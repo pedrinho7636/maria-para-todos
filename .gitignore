@@ -1,0 +1,12 @@
+# Dependências instaladas (reinstale com `npm install` dentro de api/)
+node_modules/
+
+# Segredos — nunca commitar (senha do banco, JWT secret)
+.env
+.env.local
+*.env
+
+# Sistema operacional / editor
+.DS_Store
+Thumbs.db
+.vscode/
