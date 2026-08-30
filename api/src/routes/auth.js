@@ -111,30 +111,52 @@ router.post('/cadastro/cliente', async (req, res) => {
   }
 });
 
-// Login unificado — perfil decide em qual tabela procurar e qual campo usar como identificador
+// Busca um usuário por tabela/campo e confere a senha; retorna null se não bater
+async function buscarEValidar(tabela, campo, identificador, senha) {
+  const { rows: [usuario] } = await pool.query(`select * from ${tabela} where ${campo} = $1`, [identificador]);
+  if (!usuario || !usuario.senha_hash) return null;
+  const ok = await bcrypt.compare(senha, usuario.senha_hash);
+  return ok ? usuario : null;
+}
+
+// Login unificado — perfil decide em qual tabela procurar e qual campo usar como identificador.
+// 'administrador' tenta primeiro administradores (franqueado) e, se não achar, sub_administradores
+// (funcionário) — a mesma tela de login serve para os dois, a distinção é resolvida aqui no backend.
 router.post('/login', async (req, res) => {
   const { perfil, identificador, senha } = req.body;
   if (!perfil || !identificador || !senha) {
     return res.status(400).json({ erro: 'perfil, identificador e senha são obrigatórios' });
   }
 
-  const config = {
-    administrador: { tabela: 'administradores', campo: 'email' },
-    prestadora: { tabela: 'prestadoras', campo: 'telefone' },
-    cliente: { tabela: 'clientes', campo: 'email' },
-  }[perfil];
-
-  if (!config) return res.status(400).json({ erro: 'Perfil inválido' });
-
   try {
-    const { rows: [usuario] } = await pool.query(
-      `select * from ${config.tabela} where ${config.campo} = $1`,
-      [identificador]
-    );
-    if (!usuario || !usuario.senha_hash) return res.status(401).json({ erro: 'Credenciais inválidas' });
+    if (perfil === 'administrador') {
+      let usuario = await buscarEValidar('administradores', 'email', identificador, senha);
+      let perfilResolvido = 'administrador';
+      if (!usuario) {
+        usuario = await buscarEValidar('sub_administradores', 'email', identificador, senha);
+        perfilResolvido = 'sub_administrador';
+      }
+      if (!usuario) return res.status(401).json({ erro: 'Credenciais inválidas' });
+      if (perfilResolvido === 'sub_administrador' && !usuario.ativo) {
+        return res.status(401).json({ erro: 'Conta desativada' });
+      }
 
-    const senhaOk = await bcrypt.compare(senha, usuario.senha_hash);
-    if (!senhaOk) return res.status(401).json({ erro: 'Credenciais inválidas' });
+      delete usuario.senha_hash;
+      const payload = perfilResolvido === 'administrador'
+        ? { id: usuario.id, perfil: 'administrador' }
+        : { id: usuario.id, perfil: 'sub_administrador', unidade_id: usuario.unidade_id };
+      const token = assinarToken(payload);
+      return res.json({ token, perfil: perfilResolvido, usuario });
+    }
+
+    const config = {
+      prestadora: { tabela: 'prestadoras', campo: 'telefone' },
+      cliente: { tabela: 'clientes', campo: 'email' },
+    }[perfil];
+    if (!config) return res.status(400).json({ erro: 'Perfil inválido' });
+
+    const usuario = await buscarEValidar(config.tabela, config.campo, identificador, senha);
+    if (!usuario) return res.status(401).json({ erro: 'Credenciais inválidas' });
 
     delete usuario.senha_hash;
     const token = assinarToken({ id: usuario.id, perfil, unidade_id: usuario.unidade_id });

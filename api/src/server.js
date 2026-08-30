@@ -6,6 +6,7 @@ const authRoutes = require('./routes/auth');
 const unidadesRoutes = require('./routes/unidades');
 const atendimentosRoutes = require('./routes/atendimentos');
 const avaliacoesRoutes = require('./routes/avaliacoes');
+const subadministradoresRoutes = require('./routes/subadministradores');
 
 const app = express();
 app.use(cors());
@@ -17,6 +18,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/unidades', unidadesRoutes);
 app.use('/api/atendimentos', atendimentosRoutes);
 app.use('/api/avaliacoes', avaliacoesRoutes);
+app.use('/api/sub-administradores', subadministradoresRoutes);
 
 app.use((req, res) => res.status(404).json({ erro: 'Rota não encontrada' }));
 

@@ -150,7 +150,7 @@ create table avaliacoes (
   nota            smallint not null check (nota between 1 and 5),
   comentario      text,
   status          status_avaliacao not null default 'pendente',
-  moderado_por    uuid references administradores(id),
+  moderado_por    uuid, -- id de administradores OU sub_administradores; sem FK unica, pode vir de duas tabelas
   moderado_em     timestamptz,
   criado_em       timestamptz not null default now()
 );
@@ -234,7 +234,7 @@ insert into unidades (id, slug, nome, uf, cnpj, telefone, endereco, endereco_cur
 
 -- Administrador de exemplo — senha: senha123
 insert into administradores (id, nome, sobrenome, email, senha_hash) values
-  ('d0000000-0000-0000-0000-000000000001', 'Renata', 'Almeida', 'renata@mariabrasileira.com', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8Q4LqR7bmU7fkUKnrz.f1Kzq1KgxSC');
+  ('d0000000-0000-0000-0000-000000000001', 'Renata', 'Almeida', 'renata@mariabrasileira.com', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O');
 
 insert into administrador_unidades (administrador_id, unidade_id) values
   ('d0000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111'),
@@ -242,13 +242,13 @@ insert into administrador_unidades (administrador_id, unidade_id) values
 
 -- Prestadoras (`equipeData`) — senha: senha123
 insert into prestadoras (id, nome, telefone, senha_hash, unidade_id, ativa) values
-  ('a0000000-0000-0000-0000-000000000001', 'Fabiana S.',  '(54) 9 9000-0001', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8Q4LqR7bmU7fkUKnrz.f1Kzq1KgxSC', '11111111-1111-1111-1111-111111111111', true),
-  ('a0000000-0000-0000-0000-000000000002', 'Cláudia B.',  '(54) 9 9000-0002', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8Q4LqR7bmU7fkUKnrz.f1Kzq1KgxSC', '11111111-1111-1111-1111-111111111111', true),
-  ('a0000000-0000-0000-0000-000000000003', 'Joana R.',    '(54) 9 9000-0003', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8Q4LqR7bmU7fkUKnrz.f1Kzq1KgxSC', '11111111-1111-1111-1111-111111111111', true),
-  ('a0000000-0000-0000-0000-000000000004', 'Patrícia L.', '(54) 9 9000-0004', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8Q4LqR7bmU7fkUKnrz.f1Kzq1KgxSC', '11111111-1111-1111-1111-111111111111', false),
-  ('a0000000-0000-0000-0000-000000000005', 'Rosa M.',     '(55) 9 9000-0005', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8Q4LqR7bmU7fkUKnrz.f1Kzq1KgxSC', '22222222-2222-2222-2222-222222222222', true),
-  ('a0000000-0000-0000-0000-000000000006', 'Inês K.',     '(55) 9 9000-0006', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8Q4LqR7bmU7fkUKnrz.f1Kzq1KgxSC', '22222222-2222-2222-2222-222222222222', true),
-  ('a0000000-0000-0000-0000-000000000007', 'Daniel T.',   '(55) 9 9000-0007', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8Q4LqR7bmU7fkUKnrz.f1Kzq1KgxSC', '22222222-2222-2222-2222-222222222222', true);
+  ('a0000000-0000-0000-0000-000000000001', 'Fabiana S.',  '(54) 9 9000-0001', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
+  ('a0000000-0000-0000-0000-000000000002', 'Cláudia B.',  '(54) 9 9000-0002', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
+  ('a0000000-0000-0000-0000-000000000003', 'Joana R.',    '(54) 9 9000-0003', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
+  ('a0000000-0000-0000-0000-000000000004', 'Patrícia L.', '(54) 9 9000-0004', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', false),
+  ('a0000000-0000-0000-0000-000000000005', 'Rosa M.',     '(55) 9 9000-0005', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true),
+  ('a0000000-0000-0000-0000-000000000006', 'Inês K.',     '(55) 9 9000-0006', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true),
+  ('a0000000-0000-0000-0000-000000000007', 'Daniel T.',   '(55) 9 9000-0007', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true);
 
 -- Clientes (`clientesData`)
 insert into clientes (id, nome, unidade_id) values
@@ -304,6 +304,44 @@ insert into avaliacoes (atendimento_id, cliente_id, prestadora_id, nota, comenta
   ('c0000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000001', 4, 'Muito boa, recomendo.', 'aprovada'),
   ('c0000000-0000-0000-0000-000000000006', 'b0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000001', 5, 'Trabalho excelente.', 'aprovada'),
   ('c0000000-0000-0000-0000-000000000007', 'b0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000001', 4, 'Tudo certo, atenciosa.', 'pendente');
+
+-- ============================================================================
+-- SUB-ADMINISTRADORES, RECORRÊNCIA E ORIGEM 'manual'
+-- Funcionários do franqueado (permissões granulares por módulo, vinculados a
+-- UMA unidade) + agrupamento de atendimentos recorrentes gerados em lote.
+-- ============================================================================
+
+-- Atendimento criado direto no painel do admin (avulso ou recorrente),
+-- diferente de um pedido vindo do site ou do WhatsApp.
+alter type origem_pedido add value 'manual';
+
+-- Agrupamento de atendimentos recorrentes — não é FK, não existe tabela de
+-- regra: cada ocorrência já nasce como uma linha concreta em atendimentos.
+alter table atendimentos add column serie_id uuid;
+comment on column atendimentos.serie_id is 'Tag compartilhada pelas linhas geradas de uma vez por um atendimento recorrente.';
+create index idx_atendimentos_serie on atendimentos(serie_id) where serie_id is not null;
+
+create table sub_administradores (
+  id              uuid primary key default gen_random_uuid(),
+  nome            text not null,
+  sobrenome       text not null,
+  email           text unique not null,
+  senha_hash      text not null,
+  unidade_id      uuid not null references unidades(id),
+  ativo           boolean not null default true,
+  criado_por      uuid references administradores(id),
+  pode_dashboard  boolean not null default false,
+  pode_agenda     boolean not null default false,
+  pode_avaliacoes boolean not null default false,
+  pode_equipe     boolean not null default false,
+  pode_clientes   boolean not null default false,
+  pode_financeiro boolean not null default false, -- reservado, módulo "em breve" no painel
+  criado_em       timestamptz not null default now()
+);
+
+comment on table sub_administradores is 'Contas de funcionários do franqueado, vinculadas a UMA unidade, com permissões por módulo (pode_<modulo>).';
+
+create index idx_sub_administradores_unidade on sub_administradores(unidade_id);
 
 -- ============================================================================
 -- FIM

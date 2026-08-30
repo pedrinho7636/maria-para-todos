@@ -1,7 +1,6 @@
 const express = require('express');
 const { pool } = require('../db');
-const { requireAuth, requireRole } = require('../middleware/auth');
-const { unidadeDoAdmin } = require('../utils/permissoes');
+const { requireAuth, requireAcessoUnidade } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
@@ -23,15 +22,9 @@ router.get('/:slug', asyncHandler(async (req, res) => {
   res.json(unidade);
 }));
 
-// A partir daqui, tudo exige login de administrador vinculado à unidade
-router.use('/:slug/admin', requireAuth, requireRole('administrador'), asyncHandler(async (req, res, next) => {
-  const unidadeId = await unidadeDoAdmin(req.user.id, req.params.slug);
-  if (!unidadeId) return res.status(403).json({ erro: 'Você não administra esta unidade' });
-  req.unidadeId = unidadeId;
-  next();
-}));
-
-router.get('/:slug/admin/dashboard', asyncHandler(async (req, res) => {
+// A partir daqui, cada rota exige seu próprio módulo — administrador completo
+// sempre passa; sub-administrador só se tiver a permissão daquele módulo.
+router.get('/:slug/admin/dashboard', requireAuth, requireAcessoUnidade('dashboard'), asyncHandler(async (req, res) => {
   const { rows: [dados] } = await pool.query(
     'select * from vw_dashboard_unidade where unidade_id = $1',
     [req.unidadeId]
@@ -39,7 +32,7 @@ router.get('/:slug/admin/dashboard', asyncHandler(async (req, res) => {
   res.json(dados || {});
 }));
 
-router.get('/:slug/admin/equipe', asyncHandler(async (req, res) => {
+router.get('/:slug/admin/equipe', requireAuth, requireAcessoUnidade('equipe'), asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     'select * from vw_equipe_unidade where unidade_id = $1 order by nome',
     [req.unidadeId]
@@ -47,7 +40,7 @@ router.get('/:slug/admin/equipe', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
-router.get('/:slug/admin/clientes', asyncHandler(async (req, res) => {
+router.get('/:slug/admin/clientes', requireAuth, requireAcessoUnidade('clientes'), asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     'select * from vw_clientes_unidade where unidade_id = $1 order by nome',
     [req.unidadeId]
