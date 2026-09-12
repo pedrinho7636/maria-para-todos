@@ -109,7 +109,7 @@ Mapeamento explícito para os dados mockados:
 - **Avaliação passa por moderação obrigatória.** Cliente → status `pendente` → admin aprova/recusa → só então a prestadora vê.
 - **Dados são segmentados por unidade** (Carazinho/Panambi) em quase todas as entidades operacionais (agenda, equipe, clientes). O administrador alterna a unidade ativa via `setUnit()`.
 - **Cadastro de prestadora é vinculado à unidade** já no momento da verificação (o código de WhatsApp é "enviado pela unidade" selecionada).
-- **Não há autenticação real** — login apenas escolhe qual tela mostrar, sem validar usuário/senha.
+- **Autenticação real** (bcrypt + JWT) — descrição válida apenas para o protótipo original; a versão atual (v1.0.0) já valida usuário/senha de verdade contra o Postgres. Ver `LEIA-ME.md`.
 
 ---
 
@@ -131,10 +131,19 @@ Esta tabela conecta cada estrutura mockada acima ao schema relacional gerado em 
 
 ---
 
-## 7. Próximos passos sugeridos
+## 7. Status desses passos na v1.0.0
 
-1. Implementar as ações de UI que faltam: "converter pedido em convite" (admin) e "marcar atendimento como concluído" (prestadora ou automático por data/hora).
-2. Substituir os dados mockados em JS por chamadas reais ao Supabase/PostgreSQL usando o schema anexo.
-3. Implementar autenticação real (Supabase Auth) no lugar do `setProfile`/`doLogin` simulados.
-4. Persistir o cadastro (`doCadastro`) gravando efetivamente `administradores`/`prestadoras`/`clientes`.
-5. Integrar o envio de código via WhatsApp Business API (hoje simulado com `Math.random()`).
+Esta seção listava passos sugeridos quando o projeto ainda era só o protótipo estático. Todos foram implementados
+(com Node/Express + PostgreSQL local, não Supabase — ver `LEIA-ME.md` para a arquitetura real):
+
+1. ✅ "Converter pedido em convite" (admin) e reatribuição de prestadora — inclusive fora do fluxo linear original.
+2. ✅ Dados mockados substituídos por chamadas reais à API, que fala com PostgreSQL.
+3. ✅ Autenticação real (bcrypt + JWT), com administrador, sub-administrador, prestadora e cliente.
+4. ✅ Cadastro persistido de verdade em `administradores` / `prestadoras` / `clientes`.
+5. ⏸️ Integração com WhatsApp Business API — pausada por enquanto (a verificação de conta comercial se mostrou
+   mais trabalhosa do que o esperado); o código de verificação no cadastro continua simulado. Fica para uma
+   versão futura.
+
+Também foi além do que estava previsto aqui: sub-administradores com permissões por módulo, agenda em calendário
+com linha do tempo, atendimento recorrente por padrão semanal, e janela de confirmação de 2 dias para a
+prestadora.

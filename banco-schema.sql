@@ -1,8 +1,9 @@
 -- ============================================================================
--- Portal da Maria — Schema PostgreSQL (Supabase)
--- Gerado a partir da engenharia reversa de "Portal Da Maria V 0.0.3.html"
--- Os dados de exemplo (INSERTs) reproduzem exatamente os mocks usados no
--- protótipo, para permitir testar o front-end contra o banco real.
+-- Portal da Maria — Schema PostgreSQL (v1.0.0)
+-- Autenticação e autorização são responsabilidade da API Node/Express em
+-- api/ (bcrypt para senha, JWT para sessão, checagem de permissão por
+-- unidade/módulo nas próprias rotas) — não depende de Supabase Auth nem de
+-- Row Level Security.
 -- ============================================================================
 
 -- Extensão para gerar UUIDs
@@ -28,6 +29,8 @@ create type status_avaliacao as enum (
 );
 
 create type origem_pedido as enum ('site', 'whatsapp');
+
+create type perfil_usuario as enum ('administrador', 'prestadora', 'cliente');
 
 -- ============================================================================
 -- UNIDADES (equivalente a `cidades` + `unidades` no HTML)
@@ -55,11 +58,11 @@ comment on table unidades is 'Unidades franqueadas (Carazinho, Panambi). Aliment
 -- ============================================================================
 
 create table administradores (
-  id          uuid primary key default gen_random_uuid(), -- mesmo id do auth.users (Supabase Auth)
+  id          uuid primary key default gen_random_uuid(),
   nome        text not null,
   sobrenome   text not null,
   email       text unique not null,
-  senha_hash  text not null,  -- gerenciada pelo Supabase Auth; coluna mantida só para referência/compatibilidade
+  senha_hash  text not null,  -- hash bcrypt gerado pela API no cadastro (não é mais "gerenciado pelo Supabase")
   criado_em   timestamptz not null default now()
 );
 
@@ -81,7 +84,8 @@ comment on table administrador_unidades is 'Vínculo N:N administrador<->unidade
 create table prestadoras (
   id          uuid primary key default gen_random_uuid(),
   nome        text not null,
-  telefone    text not null,               -- usado no cadastro/verificação via WhatsApp
+  telefone    text not null unique,       -- usado no cadastro/verificação via WhatsApp e como login
+  senha_hash  text not null,              -- hash bcrypt gerado pela API no cadastro
   unidade_id  uuid not null references unidades(id),
   ativa       boolean not null default true,
   criado_em   timestamptz not null default now()
@@ -97,7 +101,8 @@ create table clientes (
   id          uuid primary key default gen_random_uuid(),
   nome        text not null,               -- pode ser pessoa física ou nome fantasia (ex: 'Cond. Primavera')
   telefone    text,
-  email       text,
+  email       text unique,
+  senha_hash  text,                        -- nulo para clientes cadastrados via pedido avulso (sem login ainda)
   unidade_id  uuid not null references unidades(id),
   criado_em   timestamptz not null default now()
 );
@@ -142,7 +147,7 @@ create table avaliacoes (
   nota            smallint not null check (nota between 1 and 5),
   comentario      text,
   status          status_avaliacao not null default 'pendente',
-  moderado_por    uuid references administradores(id),
+  moderado_por    uuid, -- id de administradores OU sub_administradores; sem FK unica, pode vir de duas tabelas
   moderado_em     timestamptz,
   criado_em       timestamptz not null default now()
 );
@@ -151,6 +156,21 @@ comment on table avaliacoes is 'Ciclo cliente -> moderação do admin -> prestad
 
 create index idx_avaliacoes_status on avaliacoes(status);
 create index idx_avaliacoes_prestadora on avaliacoes(prestadora_id);
+
+-- ============================================================================
+-- CÓDIGOS DE VERIFICAÇÃO (cadastro por e-mail/WhatsApp)
+-- ============================================================================
+
+create table codigos_verificacao (
+  id          uuid primary key default gen_random_uuid(),
+  destino     text not null,        -- e-mail ou telefone
+  codigo      text not null,        -- código de 6 dígitos
+  usado       boolean not null default false,
+  expira_em   timestamptz not null,
+  criado_em   timestamptz not null default now()
+);
+
+comment on table codigos_verificacao is 'Códigos de 6 dígitos para verificação de e-mail (admin) ou WhatsApp (prestadora) no cadastro. Hoje simulado; troca por WhatsApp Business API fica pra depois.';
 
 -- ============================================================================
 -- VIEWS — substituem os campos pré-calculados que existiam nos mocks
@@ -200,96 +220,32 @@ left join atendimentos a on a.cliente_id = c.id and a.status = 'concluido'
 group by c.id, c.unidade_id, c.nome;
 
 -- ============================================================================
--- ROW LEVEL SECURITY (RLS)
--- Pressuposto: administradores.id / prestadoras.id / clientes.id são o MESMO
--- uuid do usuário em auth.users (padrão comum no Supabase: o id da tabela de
--- perfil é criado igual ao id retornado pelo Supabase Auth no cadastro).
--- Ajustar as policies abaixo caso essa convenção não seja adotada.
--- ============================================================================
-
-alter table unidades enable row level security;
-alter table administradores enable row level security;
-alter table administrador_unidades enable row level security;
-alter table prestadoras enable row level security;
-alter table clientes enable row level security;
-alter table atendimentos enable row level security;
-alter table avaliacoes enable row level security;
-
--- Dados institucionais das unidades (nome, telefone, endereço, CNPJ) são
--- públicos: alimentam a home pública (seletor de região) sem exigir login.
-create policy publico_ve_unidades on unidades
-  for select using (true);
-
--- Só administradores vinculados podem alterar dados da própria unidade
-create policy adm_edita_sua_unidade on unidades
-  for update using (
-    id in (select unidade_id from administrador_unidades where administrador_id = auth.uid())
-  );
-
-create policy adm_gerencia_atendimentos_da_unidade on atendimentos
-  for all using (
-    unidade_id in (select unidade_id from administrador_unidades where administrador_id = auth.uid())
-  );
-
-create policy adm_gerencia_avaliacoes_da_unidade on avaliacoes
-  for all using (
-    prestadora_id in (
-      select p.id from prestadoras p
-      where p.unidade_id in (select unidade_id from administrador_unidades where administrador_id = auth.uid())
-    )
-  );
-
--- Prestadora só vê seus próprios atendimentos (convites propostos + agenda aceita)
-create policy prestadora_ve_seus_atendimentos on atendimentos
-  for select using (prestadora_id = auth.uid());
-
-create policy prestadora_atualiza_status_proprio on atendimentos
-  for update using (prestadora_id = auth.uid());
-
--- Prestadora só vê avaliações aprovadas dela
-create policy prestadora_ve_suas_avaliacoes_aprovadas on avaliacoes
-  for select using (prestadora_id = auth.uid() and status = 'aprovada');
-
--- Cliente só vê seus próprios atendimentos e avaliações
-create policy cliente_ve_seus_atendimentos on atendimentos
-  for select using (cliente_id = auth.uid());
-
-create policy cliente_gerencia_suas_avaliacoes on avaliacoes
-  for all using (cliente_id = auth.uid());
-
--- ============================================================================
 -- SEED DATA — reproduz fielmente os dados mockados no protótipo HTML
+-- Senhas de exemplo: todas "senha123" (hash bcrypt gerado com custo 10)
 -- ============================================================================
 
 -- Unidades (`cidades` / `unidades`)
--- Exemplo aqui: CNPJs diferentes por unidade. Se o mesmo franqueado tivesse
--- as duas franquias sob um único CNPJ, bastaria repetir o mesmo valor nas
--- duas linhas — o modelo suporta os dois casos.
 insert into unidades (id, slug, nome, uf, cnpj, telefone, endereco, endereco_curto) values
   ('11111111-1111-1111-1111-111111111111', 'carazinho', 'Carazinho', 'RS', '12.345.678/0001-90', '(54) 9 9999-0001', 'Rua Exemplo, 123 — Centro, Carazinho/RS', 'Rua Exemplo, 123 — Centro'),
   ('22222222-2222-2222-2222-222222222222', 'panambi',   'Panambi',   'RS', '12.345.678/0002-71', '(55) 9 9999-0002', 'Av. Exemplo, 456 — Centro, Panambi/RS',   'Av. Exemplo, 456 — Centro');
 
--- Administrador de exemplo, vinculado às DUAS unidades (mesmo franqueado
--- gerenciando as duas franquias, cada uma com seu próprio CNPJ).
--- Atenção: em produção, o id abaixo precisa ser o MESMO id gerado pelo
--- Supabase Auth no momento do cadastro (supabase.auth.signUp) — este
--- valor fixo serve apenas para testar as demais tabelas isoladamente.
+-- Administrador de exemplo — senha: senha123
 insert into administradores (id, nome, sobrenome, email, senha_hash) values
-  ('d0000000-0000-0000-0000-000000000001', 'Renata', 'Almeida', 'renata@mariabrasileira.com', 'gerenciado-pelo-supabase-auth');
+  ('d0000000-0000-0000-0000-000000000001', 'Renata', 'Almeida', 'renata@mariabrasileira.com', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O');
 
 insert into administrador_unidades (administrador_id, unidade_id) values
   ('d0000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111'),
   ('d0000000-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222');
 
--- Prestadoras (`equipeData`)
-insert into prestadoras (id, nome, telefone, unidade_id, ativa) values
-  ('a0000000-0000-0000-0000-000000000001', 'Fabiana S.',  '(54) 9 9000-0001', '11111111-1111-1111-1111-111111111111', true),
-  ('a0000000-0000-0000-0000-000000000002', 'Cláudia B.',  '(54) 9 9000-0002', '11111111-1111-1111-1111-111111111111', true),
-  ('a0000000-0000-0000-0000-000000000003', 'Joana R.',    '(54) 9 9000-0003', '11111111-1111-1111-1111-111111111111', true),
-  ('a0000000-0000-0000-0000-000000000004', 'Patrícia L.', '(54) 9 9000-0004', '11111111-1111-1111-1111-111111111111', false),
-  ('a0000000-0000-0000-0000-000000000005', 'Rosa M.',     '(55) 9 9000-0005', '22222222-2222-2222-2222-222222222222', true),
-  ('a0000000-0000-0000-0000-000000000006', 'Inês K.',     '(55) 9 9000-0006', '22222222-2222-2222-2222-222222222222', true),
-  ('a0000000-0000-0000-0000-000000000007', 'Daniel T.',   '(55) 9 9000-0007', '22222222-2222-2222-2222-222222222222', true);
+-- Prestadoras (`equipeData`) — senha: senha123
+insert into prestadoras (id, nome, telefone, senha_hash, unidade_id, ativa) values
+  ('a0000000-0000-0000-0000-000000000001', 'Fabiana S.',  '(54) 9 9000-0001', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
+  ('a0000000-0000-0000-0000-000000000002', 'Cláudia B.',  '(54) 9 9000-0002', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
+  ('a0000000-0000-0000-0000-000000000003', 'Joana R.',    '(54) 9 9000-0003', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
+  ('a0000000-0000-0000-0000-000000000004', 'Patrícia L.', '(54) 9 9000-0004', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', false),
+  ('a0000000-0000-0000-0000-000000000005', 'Rosa M.',     '(55) 9 9000-0005', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true),
+  ('a0000000-0000-0000-0000-000000000006', 'Inês K.',     '(55) 9 9000-0006', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true),
+  ('a0000000-0000-0000-0000-000000000007', 'Daniel T.',   '(55) 9 9000-0007', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true);
 
 -- Clientes (`clientesData`)
 insert into clientes (id, nome, unidade_id) values
@@ -345,6 +301,44 @@ insert into avaliacoes (atendimento_id, cliente_id, prestadora_id, nota, comenta
   ('c0000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000001', 4, 'Muito boa, recomendo.', 'aprovada'),
   ('c0000000-0000-0000-0000-000000000006', 'b0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000001', 5, 'Trabalho excelente.', 'aprovada'),
   ('c0000000-0000-0000-0000-000000000007', 'b0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000001', 4, 'Tudo certo, atenciosa.', 'pendente');
+
+-- ============================================================================
+-- SUB-ADMINISTRADORES, RECORRÊNCIA E ORIGEM 'manual'
+-- Funcionários do franqueado (permissões granulares por módulo, vinculados a
+-- UMA unidade) + agrupamento de atendimentos recorrentes gerados em lote.
+-- ============================================================================
+
+-- Atendimento criado direto no painel do admin (avulso ou recorrente),
+-- diferente de um pedido vindo do site ou do WhatsApp.
+alter type origem_pedido add value 'manual';
+
+-- Agrupamento de atendimentos recorrentes — não é FK, não existe tabela de
+-- regra: cada ocorrência já nasce como uma linha concreta em atendimentos.
+alter table atendimentos add column serie_id uuid;
+comment on column atendimentos.serie_id is 'Tag compartilhada pelas linhas geradas de uma vez por um atendimento recorrente.';
+create index idx_atendimentos_serie on atendimentos(serie_id) where serie_id is not null;
+
+create table sub_administradores (
+  id              uuid primary key default gen_random_uuid(),
+  nome            text not null,
+  sobrenome       text not null,
+  email           text unique not null,
+  senha_hash      text not null,
+  unidade_id      uuid not null references unidades(id),
+  ativo           boolean not null default true,
+  criado_por      uuid references administradores(id),
+  pode_dashboard  boolean not null default false,
+  pode_agenda     boolean not null default false,
+  pode_avaliacoes boolean not null default false,
+  pode_equipe     boolean not null default false,
+  pode_clientes   boolean not null default false,
+  pode_financeiro boolean not null default false, -- reservado, módulo "em breve" no painel
+  criado_em       timestamptz not null default now()
+);
+
+comment on table sub_administradores is 'Contas de funcionários do franqueado, vinculadas a UMA unidade, com permissões por módulo (pode_<modulo>).';
+
+create index idx_sub_administradores_unidade on sub_administradores(unidade_id);
 
 -- ============================================================================
 -- FIM

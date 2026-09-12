@@ -1734,8 +1734,45 @@
         grid-template-columns: repeat(2, 1fr)
       }
 
-      .topnav,
       .pubnav {
+        display: none
+      }
+
+      /* Menu interno (admin/prestadora) continua acessível em telas estreitas
+         via rolagem horizontal, em vez de simplesmente sumir. */
+      .topbar-inner {
+        gap: 10px;
+        padding: 0 16px
+      }
+
+      .brand {
+        flex: none
+      }
+
+      .brand-name {
+        white-space: nowrap;
+        font-size: 14px
+      }
+
+      .topnav {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        margin-left: 0
+      }
+
+      .topnav::-webkit-scrollbar {
+        display: none
+      }
+
+      .topnav a {
+        flex: none;
+        white-space: nowrap
+      }
+
+      .brand-name span {
         display: none
       }
     }
@@ -1771,6 +1808,17 @@
 
       .login-form-wrap {
         padding: 28px 20px
+      }
+
+      /* Linhas de lista (equipe/clientes/acessos) com chip + botões quebram
+         numa segunda linha em vez de espremer tudo numa única linha. */
+      .tablerow {
+        flex-wrap: wrap;
+        row-gap: 8px
+      }
+
+      .tablerow .tr-body {
+        flex-basis: 100%
       }
     }
 
@@ -1914,6 +1962,160 @@
 
     .back-link:hover {
       text-decoration: underline
+    }
+
+    /* ============ CALENDÁRIO + LINHA DO TEMPO (agenda do admin) ============ */
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px
+    }
+
+    .cal-dow {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      padding-bottom: 4px
+    }
+
+    .cal-day {
+      position: relative;
+      padding: 9px 0;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 13px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--ink)
+    }
+
+    .cal-day:hover {
+      background: var(--green-soft)
+    }
+
+    .cal-day.outro-mes {
+      color: var(--muted);
+      opacity: .45
+    }
+
+    .cal-day.hoje {
+      font-weight: 700;
+      color: var(--green-strong)
+    }
+
+    .cal-day.selecionado {
+      background: var(--green);
+      color: #fff
+    }
+
+    .cal-day.tem-atendimento::after {
+      content: '';
+      display: block;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--green);
+      margin: 3px auto 0
+    }
+
+    .cal-day.selecionado.tem-atendimento::after {
+      background: #fff
+    }
+
+    .cal-day.bloqueado {
+      color: var(--muted);
+      opacity: .35;
+      cursor: not-allowed
+    }
+
+    .cal-day.bloqueado:hover {
+      background: transparent
+    }
+
+    .timeline {
+      display: flex;
+      margin-top: 4px
+    }
+
+    .timeline-hours {
+      width: 46px;
+      flex: none
+    }
+
+    .timeline-hours span {
+      display: block;
+      height: 60px;
+      font-size: 11px;
+      color: var(--muted);
+      transform: translateY(-6px)
+    }
+
+    .timeline-track {
+      position: relative;
+      flex: 1;
+      background-image: repeating-linear-gradient(to bottom, var(--line) 0, var(--line) 1px, transparent 1px, transparent 60px);
+      min-height: 60px
+    }
+
+    .tl-block {
+      position: absolute;
+      border-radius: 8px;
+      padding: 5px 8px;
+      font-size: 11.5px;
+      line-height: 1.3;
+      overflow: hidden;
+      cursor: pointer;
+      background: var(--green-soft);
+      border: 1px solid #CBE6D9;
+      color: var(--green-strong);
+      transition: box-shadow .15s
+    }
+
+    .tl-block:hover {
+      box-shadow: 0 2px 8px rgba(11, 31, 24, .15)
+    }
+
+    .tl-block.sem-prestadora {
+      background: #FBF0DC;
+      border-color: #F0DCB8;
+      color: var(--amber)
+    }
+
+    /* proposto, ainda fora da janela de confirmação (mais de 2 dias) */
+    .tl-block.aguardando-janela {
+      background: var(--blue-soft);
+      border-color: #BFD6EE;
+      color: var(--blue)
+    }
+
+    /* proposto, já dentro da janela de confirmação (<=2 dias) — chama atenção */
+    .tl-block.pendente-confirmacao {
+      background: #FBE7DC;
+      border-color: #F0C4AC;
+      color: #C25A2B
+    }
+
+    .tl-block strong {
+      display: block;
+      font-size: 11.5px
+    }
+
+    .reatribuir-pop {
+      position: absolute;
+      z-index: 20;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      padding: 12px;
+      width: 220px
+    }
+
+    .reatribuir-pop select {
+      width: 100%;
+      margin-bottom: 8px
     }
 
     .tablerow {
@@ -2152,7 +2354,7 @@
 <body>
   <div id="banco-loading"
     style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1f2937;color:#fff;font:13px/1.4 sans-serif;padding:8px 14px;text-align:center">
-    Conectando ao Supabase…</div>
+    Conectando…</div>
 
   <!-- ============================ HOME PÚBLICA ============================ -->
   <section id="screen-home" class="screen active">
@@ -2667,6 +2869,7 @@
           <a id="nav-equipe" onclick="adminView('equipe')">Equipe</a>
           <a id="nav-clientes" onclick="adminView('clientes')">Clientes</a>
           <a id="nav-avaliacoes" onclick="adminView('avaliacoes')">Avaliações</a>
+          <a id="nav-subadmins" onclick="adminView('subadmins')">Acessos</a>
         </nav>
         <div class="topbar-right">
           <div class="logout" onclick="logout()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -2719,7 +2922,7 @@
               <h2>Acesso rápido</h2><a>Personalizar</a>
             </div>
             <div class="modules">
-              <div class="mod" tabindex="0" onclick="adminView('agenda')">
+              <div class="mod" tabindex="0" data-modulo="agenda" onclick="adminView('agenda')">
                 <div class="mod-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="2" stroke-linecap="round">
                     <rect x="3" y="4" width="18" height="18" rx="2" />
@@ -2728,7 +2931,7 @@
                 <h3>Agenda</h3>
                 <p>Atendimentos do dia, escalas e remarcações.</p><span class="badge" data-k="mAgenda">12 hoje</span>
               </div>
-              <div class="mod blue" tabindex="0" onclick="adminView('equipe')">
+              <div class="mod blue" tabindex="0" data-modulo="equipe" onclick="adminView('equipe')">
                 <div class="mod-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="2" stroke-linecap="round">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -2737,7 +2940,7 @@
                 <h3>Equipe</h3>
                 <p>Profissionais, documentos e disponibilidade.</p><span class="badge" data-k="mEquipe">8 ativos</span>
               </div>
-              <div class="mod" tabindex="0" onclick="adminView('clientes')">
+              <div class="mod" tabindex="0" data-modulo="clientes" onclick="adminView('clientes')">
                 <div class="mod-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="2" stroke-linecap="round">
                     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -2746,7 +2949,7 @@
                 <h3>Clientes</h3>
                 <p>Base, histórico e contratos recorrentes.</p><span class="badge" data-k="mClientes">214 ativos</span>
               </div>
-              <div class="mod blue" tabindex="0" onclick="adminView('avaliacoes')">
+              <div class="mod blue" tabindex="0" data-modulo="avaliacoes" onclick="adminView('avaliacoes')">
                 <div class="mod-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="2" stroke-linecap="round">
                     <path d="M12 2l2.9 6 6.6.6-5 4.3 1.5 6.5L12 16.9 5.9 19.4l1.5-6.5-5-4.3 6.6-.6z" />
@@ -2793,14 +2996,34 @@
           <div>
             <div class="eyebrow">Agenda</div>
             <h1>Agenda da unidade</h1>
-            <p class="vh-sub" id="agv-unit">Carazinho · hoje</p>
+            <p class="vh-sub" id="agv-unit">Carazinho</p>
           </div><span class="back-link" onclick="adminView('visaogeral')">← Visão geral</span>
         </div>
-        <div class="panel">
-          <div class="panel-head">
-            <h2>Atendimentos de hoje</h2><span class="count"><span id="agv-count">5</span> no total</span>
+        <div class="pcols">
+          <div class="panel" style="padding:16px">
+            <div class="panel-head" style="padding:0 0 12px">
+              <button class="btn-verify" onclick="mudarMesCalendario(-1)">‹</button>
+              <h2 id="agv-mes-label" style="flex:1;text-align:center">Agosto 2026</h2>
+              <button class="btn-verify" onclick="mudarMesCalendario(1)">›</button>
+            </div>
+            <div class="calendar-grid" id="agv-cal-dow">
+              <div class="cal-dow">D</div><div class="cal-dow">S</div><div class="cal-dow">T</div><div class="cal-dow">Q</div><div class="cal-dow">Q</div><div class="cal-dow">S</div><div class="cal-dow">S</div>
+            </div>
+            <div class="calendar-grid" id="agv-cal-grid"></div>
+            <div class="form-actions" style="margin-top:16px">
+              <button class="btn-sm" style="width:100%" onclick="abrirModalRecorrente()">+ Atendimento recorrente</button>
+            </div>
           </div>
-          <div id="agv-list"></div>
+          <div class="panel">
+            <div class="panel-head">
+              <h2 id="agv-dia-label">Hoje</h2><span class="count"><span id="agv-count">0</span> no total</span>
+            </div>
+            <div class="timeline">
+              <div class="timeline-hours" id="agv-tl-horas"></div>
+              <div class="timeline-track" id="agv-tl-track"></div>
+            </div>
+            <div id="agv-tl-vazio" class="empty" style="display:none">Nenhum atendimento neste dia.</div>
+          </div>
         </div>
       </div>
 
@@ -2855,6 +3078,46 @@
           <div id="adm-aval-hist"></div>
         </div>
       </div>
+      <div class="adminview" id="av-subadmins" style="display:none">
+        <div class="view-head">
+          <div>
+            <div class="eyebrow">Acessos</div>
+            <h1>Administradores da unidade</h1>
+            <p class="vh-sub" id="sa-unit">Carazinho</p>
+          </div><span class="back-link" onclick="adminView('visaogeral')">← Visão geral</span>
+        </div>
+        <div class="panel" style="margin-bottom:26px">
+          <div class="panel-head"><h2 id="sa-form-titulo">Adicionar funcionário</h2></div>
+          <div class="form-card" style="padding:20px;border-radius:0">
+            <div class="field-row">
+              <div class="field"><label>Nome</label><input id="sa-nome"></div>
+              <div class="field"><label>Sobrenome</label><input id="sa-sobrenome"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label>E-mail (login)</label><input id="sa-email" type="email"></div>
+              <div class="field"><label id="sa-senha-label">Senha</label><input id="sa-senha" type="password"></div>
+            </div>
+            <div class="field">
+              <label>Permissões</label>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-agenda"> Agenda</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-avaliacoes"> Avaliações</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-equipe"> Equipe</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-clientes"> Clientes</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-dashboard"> Visão geral</label>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn-sm ghost" id="sa-form-cancelar" style="display:none" onclick="cancelarEdicaoSubadmin()">Cancelar edição</button>
+              <button class="btn-sm" id="sa-form-botao" onclick="salvarSubadmin()">Criar acesso</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Funcionários com acesso</h2></div>
+          <div id="sa-list"></div>
+        </div>
+      </div>
     </div>
     <footer class="appfoot">
       <div class="foot-inner">
@@ -2903,8 +3166,8 @@
         </div>
         <div class="stat b">
           <div class="stat-label">Previsto na semana</div>
-          <div class="stat-value"><small>R$</small> 640</div>
-          <div class="stat-trend up">5 atendimentos</div>
+          <div class="stat-value"><small>R$</small> <span id="ps-previsto-valor">0</span></div>
+          <div class="stat-trend up"><span id="ps-previsto-qtd">0</span> atendimentos</div>
         </div>
       </section>
       <div class="pcols">
@@ -2926,6 +3189,27 @@
             </div>
             <div id="prest-agenda"></div>
           </div>
+        </div>
+      </div>
+
+      <div class="sec-head" style="margin-top:28px">
+        <h2>Meu calendário</h2>
+      </div>
+      <div class="pcols">
+        <div class="panel" style="padding:16px">
+          <div class="panel-head" style="padding:0 0 12px">
+            <button class="btn-verify" onclick="mudarMesCalendarioPrestadora(-1)">‹</button>
+            <h2 id="ps-cal-mes-label" style="flex:1;text-align:center">Mês</h2>
+            <button class="btn-verify" onclick="mudarMesCalendarioPrestadora(1)">›</button>
+          </div>
+          <div class="calendar-grid">
+            <div class="cal-dow">D</div><div class="cal-dow">S</div><div class="cal-dow">T</div><div class="cal-dow">Q</div><div class="cal-dow">Q</div><div class="cal-dow">S</div><div class="cal-dow">S</div>
+          </div>
+          <div class="calendar-grid" id="ps-cal-grid"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2 id="ps-cal-dia-label">Hoje</h2></div>
+          <div id="ps-cal-lista"></div>
         </div>
       </div>
 
@@ -3077,6 +3361,28 @@
     </div>
   </div>
 
+  <div class="modal" id="modal-recorrente">
+    <div class="modal-card" style="max-width:480px;max-height:88vh;overflow-y:auto">
+      <h3>Atendimento recorrente</h3>
+      <p>Monte os atendimentos de uma semana-modelo; o sistema repete esse padrão.</p>
+      <div class="field-row">
+        <div class="field"><label>Semana de início (qualquer dia dela)</label><input id="rec-data" type="date"></div>
+        <div class="field"><label>Por quantos meses</label><input id="rec-horizonte" type="number" value="3" min="1"></div>
+      </div>
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:13px"><input type="checkbox" id="rec-alternada"> Repetir semana sim, semana não (quinzenal)</label>
+      </div>
+      <div id="rec-itens-lista"></div>
+      <div class="form-actions" style="margin-bottom:10px">
+        <button class="btn-verify" style="width:100%" onclick="adicionarItemRecorrente()">+ Adicionar dia da semana</button>
+      </div>
+      <div class="form-actions">
+        <button class="btn-sm ghost" onclick="fecharModalRecorrente()">Cancelar</button>
+        <button class="btn-sm" onclick="salvarRecorrente()">Gerar ocorrências</button>
+      </div>
+    </div>
+  </div>
+
   <button class="theme-toggle" onclick="toggleTheme()" aria-label="Alternar modo claro/escuro"
     title="Modo claro/escuro">
     <svg class="ic-moon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -3097,24 +3403,28 @@
     </svg><span id="toast-msg"></span></div>
 
   <!-- ============================================================
-       SUPABASE — cliente real, usando o schema de banco-schema.sql
-       Troque SUPABASE_URL e SUPABASE_ANON_KEY pelas chaves do projeto
-       (Supabase > Project Settings > API). O anon key é seguro de expor
-       no front-end: o acesso real é controlado pelas policies de RLS
-       definidas em banco-schema.sql.
+       API LOCAL — Node/Express + PostgreSQL rodando na sua máquina
+       (pasta api/). Ajuste API_BASE se a API estiver noutra porta/host.
        ============================================================ -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const SUPABASE_URL = "https://SEU-PROJETO.supabase.co";
-    const SUPABASE_ANON_KEY = "SUA-CHAVE-ANON-AQUI";
-    const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const API_BASE = "http://localhost:3001/api";
+    let authToken = null;
+    try { authToken = localStorage.getItem('pm-token'); } catch (e) { }
+
+    async function api(path, opts = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+      if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+      const res = await fetch(API_BASE + path, { ...opts, headers });
+      const dados = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(dados.erro || ('Erro ' + res.status));
+      return dados;
+    }
   </script>
   <script>
     /* ================================================================
-       PORTAL DA MARIA — VERSÃO "CONECTADO"
-       Os dados abaixo não são mais fixos: vêm do banco Postgres real
-       (banco-schema.sql) através do cliente Supabase (supa), montado
-       pela função carregarDadosSupabase() no fim deste <script>.
+       PORTAL DA MARIA — VERSÃO "LOCAL"
+       Os dados abaixo vêm da API Node/Express (pasta api/), que fala
+       com um PostgreSQL local usando o schema de banco-schema-local.sql.
        ================================================================ */
     let cidades = {};
     let unidades = {};
@@ -3128,8 +3438,43 @@
     let concluidos = [];
     let bancoCarregado = false;
 
-    /* Converte um registro status_atendimento='pedido'/'proposto'/'aceito' da
-       tabela atendimentos no shape "job" que os renders já esperam (t,c,p,s,st) */
+    // Permissões do painel administrativo: administrador completo enxerga tudo;
+    // sub_administrador só o que foi marcado nele (colunas pode_* vindas do login).
+    function permissoesAtuais() {
+      if (!usuarioLogado || usuarioLogado.tipo === 'administrador') {
+        return { dashboard: true, agenda: true, avaliacoes: true, equipe: true, clientes: true, subadmins: true };
+      }
+      const u = usuarioLogado.dados || {};
+      return {
+        dashboard: !!u.pode_dashboard, agenda: !!u.pode_agenda, avaliacoes: !!u.pode_avaliacoes,
+        equipe: !!u.pode_equipe, clientes: !!u.pode_clientes, subadmins: false
+      };
+    }
+    function aplicarPermissoesAdminUI() {
+      const p = permissoesAtuais();
+      const setDisplay = (id, visivel) => { const el = document.getElementById(id); if (el) el.style.display = visivel ? '' : 'none'; };
+      setDisplay('nav-visaogeral', p.dashboard);
+      setDisplay('nav-agenda', p.agenda);
+      setDisplay('nav-equipe', p.equipe);
+      setDisplay('nav-clientes', p.clientes);
+      setDisplay('nav-avaliacoes', p.avaliacoes);
+      setDisplay('nav-subadmins', p.subadmins);
+      document.querySelectorAll('#screen-franqueado .mod[data-modulo]').forEach(el => {
+        el.style.display = p[el.dataset.modulo] === false ? 'none' : '';
+      });
+    }
+
+    const unidadeVazia = () => ({
+      nome: '', atend: '0', atendT: '', atendCls: 'up',
+      prof: '0', profT: '0 escalados hoje',
+      fat: '0', fatT: '', fatCls: 'up',
+      nps: '—', npsT: '', npsCls: 'up',
+      mAgenda: '0 hoje', mEquipe: '—', mClientes: '—', mFin: '—',
+      jobs: []
+    });
+
+    /* Converte um registro de atendimentos (status pedido/proposto/aceito) no
+       shape "job" que os renders já esperam (t,c,p,s,st) */
     function atendimentoParaJob(a) {
       const statusMap = { pedido: 'novo', proposto: 'aguardando', aceito: 'confirmado', concluido: 'confirmado' };
       const classeMap = { novo: 'st-new', aguardando: 'st-wait', confirmado: 'st-ok' };
@@ -3137,85 +3482,77 @@
       return {
         t: a.hora_atendimento ? a.hora_atendimento.slice(0, 5) : '—',
         c: a.tipo_servico + (a.area ? ' — ' + a.area : ''),
-        p: a.prestadoras ? a.prestadoras.nome : '—',
+        p: a.prestadora_nome || '—',
         s: classeMap[st] || 'st-wait',
         st, id: a.id
       };
     }
 
-    async function carregarDadosSupabase() {
+    // Dados públicos (home): lista de unidades. As demais listas ficam vazias até o login.
+    async function carregarDadosPublicos() {
       try {
-        const { data: unis, error: eu } = await supa.from('unidades').select('*');
-        if (eu) throw eu;
-
+        const unis = await api('/unidades');
         cidades = {}; unidades = {};
         for (const u of unis) {
-          cidades[u.slug] = { id: u.id, nome: u.nome, uf: u.uf, cnpj: u.cnpj, tel: u.telefone, end: u.endereco, endCurto: u.endereco_curto };
-
-          const { data: dash } = await supa.from('vw_dashboard_unidade').select('*').eq('unidade_id', u.id).maybeSingle();
-          const { data: jobsRaw } = await supa.from('atendimentos')
-            .select('id,hora_atendimento,tipo_servico,area,status,prestadoras(nome)')
-            .eq('unidade_id', u.id).eq('data_atendimento', new Date().toISOString().slice(0, 10));
-
-          unidades[u.slug] = {
-            id: u.id, nome: u.nome,
-            atend: String(dash?.atendimentos_hoje ?? 0), atendT: '', atendCls: 'up',
-            prof: String(dash?.prestadoras_escaladas_hoje ?? 0), profT: (dash?.prestadoras_escaladas_hoje ?? 0) + ' escalados hoje',
-            fat: (dash?.faturamento_mes ?? 0).toLocaleString('pt-BR'), fatT: '', fatCls: 'up',
-            nps: String(dash?.nps_medio ?? '—'), npsT: '', npsCls: 'up',
-            mAgenda: (dash?.atendimentos_hoje ?? 0) + ' hoje', mEquipe: '—', mClientes: '—', mFin: '—',
-            jobs: (jobsRaw || []).map(atendimentoParaJob)
-          };
+          cidades[u.slug] = { nome: u.nome, uf: u.uf, tel: u.telefone, end: u.endereco, endCurto: u.endereco_curto };
+          unidades[u.slug] = { ...unidadeVazia(), nome: u.nome };
         }
-
-        // usuário logado como prestadora: convites (status=proposto) e agenda aceita (status=aceito)
-        if (usuarioLogado && usuarioLogado.tipo === 'prestadora') {
-          const { data: pInfo } = await supa.from('prestadoras').select('*').eq('id', usuarioLogado.id).maybeSingle();
-          if (pInfo) {
-            const slugUnidade = unis.find(u => u.id === pInfo.unidade_id)?.slug || 'carazinho';
-            prestadora = { id: pInfo.id, nome: pInfo.nome, unidade: slugUnidade };
-
-            const { data: conv } = await supa.from('atendimentos')
-              .select('id,tipo_servico,area,data_atendimento,hora_atendimento,valor')
-              .eq('prestadora_id', pInfo.id).eq('status', 'proposto');
-            convites = (conv || []).map(c => ({ id: c.id, serv: c.tipo_servico, area: c.area, data: c.data_atendimento, hora: c.hora_atendimento?.slice(0, 5), valor: 'R$ ' + c.valor }));
-
-            const { data: ag } = await supa.from('atendimentos')
-              .select('id,tipo_servico,area,hora_atendimento,valor')
-              .eq('prestadora_id', pInfo.id).eq('status', 'aceito');
-            agendaPrestadora = (ag || []).map(a => ({ id: a.id, hora: a.hora_atendimento?.slice(0, 5), serv: a.tipo_servico + (a.area ? ' — ' + a.area : ''), valor: 'R$ ' + a.valor }));
-          }
-        }
-
-        // equipe e clientes por unidade (views vw_equipe_unidade / vw_clientes_unidade)
-        for (const u of unis) {
-          const { data: eq } = await supa.from('vw_equipe_unidade').select('*').eq('unidade_id', u.id);
-          equipeData[u.slug] = (eq || []).map(e => ({ nome: e.nome, ini: e.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), serv: e.total_atendimentos, nota: e.nota_media, ativa: e.ativa }));
-
-          const { data: cl } = await supa.from('vw_clientes_unidade').select('*').eq('unidade_id', u.id);
-          clientesData[u.slug] = (cl || []).map(c => ({ nome: c.nome, ini: c.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), ultimo: (c.ultimo_atendimento_tipo || '—') + (c.ultimo_atendimento_data ? ' · ' + c.ultimo_atendimento_data : ''), total: c.total_servicos }));
-        }
-
-        // avaliações (moderação do admin / vitrine da prestadora)
-        const { data: avs } = await supa.from('avaliacoes').select('id,nota,comentario,status,criado_em,clientes(nome),prestadoras(nome)').order('criado_em', { ascending: false });
-        avaliacoes = (avs || []).map(a => ({ id: a.id, cliente: a.clientes?.nome, prestadora: a.prestadoras?.nome, servico: '', nota: a.nota, comentario: a.comentario, status: a.status, data: (a.criado_em || '').slice(0, 10) }));
-
-        // atendimentos concluídos do cliente logado, aguardando avaliação
-        if (usuarioLogado && usuarioLogado.tipo === 'cliente') {
-          const { data: conc } = await supa.from('atendimentos')
-            .select('id,tipo_servico,data_atendimento,prestadora_id,prestadoras(nome)')
-            .eq('cliente_id', usuarioLogado.id).eq('status', 'concluido');
-          concluidos = (conc || []).map(c => ({ id: c.id, servico: c.tipo_servico, data: c.data_atendimento, prestadora: c.prestadoras?.nome, prestadora_id: c.prestadora_id }));
-        }
-
         bancoCarregado = true;
         document.getElementById('banco-loading')?.remove();
-        console.log('[supabase] dados carregados de', SUPABASE_URL);
+        console.log('[api local] unidades carregadas de', API_BASE);
       } catch (err) {
-        console.error('[supabase] falha ao carregar dados:', err);
+        console.error('[api local] falha ao carregar unidades:', err);
         const el = document.getElementById('banco-loading');
-        if (el) el.innerHTML = '⚠️ Não foi possível conectar ao Supabase. Confira SUPABASE_URL / SUPABASE_ANON_KEY no início do &lt;script&gt; e se o banco-schema.sql já foi aplicado.';
+        if (el) el.innerHTML = '⚠️ Não foi possível conectar à API local. Confira se "npm start" está rodando em api/ e se API_BASE aponta pra porta certa.';
       }
+    }
+
+    // Dashboard + agenda do dia da unidade — exige admin logado e vinculado à unidade.
+    // Cada busca respeita sua própria permissão (dashboard/agenda são módulos
+    // separados no backend); sem a permissão, resolve vazio em vez de dar 403.
+    async function carregarUnidadeAdmin(slug) {
+      const p = permissoesAtuais();
+      const [dash, agenda] = await Promise.all([
+        p.dashboard ? api(`/unidades/${slug}/admin/dashboard`) : Promise.resolve({}),
+        p.agenda ? api(`/atendimentos/admin/${slug}/agenda`) : Promise.resolve([])
+      ]);
+      unidades[slug] = {
+        nome: cidades[slug].nome,
+        atend: String(dash.atendimentos_hoje ?? 0), atendT: '', atendCls: 'up',
+        prof: String(dash.prestadoras_escaladas_hoje ?? 0), profT: (dash.prestadoras_escaladas_hoje ?? 0) + ' escalados hoje',
+        fat: Number(dash.faturamento_mes ?? 0).toLocaleString('pt-BR'), fatT: '', fatCls: 'up',
+        nps: String(dash.nps_medio ?? '—'), npsT: '', npsCls: 'up',
+        mAgenda: (dash.atendimentos_hoje ?? 0) + ' hoje', mEquipe: '—', mClientes: '—', mFin: '—',
+        jobs: agenda.map(atendimentoParaJob)
+      };
+    }
+
+    async function carregarEquipeClientesAvaliacoes(slug) {
+      const p = permissoesAtuais();
+      const [eq, cl, avs] = await Promise.all([
+        p.equipe ? api(`/unidades/${slug}/admin/equipe`) : Promise.resolve([]),
+        p.clientes ? api(`/unidades/${slug}/admin/clientes`) : Promise.resolve([]),
+        p.avaliacoes ? api(`/avaliacoes/admin/${slug}`) : Promise.resolve([])
+      ]);
+      equipeData[slug] = eq.map(e => ({ id: e.prestadora_id, nome: e.nome, ini: e.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), serv: Number(e.total_atendimentos), nota: Number(e.nota_media) || 0, ativa: e.ativa }));
+      clientesData[slug] = cl.map(c => ({ id: c.cliente_id, nome: c.nome, ini: c.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), ultimo: (c.ultimo_atendimento_tipo || '—') + (c.ultimo_atendimento_data ? ' · ' + c.ultimo_atendimento_data : ''), total: Number(c.total_servicos) }));
+      avaliacoes = avs.map(a => ({ id: a.id, cliente: a.cliente_nome, prestadora: a.prestadora_nome, servico: a.servico || '', nota: a.nota, comentario: a.comentario, status: a.status, data: (a.criado_em || '').slice(0, 10) }));
+    }
+
+    async function carregarDadosPrestadora() {
+      const [conv, ag, avs] = await Promise.all([
+        api('/atendimentos/prestadora/me/convites'),
+        api('/atendimentos/prestadora/me/agenda'),
+        api('/avaliacoes/prestadora/me')
+      ]);
+      convites = conv.map(c => ({ id: c.id, serv: c.tipo_servico, area: c.area, data: c.data_atendimento, hora: c.hora_atendimento?.slice(0, 5), valor: c.valor ? 'R$ ' + c.valor : '—', status: 'proposto' }));
+      agendaPrestadora = ag.map(a => ({ id: a.id, hora: a.hora_atendimento?.slice(0, 5), serv: a.tipo_servico + (a.area ? ' — ' + a.area : ''), valor: a.valor ? 'R$ ' + a.valor : '—', valorNum: Number(a.valor) || 0, data: a.data_atendimento, status: 'aceito' }));
+      avaliacoes = avs.map(a => ({ id: a.id, cliente: a.cliente_nome, prestadora: prestadora.nome, servico: a.servico || '', nota: a.nota, comentario: a.comentario, status: a.status, data: (a.criado_em || '').slice(0, 10) }));
+    }
+
+    async function carregarDadosCliente() {
+      const conc = await api('/atendimentos/cliente/me/pendentes-avaliacao');
+      concluidos = conc.map(c => ({ id: c.id, servico: c.tipo_servico, data: c.data_atendimento, prestadora: c.prestadora_nome || '—', prestadora_id: c.prestadora_id }));
     }
 
     /* região */
@@ -3245,27 +3582,49 @@
     function goLogin() { show('screen-login'); }
     function goCadastro() { show('screen-cadastro'); }
     async function doLogin() {
-      const email = document.getElementById('login-user').value.trim();
+      const identificador = document.getElementById('login-user').value.trim();
       const senha = document.getElementById('login-pass').value;
-      if (!email || !senha) { toast('Preencha e-mail e senha.'); return; }
+      if (!identificador || !senha) { toast('Preencha e-mail/telefone e senha.'); return; }
 
-      const { data, error } = await supa.auth.signInWithPassword({ email, password: senha });
-      if (error) { toast('Não foi possível entrar: ' + error.message); return; }
-
-      const authId = data.user.id;
-      const tabelaPorPerfil = { franqueado: 'administradores', prestadora: 'prestadoras', cliente: 'clientes' };
       const tipoInterno = { franqueado: 'administrador', prestadora: 'prestadora', cliente: 'cliente' }[perfil];
-      const { data: perfilRow, error: eP } = await supa.from(tabelaPorPerfil[perfil]).select('*').eq('id', authId).maybeSingle();
-      if (eP || !perfilRow) { toast('Login ok, mas não achamos o cadastro de ' + perfil + ' para este usuário.'); return; }
+      let resp;
+      try {
+        resp = await api('/auth/login', { method: 'POST', body: JSON.stringify({ perfil: tipoInterno, identificador, senha }) });
+      } catch (err) { toast('Não foi possível entrar: ' + err.message); return; }
 
-      usuarioLogado = { id: authId, tipo: tipoInterno, dados: perfilRow };
-      await carregarDadosSupabase();
+      authToken = resp.token;
+      try { localStorage.setItem('pm-token', authToken); } catch (e) { }
+      // resp.perfil é o perfil resolvido pelo backend ('administrador' ou 'sub_administrador'
+      // quando tipoInterno === 'administrador' — a mesma aba de login serve para os dois).
+      usuarioLogado = { id: resp.usuario.id, tipo: resp.perfil || tipoInterno, dados: resp.usuario };
 
-      if (perfil === 'franqueado') { show('screen-franqueado'); setUnit(regiao); adminView('visaogeral'); updateAvalBadge(); }
-      else if (perfil === 'prestadora') { show('screen-prestadora'); renderPrestadora(); }
-      else { show('screen-cliente'); renderClienteAval(); }
+      try {
+        if (tipoInterno === 'administrador') {
+          aplicarPermissoesAdminUI();
+          await carregarUnidadeAdmin(regiao);
+          await carregarEquipeClientesAvaliacoes(regiao);
+          show('screen-franqueado'); setUnitUI(regiao);
+          const p = permissoesAtuais();
+          const ordem = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes']];
+          const primeira = (ordem.find(([, modulo]) => p[modulo])?.[0]) || 'agenda';
+          adminView(primeira); updateAvalBadge();
+        } else if (tipoInterno === 'prestadora') {
+          prestadora = { id: resp.usuario.id, nome: resp.usuario.nome, unidade: regiao };
+          await carregarDadosPrestadora();
+          show('screen-prestadora'); renderPrestadora(); renderCalendarioPrestadora();
+        } else {
+          await carregarDadosCliente();
+          show('screen-cliente'); renderClienteAval();
+        }
+      } catch (err) {
+        toast('Login ok, mas houve um erro ao carregar seus dados: ' + err.message);
+      }
     }
-    async function logout() { await supa.auth.signOut(); usuarioLogado = null; show('screen-home'); }
+    function logout() {
+      authToken = null; usuarioLogado = null;
+      try { localStorage.removeItem('pm-token'); } catch (e) { }
+      show('screen-home');
+    }
 
     /* cadastro */
     let cadPerfil = 'administrador';
@@ -3315,21 +3674,7 @@
           if (!cnpjRaw) { toast('Informe o CNPJ de ao menos uma franquia.'); return; }
           const cnpjs = cnpjRaw.split(',').map(c => c.trim()).filter(Boolean);
 
-          const { data: sign, error: eSign } = await supa.auth.signUp({ email, password: senha });
-          if (eSign) throw eSign;
-          const uid = sign.user.id;
-
-          const { error: eIns } = await supa.from('administradores').insert({ id: uid, nome, sobrenome, email, senha_hash: 'gerenciado-pelo-supabase-auth' });
-          if (eIns) throw eIns;
-
-          // vincula o admin a toda unidade cujo CNPJ bate com o(s) informado(s)
-          const { data: unis } = await supa.from('unidades').select('id,cnpj').in('cnpj', cnpjs);
-          if (unis && unis.length) {
-            const vinculos = unis.map(u => ({ administrador_id: uid, unidade_id: u.id }));
-            await supa.from('administrador_unidades').insert(vinculos);
-          } else {
-            toast('Conta criada, mas nenhum CNPJ informado bate com uma unidade cadastrada — peça para vincular manualmente.');
-          }
+          await api('/auth/cadastro/admin', { method: 'POST', body: JSON.stringify({ nome, sobrenome, email, senha, cnpjs }) });
 
         } else if (cadPerfil === 'prestadora') {
           const nome = document.querySelector('#cad-fields-prestadora .field input[type="text"]').value.trim();
@@ -3337,15 +3682,7 @@
           const slug = document.getElementById('cad-prest-regiao').value;
           if (!nome || !telefone || !slug) { toast('Preencha nome, telefone e região.'); return; }
 
-          const { data: uni } = await supa.from('unidades').select('id').eq('slug', slug).maybeSingle();
-          if (!uni) { toast('Região inválida.'); return; }
-
-          const emailFake = telefone.replace(/\\D/g, '') + '@prestadora.portaldamaria.app'; // Supabase Auth exige e-mail; WhatsApp é o identificador real do negócio
-          const { data: sign, error: eSign } = await supa.auth.signUp({ email: emailFake, password: senha });
-          if (eSign) throw eSign;
-
-          const { error: eIns } = await supa.from('prestadoras').insert({ id: sign.user.id, nome, telefone, unidade_id: uni.id, ativa: true });
-          if (eIns) throw eIns;
+          await api('/auth/cadastro/prestadora', { method: 'POST', body: JSON.stringify({ nome, telefone, senha, unidade_slug: slug }) });
 
         } else {
           const nome = document.querySelector('#cad-fields-cliente .field input[type="text"]').value.trim();
@@ -3354,25 +3691,18 @@
           const slug = document.querySelector('#cad-fields-cliente select').value;
           if (!nome || !email || !slug) { toast('Preencha nome, e-mail e cidade.'); return; }
 
-          const { data: uni } = await supa.from('unidades').select('id').eq('slug', slug).maybeSingle();
-          if (!uni) { toast('Cidade inválida.'); return; }
-
-          const { data: sign, error: eSign } = await supa.auth.signUp({ email, password: senha });
-          if (eSign) throw eSign;
-
-          const { error: eIns } = await supa.from('clientes').insert({ id: sign.user.id, nome, email, telefone, unidade_id: uni.id });
-          if (eIns) throw eIns;
+          await api('/auth/cadastro/cliente', { method: 'POST', body: JSON.stringify({ nome, email, telefone, senha, unidade_slug: slug }) });
         }
 
         show('screen-login');
-        toast('Conta criada! Verifique seu e-mail/WhatsApp para confirmar e depois faça login.');
+        toast('Conta criada! Faça login para continuar.');
       } catch (err) {
-        toast('Erro ao criar conta: ' + (err.message || err));
+        toast('Erro ao criar conta: ' + err.message);
       }
     }
 
     /* administrador */
-    function setUnit(key) {
+    function setUnitUI(key) {
       currentUnit = key;
       const u = unidades[key];
       document.getElementById('btn-carazinho').classList.toggle('active', key === 'carazinho');
@@ -3385,42 +3715,401 @@
       document.querySelector('[data-k="jCount"]').textContent = u.jobs.length;
       document.getElementById('joblist').innerHTML = u.jobs.map(j => `<div class="job"><div class="job-time">${j.t}</div><div class="job-body"><strong>${j.c}</strong><span>${j.p}</span></div><div class="job-status ${j.s}">${j.st}</div></div>`).join('');
     }
+    async function setUnit(key) {
+      try {
+        await carregarUnidadeAdmin(key);
+        await carregarEquipeClientesAvaliacoes(key);
+      } catch (err) { toast('Erro ao trocar de unidade: ' + err.message); return; }
+      setUnitUI(key);
+      if (document.getElementById('av-agenda')?.style.display === 'block') renderAgendaAdmin();
+      if (document.getElementById('av-equipe')?.style.display === 'block') renderEquipe();
+      if (document.getElementById('av-clientes')?.style.display === 'block') renderClientes();
+      if (document.getElementById('av-avaliacoes')?.style.display === 'block') renderAvaliacoesAdmin();
+      if (document.getElementById('av-subadmins')?.style.display === 'block') renderSubadmins();
+    }
     function setTrend(k, txt, cls) { const el = document.querySelector('[data-k="' + k + '"]'); el.textContent = txt; el.className = 'stat-trend ' + (cls === 'down' ? 'down' : 'up'); }
 
+    /* ===== Agenda: calendário do mês + linha do tempo do dia ===== */
+    const AGENDA_HORA_INICIO = 7, AGENDA_HORA_FIM = 20; // faixa exibida na linha do tempo (07h-20h)
+    let mesAtualCalendario = new Date();
+    let diaSelecionadoAgenda = null;
+    let resumoMensalPorDia = {};
+    let prestadorasAgenda = { carazinho: [], panambi: [] }; // lista enxuta p/ atribuição, liberada por 'agenda'
+
+    function renderAgendaAdmin() {
+      renderHorasGutter();
+      mesAtualCalendario = new Date();
+      const hoje = new Date();
+      if (hoje.getDay() === 0) hoje.setDate(hoje.getDate() + 1); // domingo bloqueado: cai pra segunda
+      diaSelecionadoAgenda = hoje.toISOString().slice(0, 10);
+      carregarPrestadorasAgenda(currentUnit);
+      renderCalendarioMes();
+    }
+    async function carregarPrestadorasAgenda(slug) {
+      try {
+        prestadorasAgenda[slug] = await api(`/atendimentos/admin/${slug}/prestadoras`);
+      } catch (err) { prestadorasAgenda[slug] = []; }
+    }
+    function renderHorasGutter() {
+      let html = '';
+      for (let h = AGENDA_HORA_INICIO; h < AGENDA_HORA_FIM; h++) html += `<span>${String(h).padStart(2, '0')}:00</span>`;
+      document.getElementById('agv-tl-horas').innerHTML = html;
+    }
+    function mudarMesCalendario(delta) {
+      mesAtualCalendario = new Date(mesAtualCalendario.getFullYear(), mesAtualCalendario.getMonth() + delta, 1);
+      renderCalendarioMes();
+    }
+    async function renderCalendarioMes() {
+      const ano = mesAtualCalendario.getFullYear(), mes = mesAtualCalendario.getMonth();
+      const mesStr = ano + '-' + String(mes + 1).padStart(2, '0');
+      document.getElementById('agv-mes-label').textContent =
+        mesAtualCalendario.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+      try {
+        const resumo = await api(`/atendimentos/admin/${currentUnit}/agenda/resumo-mensal?mes=${mesStr}`);
+        resumoMensalPorDia = {};
+        resumo.forEach(r => { resumoMensalPorDia[r.data] = r.total; });
+      } catch (err) { resumoMensalPorDia = {}; }
+
+      construirGridMes(ano, mes);
+      if (diaSelecionadoAgenda) selecionarDiaAgenda(diaSelecionadoAgenda);
+    }
+    function construirGridMes(ano, mes) {
+      const grid = document.getElementById('agv-cal-grid');
+      const inicioSemana = new Date(ano, mes, 1).getDay();
+      const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+      const hojeISO = new Date().toISOString().slice(0, 10);
+
+      let html = '';
+      for (let i = 0; i < inicioSemana; i++) html += '<div class="cal-day outro-mes"></div>';
+      for (let d = 1; d <= diasNoMes; d++) {
+        const dataISO = ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        const ehDomingo = new Date(ano, mes, d).getDay() === 0;
+        const classes = ['cal-day'];
+        if (dataISO === hojeISO) classes.push('hoje');
+        if (dataISO === diaSelecionadoAgenda) classes.push('selecionado');
+        if (resumoMensalPorDia[dataISO]) classes.push('tem-atendimento');
+        if (ehDomingo) {
+          classes.push('bloqueado');
+          html += `<div class="${classes.join(' ')}" title="Domingo não disponível">${d}</div>`;
+        } else {
+          html += `<div class="${classes.join(' ')}" onclick="selecionarDiaAgenda('${dataISO}')">${d}</div>`;
+        }
+      }
+      grid.innerHTML = html;
+    }
+    async function selecionarDiaAgenda(dataISO) {
+      if (new Date(dataISO + 'T00:00:00').getDay() === 0) { toast('Domingo não está disponível pra agenda.'); return; }
+      diaSelecionadoAgenda = dataISO;
+      construirGridMes(mesAtualCalendario.getFullYear(), mesAtualCalendario.getMonth());
+      const d = new Date(dataISO + 'T00:00:00');
+      document.getElementById('agv-dia-label').textContent = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+      try {
+        const atendimentos = await api(`/atendimentos/admin/${currentUnit}/agenda?data=${dataISO}`);
+        document.getElementById('agv-count').textContent = atendimentos.length;
+        renderTimelineDia(atendimentos);
+      } catch (err) { toast('Erro ao carregar agenda do dia: ' + err.message); }
+    }
+    // Posiciona os atendimentos do dia por horário; quando dois se sobrepõem,
+    // divide em colunas dentro do grupo que se sobrepõe (mesma lógica clássica
+    // de calendário de agenda). Cada bloco usa duração fixa de 60min (o schema
+    // não tem coluna de duração — corte de escopo deliberado).
+    function renderTimelineDia(atendimentos) {
+      const track = document.getElementById('agv-tl-track');
+      const vazio = document.getElementById('agv-tl-vazio');
+      track.innerHTML = '';
+      track.style.height = ((AGENDA_HORA_FIM - AGENDA_HORA_INICIO) * 60) + 'px';
+
+      const itens = atendimentos
+        .filter(a => a.hora_atendimento)
+        .map(a => {
+          const [h, m] = a.hora_atendimento.slice(0, 5).split(':').map(Number);
+          const inicioMin = h * 60 + m;
+          return Object.assign({}, a, { inicioMin, fimMin: inicioMin + 60 });
+        })
+        .sort((a, b) => a.inicioMin - b.inicioMin);
+
+      vazio.style.display = itens.length === 0 ? 'block' : 'none';
+      if (itens.length === 0) return;
+
+      const clusters = [];
+      let clusterAtual = [], fimClusterAtual = -Infinity;
+      for (const item of itens) {
+        if (clusterAtual.length && item.inicioMin >= fimClusterAtual) {
+          clusters.push(clusterAtual); clusterAtual = []; fimClusterAtual = -Infinity;
+        }
+        clusterAtual.push(item);
+        fimClusterAtual = Math.max(fimClusterAtual, item.fimMin);
+      }
+      if (clusterAtual.length) clusters.push(clusterAtual);
+
+      for (const cluster of clusters) {
+        const colunas = []; // guarda o fim (min) do último item de cada coluna
+        for (const item of cluster) {
+          let col = colunas.findIndex(fim => fim <= item.inicioMin);
+          if (col === -1) { col = colunas.length; colunas.push(item.fimMin); }
+          else colunas[col] = item.fimMin;
+          item.coluna = col;
+        }
+        const totalColunas = colunas.length;
+        for (const item of cluster) {
+          const top = item.inicioMin - AGENDA_HORA_INICIO * 60;
+          const largura = 100 / totalColunas;
+          const { cls, rotulo } = classificarBlocoAgenda(item);
+          const div = document.createElement('div');
+          div.className = 'tl-block' + cls;
+          div.style.top = top + 'px';
+          div.style.height = '54px';
+          div.style.left = (largura * item.coluna) + '%';
+          div.style.width = `calc(${largura}% - 6px)`;
+          div.innerHTML = `<strong>${item.hora_atendimento.slice(0, 5)} · ${item.tipo_servico}</strong>${rotulo}`;
+          div.onclick = ev => abrirReatribuir(ev, item);
+          track.appendChild(div);
+        }
+      }
+    }
+    // Cor/rótulo do bloco conforme o estado do atendimento:
+    // aceito = verde (padrão) · sem prestadora = âmbar · proposto fora da janela
+    // de confirmação (>2 dias) = azul · proposto dentro da janela (<=2 dias,
+    // já pode ser confirmado pela prestadora) = laranja, pra chamar atenção.
+    function classificarBlocoAgenda(item) {
+      if (!item.prestadora_id) return { cls: ' sem-prestadora', rotulo: 'sem prestadora' };
+      if (item.status !== 'proposto') return { cls: '', rotulo: item.prestadora_nome || '' };
+
+      const hojeISO = new Date().toISOString().slice(0, 10);
+      const dataISO = String(item.data_atendimento).slice(0, 10);
+      const diffDias = Math.round((new Date(dataISO + 'T00:00:00Z') - new Date(hojeISO + 'T00:00:00Z')) / 86400000);
+      return diffDias <= 2
+        ? { cls: ' pendente-confirmacao', rotulo: (item.prestadora_nome || '') + ' · aguardando confirmação' }
+        : { cls: ' aguardando-janela', rotulo: (item.prestadora_nome || '') + ' · confirma em breve' };
+    }
+    function abrirReatribuir(ev, item) {
+      fecharReatribuirPop();
+      const rect = ev.currentTarget.getBoundingClientRect();
+      const opcoes = (prestadorasAgenda[currentUnit] || [])
+        .map(p => `<option value="${p.id}" ${p.id === item.prestadora_id ? 'selected' : ''}>${p.nome}</option>`).join('');
+      const pop = document.createElement('div');
+      pop.className = 'reatribuir-pop';
+      pop.id = 'reatribuir-pop';
+      pop.innerHTML = `
+        <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Prestadora</label>
+        <select id="reatribuir-select"><option value="">Sem prestadora</option>${opcoes}</select>
+        <div class="form-actions">
+          <button class="btn-sm ghost" onclick="fecharReatribuirPop()">Cancelar</button>
+          <button class="btn-sm" onclick="salvarReatribuicao('${item.id}')">Salvar</button>
+        </div>`;
+      document.body.appendChild(pop);
+      pop.style.left = Math.min(rect.right + window.scrollX + 8, window.innerWidth - 236) + 'px';
+      pop.style.top = (rect.top + window.scrollY) + 'px';
+    }
+    function fecharReatribuirPop() { document.getElementById('reatribuir-pop')?.remove(); }
+    async function salvarReatribuicao(atendimentoId) {
+      const prestadoraId = document.getElementById('reatribuir-select').value || null;
+      try {
+        await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/reatribuir`, { method: 'POST', body: JSON.stringify({ prestadora_id: prestadoraId }) });
+        fecharReatribuirPop();
+        toast('Prestadora atualizada.');
+        selecionarDiaAgenda(diaSelecionadoAgenda);
+      } catch (err) { toast('Erro ao reatribuir: ' + err.message); }
+    }
+
+    /* Atendimento recorrente por semana-modelo: gera N ocorrências concretas de
+       uma vez (sem tabela de regra) repetindo um conjunto de dias/horários. */
+    const REC_DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    let itensRecorrencia = [];
+
+    function abrirModalRecorrente() {
+      itensRecorrencia = [{ dia: 1, hora: '', servico: '', area: '', prestadora: '', cliente: '' }];
+      document.getElementById('rec-data').value = diaSelecionadoAgenda || new Date().toISOString().slice(0, 10);
+      document.getElementById('rec-horizonte').value = 3;
+      document.getElementById('rec-alternada').checked = false;
+      renderItensRecorrente();
+      document.getElementById('modal-recorrente').classList.add('show');
+    }
+    function fecharModalRecorrente() { document.getElementById('modal-recorrente').classList.remove('show'); }
+    function adicionarItemRecorrente() {
+      itensRecorrencia.push({ dia: 1, hora: '', servico: '', area: '', prestadora: '', cliente: '' });
+      renderItensRecorrente();
+    }
+    function removerItemRecorrente(idx) { itensRecorrencia.splice(idx, 1); renderItensRecorrente(); }
+    function atualizarItemRecorrente(idx, campo, valor) { itensRecorrencia[idx][campo] = valor; }
+
+    function renderItensRecorrente() {
+      const opcoesPrestadora = prestadorasAgenda[currentUnit] || [];
+      const opcoesCliente = (clientesData[currentUnit] || []).filter(c => c.id);
+      document.getElementById('rec-itens-lista').innerHTML = itensRecorrencia.map((item, idx) => `
+        <div style="border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:12px">
+          <div class="field-row">
+            <div class="field"><label>Dia da semana</label>
+              <select onchange="atualizarItemRecorrente(${idx},'dia',+this.value)">
+                ${REC_DIAS_SEMANA.map((nome, i) => `<option value="${i}" ${item.dia === i ? 'selected' : ''}>${nome}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field"><label>Horário</label><input type="time" value="${item.hora}" onchange="atualizarItemRecorrente(${idx},'hora',this.value)"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Serviço</label><input value="${item.servico}" placeholder="Limpeza residencial" onchange="atualizarItemRecorrente(${idx},'servico',this.value)"></div>
+            <div class="field"><label>Bairro / local</label><input value="${item.area}" onchange="atualizarItemRecorrente(${idx},'area',this.value)"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Prestadora (opcional)</label>
+              <select onchange="atualizarItemRecorrente(${idx},'prestadora',this.value)">
+                <option value="">Sem prestadora ainda</option>
+                ${opcoesPrestadora.map(p => `<option value="${p.id}" ${item.prestadora === p.id ? 'selected' : ''}>${p.nome}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field"><label>Cliente (opcional)</label>
+              <select onchange="atualizarItemRecorrente(${idx},'cliente',this.value)">
+                <option value="">Avulso</option>
+                ${opcoesCliente.map(c => `<option value="${c.id}" ${item.cliente === c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <button class="btn-sm ghost" onclick="removerItemRecorrente(${idx})" ${itensRecorrencia.length === 1 ? 'disabled' : ''}>Remover este dia</button>
+        </div>
+      `).join('');
+    }
+
+    async function salvarRecorrente() {
+      const itensValidos = itensRecorrencia.filter(i => i.servico.trim() && i.hora);
+      if (itensValidos.length === 0) { toast('Preencha serviço e horário em ao menos um dia da semana.'); return; }
+      const dataInicio = document.getElementById('rec-data').value;
+      if (!dataInicio) { toast('Escolha a semana de início.'); return; }
+
+      const body = {
+        data_inicio: dataInicio,
+        horizonte_meses: document.getElementById('rec-horizonte').value,
+        semanas_alternadas: document.getElementById('rec-alternada').checked,
+        itens: itensValidos.map(i => ({
+          dia_semana: i.dia, hora_atendimento: i.hora, tipo_servico: i.servico.trim(), area: i.area.trim() || null,
+          prestadora_id: i.prestadora || null, cliente_id: i.cliente || null,
+        })),
+      };
+      try {
+        const resp = await api(`/atendimentos/admin/${currentUnit}/recorrente`, { method: 'POST', body: JSON.stringify(body) });
+        fecharModalRecorrente();
+        toast(resp.quantidade_gerada + ' atendimentos gerados.');
+        renderCalendarioMes();
+      } catch (err) { toast('Erro ao criar recorrência: ' + err.message); }
+    }
+
     /* prestadora */
+    // Prestadora só pode confirmar (aceitar) a partir de 2 dias antes do
+    // atendimento — antes disso o convite fica visível mas o botão desabilitado.
+    function statusConfirmacaoConvite(c) {
+      const hojeISO = new Date().toISOString().slice(0, 10);
+      const dataISO = String(c.data).slice(0, 10);
+      const diasRestantes = Math.round((new Date(dataISO + 'T00:00:00Z') - new Date(hojeISO + 'T00:00:00Z')) / 86400000);
+      return diasRestantes <= 2
+        ? { podeConfirmar: true, aviso: '' }
+        : { podeConfirmar: false, aviso: `Você poderá confirmar a partir de 2 dias antes do atendimento (faltam ${diasRestantes} dias).` };
+    }
     function renderPrestadora() {
       const il = document.getElementById('invitelist');
       il.innerHTML = convites.length === 0 ? '<div class="empty">Nenhum convite no momento. Você está em dia! 🎉</div>'
-        : convites.map(c => `<div class="invite"><div class="invite-top"><strong>${c.serv}</strong></div><div class="invite-meta"><b>${c.data} · ${c.hora}</b> &nbsp;·&nbsp; ${c.area} &nbsp;·&nbsp; ${c.valor}</div><div class="invite-actions"><button class="btn-accept" onclick="aceitar(${c.id})">Aceitar</button><button class="btn-decline" onclick="recusar(${c.id})">Recusar</button></div></div>`).join('');
+        : convites.map(c => {
+          const { podeConfirmar, aviso } = statusConfirmacaoConvite(c);
+          const botaoAceitar = podeConfirmar
+            ? `<button class="btn-accept" onclick="aceitar('${c.id}')">Aceitar</button>`
+            : `<button class="btn-accept" disabled style="opacity:.5;cursor:not-allowed">Aceitar</button>`;
+          return `<div class="invite"><div class="invite-top"><strong>${c.serv}</strong></div><div class="invite-meta"><b>${String(c.data).slice(0, 10)} · ${c.hora}</b> &nbsp;·&nbsp; ${c.area || ''} &nbsp;·&nbsp; ${c.valor}</div>${aviso ? `<div class="warn"><span>${aviso}</span></div>` : ''}<div class="invite-actions">${botaoAceitar}<button class="btn-decline" onclick="recusar('${c.id}')">Recusar</button></div></div>`;
+        }).join('');
       const ag = document.getElementById('prest-agenda');
       ag.innerHTML = agendaPrestadora.length === 0 ? '<div class="empty">Você ainda não aceitou atendimentos para hoje.</div>'
-        : agendaPrestadora.slice().sort((a, b) => a.hora.localeCompare(b.hora)).map(j => `<div class="job"><div class="job-time">${j.hora}</div><div class="job-body"><strong>${j.serv}</strong><span>${j.valor}</span></div><div class="job-status st-ok">aceito</div></div>`).join('');
+        : agendaPrestadora.slice().sort((a, b) => (a.hora || '').localeCompare(b.hora || '')).map(j => `<div class="job"><div class="job-time">${j.hora}</div><div class="job-body"><strong>${j.serv}</strong><span>${j.valor}</span></div><div class="job-status st-ok">aceito</div></div>`).join('');
       document.getElementById('ag-count').textContent = agendaPrestadora.length;
-      document.getElementById('ps-aceitos').textContent = agendaPrestadora.length;
+      const hojeISO = new Date().toISOString().slice(0, 10);
+      const domingoSemana = new Date(); domingoSemana.setDate(domingoSemana.getDate() - domingoSemana.getDay());
+      const sabadoSemana = new Date(domingoSemana); sabadoSemana.setDate(sabadoSemana.getDate() + 6);
+      const domingoISO = domingoSemana.toISOString().slice(0, 10), sabadoISO = sabadoSemana.toISOString().slice(0, 10);
+      const daSemana = agendaPrestadora.filter(a => { const d = String(a.data).slice(0, 10); return d >= domingoISO && d <= sabadoISO; });
+
+      document.getElementById('ps-aceitos').textContent = agendaPrestadora.filter(a => String(a.data).slice(0, 10) === hojeISO).length;
       document.getElementById('ps-pend').textContent = convites.length;
+      document.getElementById('ps-previsto-valor').textContent = daSemana.reduce((soma, a) => soma + a.valorNum, 0).toLocaleString('pt-BR');
+      document.getElementById('ps-previsto-qtd').textContent = daSemana.length;
       renderPrestAval();
     }
+    /* Calendário da prestadora: visão só-leitura dos próximos atendimentos
+       (convites propostos + agenda já confirmada), por mês/dia. */
+    let mesAtualCalendarioPrestadora = new Date();
+    let diaSelecionadoCalendarioPrestadora = null;
+    function listaAtendimentosPrestadora() { return [...convites, ...agendaPrestadora]; }
+    function renderCalendarioPrestadora() {
+      mesAtualCalendarioPrestadora = new Date();
+      selecionarDiaCalendarioPrestadora(new Date().toISOString().slice(0, 10));
+    }
+    function mudarMesCalendarioPrestadora(delta) {
+      mesAtualCalendarioPrestadora = new Date(mesAtualCalendarioPrestadora.getFullYear(), mesAtualCalendarioPrestadora.getMonth() + delta, 1);
+      construirCalendarioMesPrestadora();
+    }
+    function construirCalendarioMesPrestadora() {
+      const ano = mesAtualCalendarioPrestadora.getFullYear(), mes = mesAtualCalendarioPrestadora.getMonth();
+      document.getElementById('ps-cal-mes-label').textContent = mesAtualCalendarioPrestadora.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+      const diasComAtendimento = new Set(listaAtendimentosPrestadora().map(a => String(a.data).slice(0, 10)));
+      const inicioSemana = new Date(ano, mes, 1).getDay();
+      const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+      const hojeISO = new Date().toISOString().slice(0, 10);
+
+      let html = '';
+      for (let i = 0; i < inicioSemana; i++) html += '<div class="cal-day outro-mes"></div>';
+      for (let d = 1; d <= diasNoMes; d++) {
+        const dataISO = ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        const classes = ['cal-day'];
+        if (dataISO === hojeISO) classes.push('hoje');
+        if (dataISO === diaSelecionadoCalendarioPrestadora) classes.push('selecionado');
+        if (diasComAtendimento.has(dataISO)) classes.push('tem-atendimento');
+        html += `<div class="${classes.join(' ')}" onclick="selecionarDiaCalendarioPrestadora('${dataISO}')">${d}</div>`;
+      }
+      document.getElementById('ps-cal-grid').innerHTML = html;
+    }
+    function selecionarDiaCalendarioPrestadora(dataISO) {
+      diaSelecionadoCalendarioPrestadora = dataISO;
+      construirCalendarioMesPrestadora();
+      const d = new Date(dataISO + 'T00:00:00');
+      document.getElementById('ps-cal-dia-label').textContent = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+
+      const doDia = listaAtendimentosPrestadora()
+        .filter(a => String(a.data).slice(0, 10) === dataISO)
+        .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+      document.getElementById('ps-cal-lista').innerHTML = doDia.length === 0 ? '<div class="empty">Nada agendado neste dia.</div>'
+        : doDia.map(a => {
+          if (a.status === 'aceito') return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${a.serv}</strong><span>${a.valor || ''}</span></div><div class="job-status st-ok">confirmado</div></div>`;
+          const { podeConfirmar } = statusConfirmacaoConvite(a);
+          const cls = podeConfirmar ? 'st-new' : 'st-route';
+          const rotulo = podeConfirmar ? 'pode confirmar' : 'aguardando janela';
+          return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${a.serv}</strong><span>${a.valor || ''}</span></div><div class="job-status ${cls}">${rotulo}</div></div>`;
+        }).join('');
+    }
     async function aceitar(id) {
-      const { error } = await supa.from('atendimentos').update({ status: 'aceito' }).eq('id', id);
-      if (error) { toast('Erro ao aceitar no banco: ' + error.message); return; }
-      await carregarDadosSupabase(); renderPrestadora();
-      toast('Atendimento aceito — já foi para a agenda da unidade.');
+      try {
+        await api(`/atendimentos/prestadora/me/${id}/aceitar`, { method: 'POST' });
+        await carregarDadosPrestadora(); renderPrestadora(); renderCalendarioPrestadora();
+        toast('Atendimento aceito — já foi para a agenda da unidade.');
+      } catch (err) { toast('Erro ao aceitar no banco: ' + err.message); }
     }
     async function recusar(id) {
-      const { error } = await supa.from('atendimentos').update({ status: 'recusado' }).eq('id', id);
-      if (error) { toast('Erro ao recusar no banco: ' + error.message); return; }
-      await carregarDadosSupabase(); renderPrestadora();
-      toast('Convite recusado.');
+      try {
+        await api(`/atendimentos/prestadora/me/${id}/recusar`, { method: 'POST' });
+        await carregarDadosPrestadora(); renderPrestadora(); renderCalendarioPrestadora();
+        toast('Convite recusado.');
+      } catch (err) { toast('Erro ao recusar no banco: ' + err.message); }
     }
 
     /* ===== dados do admin (Equipe e Clientes) =====
-       equipeData / clientesData / avaliacoes / concluidos já são
-       carregados do Supabase em carregarDadosSupabase() (topo do script) */
+       equipeData / clientesData / avaliacoes já são carregados da API
+       local em carregarEquipeClientesAvaliacoes() (topo do script) */
     let currentUnit = 'carazinho';
     function starsHTML(n) { return '<span class="stars">' + [1, 2, 3, 4, 5].map(i => '<span class="' + (i <= n ? '' : 's-off') + '">★</span>').join('') + '</span>'; }
 
     /* navegação interna do admin */
     function adminView(name) {
+      const mapaModulo = { visaogeral: 'dashboard', agenda: 'agenda', equipe: 'equipe', clientes: 'clientes', avaliacoes: 'avaliacoes', subadmins: 'subadmins' };
+      const p = permissoesAtuais();
+      const modulo = mapaModulo[name];
+      if (modulo && p[modulo] === false) { toast('Você não tem permissão para acessar este módulo.'); return; }
+
       document.querySelectorAll('#screen-franqueado .adminview').forEach(v => v.style.display = 'none');
       const view = document.getElementById('av-' + name); if (view) view.style.display = 'block';
       document.querySelectorAll('#screen-franqueado .topnav a').forEach(a => a.classList.remove('active'));
@@ -3429,13 +4118,8 @@
       else if (name === 'equipe') renderEquipe();
       else if (name === 'clientes') renderClientes();
       else if (name === 'avaliacoes') renderAvaliacoesAdmin();
+      else if (name === 'subadmins') renderSubadmins();
       window.scrollTo(0, 0);
-    }
-    function renderAgendaAdmin() {
-      const u = unidades[currentUnit];
-      document.getElementById('agv-unit').textContent = u.nome + ' · hoje';
-      document.getElementById('agv-count').textContent = u.jobs.length;
-      document.getElementById('agv-list').innerHTML = u.jobs.map(j => `<div class="job"><div class="job-time">${j.t}</div><div class="job-body"><strong>${j.c}</strong><span>${j.p}</span></div><div class="job-status ${j.s}">${j.st}</div></div>`).join('');
     }
     function renderEquipe() {
       const arr = equipeData[currentUnit];
@@ -3456,27 +4140,113 @@
       const hist = avaliacoes.filter(a => a.status !== 'pendente');
       document.getElementById('adm-aval-count').textContent = pend.length;
       document.getElementById('adm-aval-pend').innerHTML = pend.length === 0 ? '<div class="empty">Nenhuma avaliação aguardando aprovação.</div>'
-        : pend.map(a => `<div class="invite"><div class="invite-top"><strong>${a.servico} · ${a.prestadora}</strong>${starsHTML(a.nota)}</div><div class="invite-meta">De <b>${a.cliente}</b> · ${a.data}${a.comentario ? ' — “' + a.comentario + '”' : ''}</div><div class="mod-actions"><button class="btn-sm" onclick="aprovarAval(${a.id})">Aprovar e enviar à prestadora</button><button class="btn-sm ghost" onclick="recusarAval(${a.id})">Recusar</button></div></div>`).join('');
+        : pend.map(a => `<div class="invite"><div class="invite-top"><strong>${a.servico} · ${a.prestadora}</strong>${starsHTML(a.nota)}</div><div class="invite-meta">De <b>${a.cliente}</b> · ${a.data}${a.comentario ? ' — “' + a.comentario + '”' : ''}</div><div class="mod-actions"><button class="btn-sm" onclick="aprovarAval('${a.id}')">Aprovar e enviar à prestadora</button><button class="btn-sm ghost" onclick="recusarAval('${a.id}')">Recusar</button></div></div>`).join('');
       document.getElementById('adm-aval-hist').innerHTML = hist.length === 0 ? '<div class="empty">Nada moderado ainda.</div>'
         : hist.map(a => `<div class="tablerow"><div class="tr-body"><strong>${a.servico} · ${a.prestadora}</strong><span>${a.cliente} · ${a.data}</span></div>${starsHTML(a.nota)}<span class="chip ${a.status === 'aprovada' ? 'chip-on' : 'chip-off'}">${a.status}</span></div>`).join('');
       updateAvalBadge();
     }
     async function aprovarAval(id) {
-      const { error } = await supa.from('avaliacoes').update({ status: 'aprovada', moderado_por: usuarioLogado?.id || null, moderado_em: new Date().toISOString() }).eq('id', id);
-      if (error) { toast('Erro ao aprovar no banco: ' + error.message); return; }
-      await carregarDadosSupabase(); renderAvaliacoesAdmin();
-      toast('Avaliação aprovada — agora aparece para a prestadora.');
+      try {
+        await api(`/avaliacoes/admin/${currentUnit}/${id}/aprovar`, { method: 'POST' });
+        await carregarEquipeClientesAvaliacoes(currentUnit); renderAvaliacoesAdmin();
+        toast('Avaliação aprovada — agora aparece para a prestadora.');
+      } catch (err) { toast('Erro ao aprovar no banco: ' + err.message); }
     }
     async function recusarAval(id) {
-      const { error } = await supa.from('avaliacoes').update({ status: 'recusada', moderado_por: usuarioLogado?.id || null, moderado_em: new Date().toISOString() }).eq('id', id);
-      if (error) { toast('Erro ao recusar no banco: ' + error.message); return; }
-      await carregarDadosSupabase(); renderAvaliacoesAdmin();
-      toast('Avaliação recusada — não foi enviada à prestadora.');
+      try {
+        await api(`/avaliacoes/admin/${currentUnit}/${id}/recusar`, { method: 'POST' });
+        await carregarEquipeClientesAvaliacoes(currentUnit); renderAvaliacoesAdmin();
+        toast('Avaliação recusada — não foi enviada à prestadora.');
+      } catch (err) { toast('Erro ao recusar no banco: ' + err.message); }
+    }
+
+    /* Acessos: CRUD de sub-administradores (funcionários com permissão por módulo) */
+    let subadminsCache = [];
+    let subadminEditandoId = null; // null = formulário em modo "criar"
+    const SA_MODULOS = ['agenda', 'avaliacoes', 'equipe', 'clientes', 'dashboard'];
+    const SA_ROTULOS = { agenda: 'Agenda', avaliacoes: 'Avaliações', equipe: 'Equipe', clientes: 'Clientes', dashboard: 'Visão geral' };
+
+    async function renderSubadmins() {
+      document.getElementById('sa-unit').textContent = unidades[currentUnit].nome;
+      try {
+        subadminsCache = await api(`/sub-administradores/${currentUnit}`);
+      } catch (err) { toast('Erro ao carregar acessos: ' + err.message); subadminsCache = []; }
+      document.getElementById('sa-list').innerHTML = subadminsCache.length === 0 ? '<div class="empty">Nenhum funcionário cadastrado ainda.</div>'
+        : subadminsCache.map(s => {
+          const modulos = SA_MODULOS.filter(m => s['pode_' + m]).map(m => SA_ROTULOS[m]).join(', ') || 'sem módulos';
+          return `<div class="tablerow">
+            <div class="tr-body"><strong>${s.nome} ${s.sobrenome}</strong><span>${s.email} · ${modulos}</span></div>
+            <span class="chip ${s.ativo ? 'chip-on' : 'chip-off'}">${s.ativo ? 'ativo' : 'inativo'}</span>
+            <button class="btn-sm ghost" onclick="editarSubadmin('${s.id}')">Editar</button>
+            <button class="btn-sm ghost" onclick="toggleSubadmin('${s.id}', ${!s.ativo})">${s.ativo ? 'Desativar' : 'Reativar'}</button>
+          </div>`;
+        }).join('');
+    }
+    // Abre o mesmo formulário de cadastro em modo edição — não cria um usuário
+    // novo, só ajusta nome/permissões/senha do sub-admin já existente.
+    function editarSubadmin(id) {
+      const s = subadminsCache.find(x => x.id === id);
+      if (!s) return;
+      subadminEditandoId = id;
+      document.getElementById('sa-nome').value = s.nome;
+      document.getElementById('sa-sobrenome').value = s.sobrenome;
+      document.getElementById('sa-email').value = s.email;
+      document.getElementById('sa-email').disabled = true; // e-mail não é editável (é o login)
+      document.getElementById('sa-senha').value = '';
+      document.getElementById('sa-senha-label').textContent = 'Nova senha (deixe em branco pra manter)';
+      SA_MODULOS.forEach(m => document.getElementById('sa-perm-' + m).checked = !!s['pode_' + m]);
+      document.getElementById('sa-form-titulo').textContent = 'Editar acesso de ' + s.nome;
+      document.getElementById('sa-form-botao').textContent = 'Salvar alterações';
+      document.getElementById('sa-form-cancelar').style.display = '';
+      document.getElementById('sa-nome').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    function cancelarEdicaoSubadmin() {
+      subadminEditandoId = null;
+      ['sa-nome', 'sa-sobrenome', 'sa-email', 'sa-senha'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('sa-email').disabled = false;
+      document.getElementById('sa-senha-label').textContent = 'Senha';
+      SA_MODULOS.forEach(m => document.getElementById('sa-perm-' + m).checked = false);
+      document.getElementById('sa-form-titulo').textContent = 'Adicionar funcionário';
+      document.getElementById('sa-form-botao').textContent = 'Criar acesso';
+      document.getElementById('sa-form-cancelar').style.display = 'none';
+    }
+    async function salvarSubadmin() {
+      const permissoes = Object.fromEntries(SA_MODULOS.map(m => [m, document.getElementById('sa-perm-' + m).checked]));
+      const nome = document.getElementById('sa-nome').value.trim();
+      const sobrenome = document.getElementById('sa-sobrenome').value.trim();
+      const senha = document.getElementById('sa-senha').value;
+
+      if (subadminEditandoId) {
+        const body = { nome, sobrenome, permissoes };
+        if (senha) body.senha = senha;
+        try {
+          await api(`/sub-administradores/${currentUnit}/${subadminEditandoId}`, { method: 'PATCH', body: JSON.stringify(body) });
+          toast('Acesso atualizado.');
+          cancelarEdicaoSubadmin();
+          renderSubadmins();
+        } catch (err) { toast('Erro ao salvar alterações: ' + err.message); }
+        return;
+      }
+
+      const email = document.getElementById('sa-email').value.trim();
+      if (!nome || !sobrenome || !email || !senha) { toast('Preencha nome, sobrenome, e-mail e senha.'); return; }
+      try {
+        await api(`/sub-administradores/${currentUnit}`, { method: 'POST', body: JSON.stringify({ nome, sobrenome, email, senha, permissoes }) });
+        cancelarEdicaoSubadmin();
+        toast('Acesso criado.');
+        renderSubadmins();
+      } catch (err) { toast('Erro ao criar acesso: ' + err.message); }
+    }
+    async function toggleSubadmin(id, ativar) {
+      try {
+        await api(`/sub-administradores/${currentUnit}/${id}/${ativar ? 'ativar' : 'desativar'}`, { method: 'POST' });
+        renderSubadmins();
+      } catch (err) { toast('Erro ao atualizar acesso: ' + err.message); }
     }
 
     /* prestadora: últimas 3 em destaque + histórico */
     function renderPrestAval() {
-      const mine = avaliacoes.filter(a => a.prestadora === prestadora.nome && a.status === 'aprovada');
+      const mine = avaliacoes.filter(a => a.status === 'aprovada');
       const avg = mine.length ? (mine.reduce((s, a) => s + a.nota, 0) / mine.length).toFixed(1) : '—';
       document.getElementById('prest-aval-avg').textContent = avg;
       document.getElementById('prest-aval-total').textContent = mine.length;
@@ -3492,7 +4262,7 @@
     function renderClienteAval() {
       const box = document.getElementById('cli-aval');
       box.innerHTML = concluidos.length === 0 ? '<div class="empty">Nenhum atendimento pendente de avaliação. Obrigado! 🙂</div>'
-        : concluidos.map(c => `<div class="rate-item"><div class="rate-top"><strong>${c.servico}</strong><span>${c.data} · ${c.prestadora}</span></div><div class="rate-stars" id="rs-${c.id}">${[1, 2, 3, 4, 5].map(n => '<span class="st" onclick="setStar(' + c.id + ',' + n + ')">★</span>').join('')}</div><textarea id="rc-${c.id}" placeholder="Conte como foi o atendimento (opcional)"></textarea><div><button class="btn-sm" onclick="enviarAvaliacao(${c.id})">Enviar avaliação</button></div></div>`).join('');
+        : concluidos.map(c => `<div class="rate-item"><div class="rate-top"><strong>${c.servico}</strong><span>${c.data} · ${c.prestadora}</span></div><div class="rate-stars" id="rs-${c.id}">${[1, 2, 3, 4, 5].map(n => '<span class="st" onclick="setStar(\'' + c.id + '\',' + n + ')">★</span>').join('')}</div><textarea id="rc-${c.id}" placeholder="Conte como foi o atendimento (opcional)"></textarea><div><button class="btn-sm" onclick="enviarAvaliacao('${c.id}')">Enviar avaliação</button></div></div>`).join('');
     }
     function setStar(id, n) { selRating[id] = n; const c = document.getElementById('rs-' + id); if (!c) return;[...c.children].forEach((s, i) => s.classList.toggle('on', i < n)); }
     async function enviarAvaliacao(id) {
@@ -3500,15 +4270,13 @@
       const nota = selRating[id] || 0;
       if (!nota) { toast('Escolha de 1 a 5 estrelas antes de enviar.'); return; }
       const com = (document.getElementById('rc-' + id).value || '').trim();
-      const { error } = await supa.from('avaliacoes').insert({
-        atendimento_id: id, cliente_id: usuarioLogado?.id, prestadora_id: c.prestadora_id,
-        nota, comentario: com, status: 'pendente'
-      });
-      if (error) { toast('Erro ao enviar avaliação: ' + error.message); return; }
-      delete selRating[id];
-      await carregarDadosSupabase();
-      renderClienteAval(); updateAvalBadge();
-      toast('Avaliação enviada — passará pela unidade antes de ir à prestadora.');
+      try {
+        await api('/avaliacoes', { method: 'POST', body: JSON.stringify({ atendimento_id: id, nota, comentario: com }) });
+        delete selRating[id];
+        await carregarDadosCliente();
+        renderClienteAval();
+        toast('Avaliação enviada — passará pela unidade antes de ir à prestadora.');
+      } catch (err) { toast('Erro ao enviar avaliação: ' + err.message); }
     }
 
     /* pedido do cliente -> "novo" na unidade */
@@ -3518,15 +4286,17 @@
       const serv = document.getElementById('c-serv').value;
       const msg = (document.getElementById('c-msg').value || '').trim();
       if (!nome || !tel) { toast('Preencha seu nome e telefone para a gente te retornar.'); return; }
-      const { error } = await supa.from('atendimentos').insert({
-        unidade_id: unidades[regiao].id, tipo_servico: serv, area: msg || null,
-        data_atendimento: new Date().toISOString().slice(0, 10), status: 'pedido',
-        origem: viaWhats ? 'whatsapp' : 'site'
-      });
-      if (error) { toast('Erro ao enviar pedido: ' + error.message); return; }
-      document.getElementById('c-nome').value = ''; document.getElementById('c-tel').value = ''; document.getElementById('c-msg').value = '';
-      await carregarDadosSupabase();
-      toast(viaWhats ? 'Pedido enviado! Abriria o WhatsApp da unidade de ' + cidades[regiao].nome + '.' : 'Pedido enviado para a unidade de ' + cidades[regiao].nome + '. Em breve entram em contato.');
+      try {
+        await api('/atendimentos', {
+          method: 'POST', body: JSON.stringify({
+            unidade_slug: regiao, tipo_servico: serv, area: msg || null,
+            data_atendimento: new Date().toISOString().slice(0, 10),
+            origem: viaWhats ? 'whatsapp' : 'site'
+          })
+        });
+        document.getElementById('c-nome').value = ''; document.getElementById('c-tel').value = ''; document.getElementById('c-msg').value = '';
+        toast(viaWhats ? 'Pedido enviado! Abriria o WhatsApp da unidade de ' + cidades[regiao].nome + '.' : 'Pedido enviado para a unidade de ' + cidades[regiao].nome + '. Em breve entram em contato.');
+      } catch (err) { toast('Erro ao enviar pedido: ' + err.message); }
     }
 
     let toastTimer;
@@ -3537,7 +4307,12 @@
     function toggleTheme() { const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; applyTheme(cur); }
     (function () { let t = 'light'; try { t = localStorage.getItem('pm-theme') || 'light'; } catch (e) { } applyTheme(t); })();
     document.getElementById('region-modal').addEventListener('click', e => { if (e.target.id === 'region-modal') e.currentTarget.classList.remove('show'); });
-    carregarDadosSupabase(); // carrega unidades (dado público) já na home; convites/agenda/concluídos ficam vazios até o login
+    document.getElementById('modal-recorrente').addEventListener('click', e => { if (e.target.id === 'modal-recorrente') e.currentTarget.classList.remove('show'); });
+    document.addEventListener('click', e => {
+      const pop = document.getElementById('reatribuir-pop');
+      if (pop && !pop.contains(e.target) && !e.target.closest('.tl-block')) fecharReatribuirPop();
+    });
+    carregarDadosPublicos(); // carrega unidades (dado público) já na home; dados de admin/prestadora/cliente ficam vazios até o login
   </script>
 </body>
 

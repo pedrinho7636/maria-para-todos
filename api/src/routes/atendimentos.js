@@ -214,14 +214,26 @@ router.get('/prestadora/me/agenda', requireAuth, requireRole('prestadora'), asyn
   res.json(rows);
 }));
 
+// Prestadora só pode confirmar (aceitar) um convite a partir de 2 dias antes
+// do atendimento — reserva de agenda muito antecipada fica só "aguardando".
 router.post('/prestadora/me/:id/aceitar', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
-  const { rows: [atendimento] } = await pool.query(
-    `update atendimentos set status = 'aceito', atualizado_em = now()
-     where id = $1 and prestadora_id = $2 and status = 'proposto'
-     returning *`,
+  const { rows: [atual] } = await pool.query(
+    `select * from atendimentos where id = $1 and prestadora_id = $2 and status = 'proposto'`,
     [req.params.id, req.user.id]
   );
-  if (!atendimento) return res.status(404).json({ erro: 'Convite não encontrado' });
+  if (!atual) return res.status(404).json({ erro: 'Convite não encontrado' });
+
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const dataISO = atual.data_atendimento.toISOString().slice(0, 10);
+  const diasRestantes = Math.round((new Date(dataISO) - new Date(hojeISO)) / 86400000);
+  if (diasRestantes > 2) {
+    return res.status(400).json({ erro: `Só é possível confirmar a partir de 2 dias antes do atendimento (faltam ${diasRestantes} dias)` });
+  }
+
+  const { rows: [atendimento] } = await pool.query(
+    `update atendimentos set status = 'aceito', atualizado_em = now() where id = $1 returning *`,
+    [req.params.id]
+  );
   res.json(atendimento);
 }));
 
