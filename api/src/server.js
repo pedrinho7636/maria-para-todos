@@ -56,6 +56,16 @@ const limiteLoginIp = rateLimit({ ...base, max: 60, skipSuccessfulRequests: true
 // cada pedido de cadastro dispara e-mail de verdade, então tem teto — mas folgado
 // o bastante pra um cadastro (pedir código, reenviar, confirmar) sem travar
 const limiteCadastro = rateLimit({ ...base, max: 30 });
+// Recuperação de senha. A chave é só o identificador (sem o IP): quem quer lotar a
+// caixa de e-mail de alguém, ou chutar o código de 6 dígitos, troca de IP à vontade —
+// o limite tem que ser por conta. Chutes: 8 erros / 15 min contra 1 milhão de códigos
+// que expiram em 15 min = chance desprezível. Os acertos não contam.
+const chaveConta = (req) => `${String(req.body?.perfil ?? '')}|${String(req.body?.identificador ?? '').trim().toLowerCase()}`;
+const limiteRecuperarPedido = rateLimit({ ...base, max: 5, keyGenerator: chaveConta });
+const limiteRecuperarConfirmar = rateLimit({ ...base, max: 8, skipSuccessfulRequests: true, keyGenerator: chaveConta });
+const limiteRecuperarIp = rateLimit({ ...base, max: 40 });
+app.post('/api/auth/recuperar-senha', limiteRecuperarIp, limiteRecuperarPedido);
+app.post('/api/auth/recuperar-senha/confirmar', limiteRecuperarIp, limiteRecuperarConfirmar);
 app.use('/api/auth/login', limiteLoginIp, limiteLoginConta);
 app.use('/api/auth/cadastro', limiteCadastro);
 

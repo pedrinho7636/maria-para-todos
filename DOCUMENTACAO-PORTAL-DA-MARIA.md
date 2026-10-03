@@ -1,7 +1,7 @@
-# Documentação técnica — Portal da Maria (v1.1.0)
+# Documentação técnica — Portal da Maria (versão 0.0.0.0)
 
 > Este documento nasceu da engenharia reversa de um protótipo estático sem backend (v0.0.3). O sistema real hoje
-> (v1.1.0) tem persistência de verdade: frontend em arquivo único (`Portal Da Maria - V1.1.0.html`) conversando com
+> (versão 0.0.0.0) tem persistência de verdade: frontend em arquivo único (`Portal Da Maria.html`) conversando com
 > uma API própria em Node/Express (`api/`), que fala com um PostgreSQL local — nada aqui é mockado ou simulado,
 > exceto onde explicitamente marcado (envio de e-mail no cadastro de admin, e a API oficial de WhatsApp Business,
 > ambos pausados/fora de escopo — ver seção 7 e `LEIA-ME.md`). As seções abaixo foram atualizadas pra refletir esse
@@ -43,6 +43,7 @@ prestadora, cliente.
 ### 2.2 `#screen-login`
 - Seleção de perfil (`setProfile`) entre `franqueado`, `prestadora`, `cliente`.
 - `doLogin()` chama `POST /api/auth/login` de verdade — a API confere a senha com bcrypt contra o hash salvo no Postgres e devolve um JWT (7 dias). Login de administrador tenta `administradores` e, se não achar, `sub_administradores` (mesma tela serve pros dois perfis).
+- **"Esqueci a senha"** (`abrirRecuperar()`): abre um modal em duas etapas. `POST /api/auth/recuperar-senha` manda um código de 6 dígitos pro e-mail cadastrado da conta (resposta sempre igual, exista a conta ou não); `POST /api/auth/recuperar-senha/confirmar` troca a senha com o código e a tela já entra com a senha nova. O código fica em `codigos_verificacao` sob a chave `recuperar:perfil:e-mail`; limites por conta (5 pedidos / 8 erros em 15 min).
 
 ### 2.3 `#screen-cadastro`
 Os 3 perfis (`setCadProfile`) seguem o mesmo padrão de duas etapas — nada é criado até o e-mail ser confirmado, já
@@ -67,7 +68,7 @@ Navegação interna via `adminView(name)`, com sub-telas (`.adminview`) — cada
 |---|---|---|
 | Visão geral | `carregarUnidadeAdmin()` | `GET /unidades/:slug/admin/dashboard` (view `vw_dashboard_unidade`) |
 | Agenda | `renderAgendaAdmin()` | `GET /atendimentos/admin/:slug/agenda` (calendário + linha do tempo do dia, reatribuição de prestadora, recorrência semanal) |
-| Equipe | `renderEquipe()` | `GET /unidades/:slug/admin/equipe` (view `vw_equipe_unidade`) |
+| Equipe | `renderEquipe()` | `GET /unidades/:slug/admin/equipe` (view `vw_equipe_unidade` + `prestadoras.valor_por_atendimento`); `PATCH /unidades/:slug/admin/equipe/:prestadoraId` define quanto a franquia paga por atendimento (só admin completo) |
 | Clientes | `renderClientes()` | `GET /unidades/:slug/admin/clientes` (view `vw_clientes_unidade`) |
 | Avaliações | `renderAvaliacoesAdmin()` | `GET /avaliacoes/admin/:slug` (moderação) |
 | Acessos | `renderSubadmins()` | `GET /sub-administradores/:slug` — CRUD de sub-administradores + telefone de WhatsApp da unidade (só admin completo, nunca delegável) |
@@ -80,6 +81,8 @@ Alternância de unidade (Carazinho/Panambi) via `setUnit(key)`, que recarrega os
 - `renderPrestadora()` desenha dois blocos, ambos vindos da API:
   - **Convites pendentes** (`GET /atendimentos/prestadora/me/convites`): `aceitar(id)` chama `POST .../:id/aceitar` (só permitido a partir de 2 dias antes do atendimento) e dispara um aviso por WhatsApp pra unidade; `recusar(id)` chama `POST .../:id/recusar`.
   - **Agenda aceita** (`GET /atendimentos/prestadora/me/agenda`): só os atendimentos já confirmados — reflete a regra "prestadora só vê o que foi aceito".
+- Valores: convites e agenda trazem `valor_pago` (o que a franquia paga a ela; nunca o `valor` cobrado do cliente). Os cartões "Previsto na semana" e "A receber no mês" vêm de `GET /atendimentos/prestadora/me/resumo` (calculado na API). A tarifa fica travada em `atendimentos.valor_prestadora` no aceite.
+- Local (`area`) do atendimento só aparece quando preenchido; o admin edita no balão da agenda (`PATCH /atendimentos/admin/:slug/:id/local`).
 - Calendário próprio (`renderCalendarioPrestadora`) com os próximos atendimentos por dia.
 - `renderPrestAval()`: nota média, total de avaliações, destaque das 3 mais recentes aprovadas + histórico das demais.
 
@@ -160,7 +163,7 @@ Esta tabela conecta cada estrutura mockada acima ao schema relacional gerado em 
 
 ---
 
-## 7. Status desses passos na v1.1.0
+## 7. Status desses passos na versão 0.0.0.0
 
 Esta seção listava passos sugeridos quando o projeto ainda era só o protótipo estático. Todos foram implementados
 (com Node/Express + PostgreSQL local, não Supabase — ver `LEIA-ME.md` para a arquitetura real):

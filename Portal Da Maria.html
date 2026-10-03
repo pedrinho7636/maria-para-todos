@@ -1549,7 +1549,7 @@
 
     .pstat {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
       gap: 14px;
       margin-bottom: 28px
     }
@@ -2216,12 +2216,13 @@
       border-radius: 10px;
       box-shadow: var(--shadow);
       padding: 12px;
-      width: 220px
+      width: 260px
     }
 
-    .reatribuir-pop select {
+    .reatribuir-pop select,
+    .reatribuir-pop input {
       width: 100%;
-      margin-bottom: 8px
+      margin-bottom: 10px
     }
 
     .tablerow {
@@ -2809,7 +2810,7 @@
             placeholder="voce@exemplo.com"></div>
         <div class="field"><label for="login-pass">Senha</label><input id="login-pass" type="password"
             placeholder="••••••••"></div>
-        <div class="row-between"><label><input type="checkbox" checked> Manter conectado</label><a href="#">Esqueci a
+        <div class="row-between"><label><input type="checkbox" checked> Manter conectado</label><a href="#" onclick="abrirRecuperar(event)">Esqueci a
             senha</a></div>
         <button class="btn-primary" onclick="doLogin()">Entrar</button>
         <div class="switch-auth">Não tem conta? <a onclick="goCadastro()">Criar conta</a></div>
@@ -3299,7 +3300,12 @@
         <div class="stat b">
           <div class="stat-label">Previsto na semana</div>
           <div class="stat-value"><small>R$</small> <span id="ps-previsto-valor">0</span></div>
-          <div class="stat-trend up"><span id="ps-previsto-qtd">0</span> atendimentos</div>
+          <div class="stat-trend up"><span id="ps-previsto-qtd">0 atendimentos</span> · <span id="ps-tarifa">valor não definido</span></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">A receber no mês</div>
+          <div class="stat-value"><small>R$</small> <span id="ps-mes-valor">0</span></div>
+          <div class="stat-trend up"><span id="ps-mes-detalhe">—</span></div>
         </div>
       </section>
       <div class="pcols">
@@ -3545,7 +3551,7 @@
         </div>
         <div class="field-row">
           <div class="field"><label>Prestadora (opcional)</label><select id="atd-prestadora"></select></div>
-          <div class="field"><label>Valor R$ (opcional)</label><input id="atd-valor" type="number" min="0" step="0.01"></div>
+          <div class="field"><label>Valor R$ (opcional)</label><input id="atd-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"></div>
         </div>
         <p style="font-size:12px;margin:0 0 14px">Ao escolher uma prestadora, o atendimento vira um convite e abrimos o WhatsApp
           com o aviso e o link pra ela confirmar.</p>
@@ -3564,6 +3570,53 @@
           <button class="btn-sm ghost" onclick="fecharModalAtendimento()">Cancelar</button>
           <button class="btn-sm" id="atd-importar" onclick="confirmarImportacao()" disabled>Importar</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-recuperar">
+    <div class="modal-card" style="max-width:420px;max-height:88vh;overflow-y:auto">
+      <div class="modal-head"><h3>Recuperar senha</h3>
+        <button class="modal-close" onclick="fecharRecuperar()" aria-label="Fechar" title="Fechar (Esc)">×</button></div>
+
+      <div id="rec-passo1">
+        <p id="rec-texto1" style="margin-bottom:12px"></p>
+        <div class="field"><label id="rec-label" for="rec-ident"></label><input id="rec-ident" type="text" autocomplete="username"></div>
+        <div class="form-actions">
+          <button class="btn-sm ghost" onclick="fecharRecuperar()">Cancelar</button>
+          <button class="btn-sm" id="rec-enviar" onclick="recuperarEnviarCodigo()">Enviar código</button>
+        </div>
+      </div>
+
+      <div id="rec-passo2" style="display:none">
+        <p id="rec-texto2" style="margin-bottom:12px"></p>
+        <div class="field"><label for="rec-codigo">Código de 6 dígitos</label>
+          <input id="rec-codigo" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"></div>
+        <div class="field"><label for="rec-senha">Nova senha</label>
+          <input id="rec-senha" type="password" autocomplete="new-password" placeholder="mínimo 8 caracteres"></div>
+        <div class="field"><label for="rec-senha2">Repita a nova senha</label>
+          <input id="rec-senha2" type="password" autocomplete="new-password"></div>
+        <div class="form-actions">
+          <button class="btn-sm ghost" onclick="recuperarVoltar()">Voltar</button>
+          <button class="btn-sm" id="rec-confirmar" onclick="recuperarConfirmar()">Redefinir senha</button>
+        </div>
+        <p style="font-size:12px;margin:12px 0 0">Não chegou? Veja o spam ou <a href="#" onclick="recuperarReenviar(event)">reenvie o código</a>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-tarifa">
+    <div class="modal-card" style="max-width:400px">
+      <div class="modal-head"><h3>Valor por atendimento</h3>
+        <button class="modal-close" onclick="fecharTarifa()" aria-label="Fechar" title="Fechar (Esc)">×</button></div>
+      <p style="margin-bottom:12px">Quanto a franquia paga a <b id="tarifa-nome"></b> por atendimento. Esse valor aparece
+        pra ela, já somado nos atendimentos aceitos. Vale a partir dos <b>próximos aceites</b>: o que ela já aceitou mantém
+        o valor combinado na hora. Deixe em branco pra remover.</p>
+      <div class="field"><label for="tarifa-valor">Valor (R$)</label>
+        <input id="tarifa-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"></div>
+      <div class="form-actions">
+        <button class="btn-sm ghost" onclick="fecharTarifa()">Cancelar</button>
+        <button class="btn-sm" id="tarifa-salvar" onclick="salvarTarifa()">Salvar</button>
       </div>
     </div>
   </div>
@@ -3688,6 +3741,12 @@
     let usuarioLogado = null;   // { id, tipo: 'administrador'|'prestadora'|'cliente' }
     let convites = [];
     let agendaPrestadora = [];
+    let resumoPrestadora = null; // tarifa e totais calculados pela API (semana/mês)
+    // linha de detalhe de um atendimento da prestadora: local e valor só entram se existirem
+    function detalheJob(a) {
+      const partes = [a.area ? escapeHtml(a.area) : '', a.valor || ''].filter(Boolean);
+      return partes.length ? `<span>${partes.join(' · ')}</span>` : '';
+    }
     let equipeData = { carazinho: [], panambi: [] };
     let clientesData = { carazinho: [], panambi: [] };
     let avaliacoes = [];
@@ -3848,19 +3907,23 @@
         p.clientes ? api(`/unidades/${slug}/admin/clientes`) : Promise.resolve([]),
         p.avaliacoes ? api(`/avaliacoes/admin/${slug}`) : Promise.resolve([])
       ]);
-      equipeData[slug] = eq.map(e => ({ id: e.prestadora_id, nome: e.nome, ini: e.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), serv: Number(e.total_atendimentos), nota: Number(e.nota_media) || 0, ativa: e.ativa }));
+      equipeData[slug] = eq.map(e => ({ id: e.prestadora_id, nome: e.nome, ini: e.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), serv: Number(e.total_atendimentos), nota: Number(e.nota_media) || 0, ativa: e.ativa, tarifa: e.valor_por_atendimento === null || e.valor_por_atendimento === undefined ? null : Number(e.valor_por_atendimento) }));
       clientesData[slug] = cl.map(c => ({ id: c.cliente_id, nome: c.nome, ini: c.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), ultimo: (c.ultimo_atendimento_tipo || '—') + (c.ultimo_atendimento_data ? ' · ' + c.ultimo_atendimento_data : ''), total: Number(c.total_servicos) }));
       avaliacoes = avs.map(a => ({ id: a.id, cliente: a.cliente_nome, prestadora: a.prestadora_nome, servico: a.servico || '', nota: a.nota, comentario: a.comentario, status: a.status, data: (a.criado_em || '').slice(0, 10) }));
     }
 
     async function carregarDadosPrestadora() {
-      const [conv, ag, avs] = await Promise.all([
+      const [conv, ag, avs, resumo] = await Promise.all([
         api('/atendimentos/prestadora/me/convites'),
         api('/atendimentos/prestadora/me/agenda'),
-        api('/avaliacoes/prestadora/me')
+        api('/avaliacoes/prestadora/me'),
+        api('/atendimentos/prestadora/me/resumo')
       ]);
-      convites = conv.map(c => ({ id: c.id, serv: c.tipo_servico, area: c.area, data: c.data_atendimento, hora: c.hora_atendimento?.slice(0, 5), valor: c.valor ? 'R$ ' + c.valor : '—', status: 'proposto' }));
-      agendaPrestadora = ag.map(a => ({ id: a.id, hora: a.hora_atendimento?.slice(0, 5), serv: a.tipo_servico + (a.area ? ' — ' + a.area : ''), valor: a.valor ? 'R$ ' + a.valor : '—', valorNum: Number(a.valor) || 0, data: a.data_atendimento, status: 'aceito' }));
+      resumoPrestadora = resumo;
+      // valor_pago = o que a FRANQUIA paga a ela por este atendimento (null = tarifa ainda não definida)
+      const reais = v => (v === null || v === undefined ? null : formatarReais(v));
+      convites = conv.map(c => ({ id: c.id, serv: c.tipo_servico, area: c.area, data: c.data_atendimento, hora: c.hora_atendimento?.slice(0, 5), valor: reais(c.valor_pago), status: 'proposto' }));
+      agendaPrestadora = ag.map(a => ({ id: a.id, hora: a.hora_atendimento?.slice(0, 5), serv: a.tipo_servico, area: a.area, valor: reais(a.valor_pago), data: a.data_atendimento, status: 'aceito' }));
       avaliacoes = avs.map(a => ({ id: a.id, cliente: a.cliente_nome, prestadora: prestadora.nome, servico: a.servico || '', nota: a.nota, comentario: a.comentario, status: a.status, data: (a.criado_em || '').slice(0, 10) }));
     }
 
@@ -4051,6 +4114,81 @@
     // A aba voltou ao foco (ou a internet voltou): confere na hora, sem esperar o próximo ciclo.
     document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarAtualizacoes(); });
     window.addEventListener('online', verificarAtualizacoes);
+
+    /* Recuperar senha: pede um código de 6 dígitos (enviado ao e-mail da conta) e
+       troca a senha com ele. A tela nunca diz se a conta existe — a API responde
+       igual nos dois casos — e depois de trocar já entra com a senha nova. */
+    let recPerfil = null, recIdentificador = '', recOcupado = false;
+    function abrirRecuperar(ev) {
+      if (ev) ev.preventDefault();
+      const ehPrestadora = perfil === 'prestadora';
+      recPerfil = { franqueado: 'administrador', prestadora: 'prestadora', cliente: 'cliente' }[perfil];
+      document.getElementById('rec-texto1').textContent = ehPrestadora
+        ? 'Informe o telefone (ou o e-mail) da sua conta. Enviamos um código de 6 dígitos para o e-mail cadastrado.'
+        : 'Informe o e-mail da sua conta. Enviamos um código de 6 dígitos para ele.';
+      document.getElementById('rec-label').textContent = ehPrestadora ? 'Telefone ou e-mail' : 'E-mail';
+      document.getElementById('rec-ident').value = document.getElementById('login-user').value.trim();
+      ['rec-codigo', 'rec-senha', 'rec-senha2'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('rec-passo1').style.display = 'block';
+      document.getElementById('rec-passo2').style.display = 'none';
+      document.getElementById('modal-recuperar').classList.add('show');
+      document.getElementById('rec-ident').focus();
+    }
+    function fecharRecuperar() { document.getElementById('modal-recuperar').classList.remove('show'); }
+    function recuperarVoltar() {
+      document.getElementById('rec-passo1').style.display = 'block';
+      document.getElementById('rec-passo2').style.display = 'none';
+    }
+    async function recuperarPedirCodigo() {
+      const identificador = document.getElementById('rec-ident').value.trim();
+      if (!identificador) { toast('Informe seu ' + (recPerfil === 'prestadora' ? 'telefone ou e-mail.' : 'e-mail.')); return false; }
+      try {
+        await api('/auth/recuperar-senha', { method: 'POST', body: JSON.stringify({ perfil: recPerfil, identificador }) });
+      } catch (err) { toast('Não foi possível enviar o código: ' + err.message); return false; }
+      recIdentificador = identificador;
+      return true;
+    }
+    async function recuperarEnviarCodigo() {
+      if (recOcupado) return;
+      recOcupado = true;
+      const botao = document.getElementById('rec-enviar'); botao.disabled = true;
+      try {
+        if (!await recuperarPedirCodigo()) return;
+        document.getElementById('rec-texto2').textContent =
+          'Se existir uma conta com esse dado, enviamos um código para o e-mail cadastrado (vale por 15 minutos). Digite-o abaixo e escolha a nova senha.';
+        document.getElementById('rec-passo1').style.display = 'none';
+        document.getElementById('rec-passo2').style.display = 'block';
+        document.getElementById('rec-codigo').focus();
+      } finally { recOcupado = false; botao.disabled = false; }
+    }
+    async function recuperarReenviar(ev) {
+      if (ev) ev.preventDefault();
+      if (recOcupado) return;
+      recOcupado = true;
+      try {
+        document.getElementById('rec-ident').value = recIdentificador;
+        if (await recuperarPedirCodigo()) toast('Código reenviado. Se existir uma conta, ele chega em instantes.');
+      } finally { recOcupado = false; }
+    }
+    async function recuperarConfirmar() {
+      if (recOcupado) return;
+      const codigo = document.getElementById('rec-codigo').value.trim();
+      const senha = document.getElementById('rec-senha').value;
+      if (!/^\d{6}$/.test(codigo)) { toast('Digite o código de 6 dígitos.'); return; }
+      if (senha.length < 8) { toast('A nova senha precisa ter ao menos 8 caracteres.'); return; }
+      if (senha !== document.getElementById('rec-senha2').value) { toast('As duas senhas não são iguais.'); return; }
+      recOcupado = true;
+      const botao = document.getElementById('rec-confirmar'); botao.disabled = true;
+      try {
+        await api('/auth/recuperar-senha/confirmar', { method: 'POST', body: JSON.stringify({ perfil: recPerfil, identificador: recIdentificador, codigo, senha }) });
+      } catch (err) { toast(err.message); return; }
+      finally { recOcupado = false; botao.disabled = false; }
+      fecharRecuperar();
+      document.getElementById('login-user').value = recIdentificador;
+      document.getElementById('login-pass').value = '';
+      toast('Senha redefinida! Entrando…');
+      doLogin(recIdentificador, senha);
+    }
 
     /* cadastro */
     let cadPerfil = 'administrador';
@@ -4331,6 +4469,7 @@
           const linhaCliente = altura >= 90 && item.cliente_nome ? `<span class="tl-linha">${escapeHtml(item.cliente_nome)}</span>` : '';
           div.innerHTML = `<strong class="tl-linha">${item.hora_atendimento.slice(0, 5)} · ${escapeHtml(item.tipo_servico)}</strong><span class="tl-linha">${rotulo}</span>${linhaCliente}`;
           div.title = `${hhmm(item.inicioMin)}–${hhmm(item.fimMin)} · ${item.tipo_servico}`
+            + (item.area ? ` · Local: ${item.area}` : '')
             + (item.cliente_nome ? ` · Cliente: ${item.cliente_nome}` : '')
             + (item.prestadora_nome || item.profissional_externo ? ` · ${item.prestadora_nome || item.profissional_externo}` : '');
           div.onclick = ev => abrirReatribuir(ev, item);
@@ -4361,9 +4500,14 @@
         ? { cls: ' pendente-confirmacao', rotulo: nomePrestadora + ' · aguardando confirmação' }
         : { cls: ' aguardando-janela', rotulo: nomePrestadora + ' · confirma em breve' };
     }
+    // Balão do atendimento: troca a prestadora e corrige o local. O campo de local
+    // fica sempre aqui pro admin poder preencher/apagar; nas telas de quem lê
+    // (prestadora, avisos de WhatsApp) atendimento sem local simplesmente não mostra a linha.
+    let reatribuirItem = null;
     function abrirReatribuir(ev, item) {
       fecharReatribuirPop();
-      if (item.status === 'concluido') { toast('Atendimento já concluído — não dá pra trocar a prestadora.'); return; }
+      reatribuirItem = item;
+      const concluido = item.status === 'concluido'; // concluído: a prestadora não troca, mas o local ainda pode ser corrigido
       const rect = ev.currentTarget.getBoundingClientRect();
       const opcoes = (prestadorasAgenda[currentUnit] || [])
         .map(p => `<option value="${p.id}" ${p.id === item.prestadora_id ? 'selected' : ''}>${escapeHtml(p.nome)}</option>`).join('');
@@ -4371,14 +4515,16 @@
       pop.className = 'reatribuir-pop';
       pop.id = 'reatribuir-pop';
       pop.innerHTML = `
-        <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Prestadora</label>
-        <select id="reatribuir-select"><option value="">Sem prestadora</option>${opcoes}</select>
+        <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Prestadora${concluido ? ' <span style="font-weight:400">(atendimento concluído)</span>' : ''}</label>
+        <select id="reatribuir-select" ${concluido ? 'disabled' : ''}><option value="">Sem prestadora</option>${opcoes}</select>
+        <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Local / bairro</label>
+        <input id="reatribuir-local" maxlength="500" value="${escapeHtml(item.area || '')}" placeholder="Sem local — deixe vazio pra ocultar">
         <div class="form-actions">
           <button class="btn-sm ghost" onclick="fecharReatribuirPop()">Cancelar</button>
           <button class="btn-sm" onclick="salvarReatribuicao('${item.id}')">Salvar</button>
         </div>`;
       document.body.appendChild(pop);
-      pop.style.left = Math.min(rect.right + window.scrollX + 8, window.innerWidth - 236) + 'px';
+      pop.style.left = Math.min(rect.right + window.scrollX + 8, window.innerWidth - 276) + 'px';
       pop.style.top = (rect.top + window.scrollY) + 'px';
     }
     function fecharReatribuirPop() { document.getElementById('reatribuir-pop')?.remove(); }
@@ -4395,27 +4541,40 @@
       const mensagem = `Olá, ${prest.nome}! Você tem um novo atendimento pela Maria Brasileira:\n`
         + `Serviço: ${atendimento.tipo_servico}${atendimento.area ? ' — ' + atendimento.area : ''}\n`
         + `Data: ${dataFmt}${atendimento.hora_atendimento ? ' às ' + atendimento.hora_atendimento.slice(0, 5) : ''}\n`
-        + (atendimento.valor ? `Valor: R$ ${atendimento.valor}\n` : '')
+        // valor_pago = o que a franquia paga a ela (nunca o preço do cliente); sem tarifa definida, a linha some
+        + (atendimento.valor_pago ? `Valor a receber: ${formatarReais(atendimento.valor_pago)}\n` : '')
         + `\nPara confirmar ou recusar, acesse a sua conta no Portal da Maria:\n${linkAcessoPrestadora()}\n`
         + (diasAteLa > 2 ? `\nA confirmação fica disponível a partir de 2 dias antes do atendimento.\n` : '')
         + `\nQualquer dúvida, é só responder aqui.`;
       aba.location.href = linkWhatsApp(prest.telefone, mensagem);
     }
     async function salvarReatribuicao(atendimentoId) {
-      const prestadoraId = document.getElementById('reatribuir-select').value || null;
+      const item = reatribuirItem;
+      if (!item || item.id !== atendimentoId) { fecharReatribuirPop(); return; }
+      const concluido = item.status === 'concluido';
+      const prestadoraId = concluido ? (item.prestadora_id || null) : (document.getElementById('reatribuir-select').value || null);
+      const local = document.getElementById('reatribuir-local').value.trim();
+      const mudouPrestadora = prestadoraId !== (item.prestadora_id || null);
+      const mudouLocal = local !== (item.area || '');
+      if (!mudouPrestadora && !mudouLocal) { fecharReatribuirPop(); return; }
+
       // Abre a aba em branco ANTES do await: depois que a resposta da API chega
       // o navegador já não considera mais isso "gesto do usuário" e bloqueia o
       // popup — abrir agora e só trocar a URL depois contorna isso.
-      const aba = prestadoraId ? window.open('', '_blank') : null;
+      const aba = mudouPrestadora && prestadoraId ? window.open('', '_blank') : null;
       try {
-        const atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/reatribuir`, { method: 'POST', body: JSON.stringify({ prestadora_id: prestadoraId }) });
+        let atendimento = item;
+        // o local vai primeiro: o aviso de WhatsApp da nova prestadora já sai com o local certo
+        if (mudouLocal) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/local`, { method: 'PATCH', body: JSON.stringify({ area: local }) });
+        if (mudouPrestadora) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/reatribuir`, { method: 'POST', body: JSON.stringify({ prestadora_id: prestadoraId }) });
         fecharReatribuirPop();
-        toast('Prestadora atualizada.');
-        avisarPrestadoraPorWhatsApp(aba, (prestadorasAgenda[currentUnit] || []).find(p => p.id === prestadoraId), atendimento);
+        toast(mudouPrestadora && mudouLocal ? 'Prestadora e local atualizados.' : mudouPrestadora ? 'Prestadora atualizada.' : (local ? 'Local atualizado.' : 'Local removido.'));
+        if (mudouPrestadora) avisarPrestadoraPorWhatsApp(aba, (prestadorasAgenda[currentUnit] || []).find(p => p.id === prestadoraId), atendimento);
         selecionarDiaAgenda(diaSelecionadoAgenda);
       } catch (err) {
         if (aba) aba.close();
-        toast('Erro ao reatribuir: ' + err.message);
+        toast('Erro ao salvar: ' + err.message);
+        selecionarDiaAgenda(diaSelecionadoAgenda); // se só uma das duas chamadas passou, a agenda mostra o que de fato ficou salvo
       }
     }
 
@@ -4471,7 +4630,11 @@
       const corpo = { tipo_servico: servico, data_atendimento: data, hora_atendimento: hora };
       if (atdVal('atd-area').trim()) corpo.area = atdVal('atd-area').trim();
       if (atdVal('atd-duracao')) corpo.duracao_horas = Number(atdVal('atd-duracao'));
-      if (atdVal('atd-valor')) corpo.valor = Number(atdVal('atd-valor'));
+      const valorTxt = atdVal('atd-valor').trim().replace(/^R\$\s*/i, '').replace(',', '.');
+      if (valorTxt) {
+        if (!/^\d{1,8}(\.\d{1,2})?$/.test(valorTxt)) { toast('Valor inválido — use números, ex.: 150,00.'); return; }
+        corpo.valor = Number(valorTxt);
+      }
       if (atdVal('atd-prestadora')) corpo.prestadora_id = atdVal('atd-prestadora');
       const cliente = atdVal('atd-cliente');
       if (cliente === '__novo__') {
@@ -4662,22 +4825,29 @@
           const botaoAceitar = podeConfirmar
             ? `<button class="btn-accept" onclick="aceitar('${c.id}')">Aceitar</button>`
             : `<button class="btn-accept" disabled style="opacity:.5;cursor:not-allowed">Aceitar</button>`;
-          return `<div class="invite"><div class="invite-top"><strong>${escapeHtml(c.serv)}</strong></div><div class="invite-meta"><b>${String(c.data).slice(0, 10)} · ${c.hora}</b> &nbsp;·&nbsp; ${escapeHtml(c.area || '')} &nbsp;·&nbsp; ${c.valor}</div>${aviso ? `<div class="warn"><span>${aviso}</span></div>` : ''}<div class="invite-actions">${botaoAceitar}<button class="btn-decline" onclick="recusar('${c.id}')">Recusar</button></div></div>`;
+          // local e valor só aparecem quando existem (sem "·" sobrando nem campo vazio)
+          const meta = [`<b>${String(c.data).slice(0, 10)} · ${c.hora}</b>`, c.area ? escapeHtml(c.area) : '', c.valor ? `<b>${c.valor}</b>` : '']
+            .filter(Boolean).join(' &nbsp;·&nbsp; ');
+          return `<div class="invite"><div class="invite-top"><strong>${escapeHtml(c.serv)}</strong></div><div class="invite-meta">${meta}</div>${aviso ? `<div class="warn"><span>${aviso}</span></div>` : ''}<div class="invite-actions">${botaoAceitar}<button class="btn-decline" onclick="recusar('${c.id}')">Recusar</button></div></div>`;
         }).join('');
       const ag = document.getElementById('prest-agenda');
       ag.innerHTML = agendaPrestadora.length === 0 ? '<div class="empty">Você ainda não aceitou atendimentos para hoje.</div>'
-        : agendaPrestadora.slice().sort((a, b) => (a.hora || '').localeCompare(b.hora || '')).map(j => `<div class="job"><div class="job-time">${j.hora}</div><div class="job-body"><strong>${escapeHtml(j.serv)}</strong><span>${j.valor}</span></div><div class="job-status st-ok">aceito</div></div>`).join('');
+        : agendaPrestadora.slice().sort((a, b) => (a.hora || '').localeCompare(b.hora || '')).map(j => `<div class="job"><div class="job-time">${j.hora}</div><div class="job-body"><strong>${escapeHtml(j.serv)}</strong>${detalheJob(j)}</div><div class="job-status st-ok">aceito</div></div>`).join('');
       document.getElementById('ag-count').textContent = agendaPrestadora.length;
       const hojeISO = hojeISOBrasil();
-      const domingoSemana = new Date(); domingoSemana.setDate(domingoSemana.getDate() - domingoSemana.getDay());
-      const sabadoSemana = new Date(domingoSemana); sabadoSemana.setDate(sabadoSemana.getDate() + 6);
-      const domingoISO = domingoSemana.toISOString().slice(0, 10), sabadoISO = sabadoSemana.toISOString().slice(0, 10);
-      const daSemana = agendaPrestadora.filter(a => { const d = String(a.data).slice(0, 10); return d >= domingoISO && d <= sabadoISO; });
-
       document.getElementById('ps-aceitos').textContent = agendaPrestadora.filter(a => String(a.data).slice(0, 10) === hojeISO).length;
       document.getElementById('ps-pend').textContent = convites.length;
-      document.getElementById('ps-previsto-valor').textContent = daSemana.reduce((soma, a) => soma + a.valorNum, 0).toLocaleString('pt-BR');
-      document.getElementById('ps-previsto-qtd').textContent = daSemana.length;
+
+      // Valores vêm calculados da API: tarifa por atendimento (definida pelo admin) × atendimentos aceitos.
+      const r = resumoPrestadora || { valor_por_atendimento: null, semana: { qtd: 0, total: 0 }, mes: { realizados_qtd: 0, realizados_total: 0, previstos_qtd: 0, previstos_total: 0 } };
+      const semTarifa = r.valor_por_atendimento === null;
+      const dinheiro = v => (semTarifa && !v ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+      document.getElementById('ps-previsto-valor').textContent = dinheiro(r.semana.total);
+      const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+      document.getElementById('ps-previsto-qtd').textContent = plural(r.semana.qtd, 'atendimento', 'atendimentos');
+      document.getElementById('ps-tarifa').textContent = semTarifa ? 'valor ainda não definido' : formatarReais(r.valor_por_atendimento) + ' cada';
+      document.getElementById('ps-mes-valor').textContent = dinheiro(r.mes.realizados_total + r.mes.previstos_total);
+      document.getElementById('ps-mes-detalhe').textContent = `${plural(r.mes.realizados_qtd, 'realizado', 'realizados')} · ${r.mes.previstos_qtd} a realizar`;
       renderPrestAval();
     }
     /* Calendário da prestadora: visão só-leitura dos próximos atendimentos
@@ -4725,11 +4895,11 @@
         .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
       document.getElementById('ps-cal-lista').innerHTML = doDia.length === 0 ? '<div class="empty">Nada agendado neste dia.</div>'
         : doDia.map(a => {
-          if (a.status === 'aceito') return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(a.serv)}</strong><span>${a.valor || ''}</span></div><div class="job-status st-ok">confirmado</div></div>`;
+          if (a.status === 'aceito') return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(a.serv)}</strong>${detalheJob(a)}</div><div class="job-status st-ok">confirmado</div></div>`;
           const { podeConfirmar } = statusConfirmacaoConvite(a);
           const cls = podeConfirmar ? 'st-new' : 'st-route';
           const rotulo = podeConfirmar ? 'pode confirmar' : 'aguardando janela';
-          return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(a.serv)}</strong><span>${a.valor || ''}</span></div><div class="job-status ${cls}">${rotulo}</div></div>`;
+          return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(a.serv)}</strong>${detalheJob(a)}</div><div class="job-status ${cls}">${rotulo}</div></div>`;
         }).join('');
     }
     async function aceitar(id) {
@@ -4786,7 +4956,43 @@
     function renderEquipe() {
       const arr = equipeData[currentUnit];
       document.getElementById('eqv-unit').textContent = unidades[currentUnit].nome;
-      document.getElementById('eqv-list').innerHTML = arr.map(p => `<div class="tablerow"><div class="tr-av">${escapeHtml(p.ini)}</div><div class="tr-body"><strong>${escapeHtml(p.nome)}</strong><span>${p.serv} atendimentos · nota ${p.nota.toFixed(1)} ★</span></div><span class="chip ${p.ativa ? 'chip-on' : 'chip-off'}">${p.ativa ? 'ativa' : 'inativa'}</span></div>`).join('');
+      const podeEditarValor = usuarioLogado?.tipo === 'administrador'; // dinheiro: funcionário só enxerga
+      document.getElementById('eqv-list').innerHTML = arr.map(p => {
+        const valor = p.tarifa === null ? '<span class="tr-meta">sem valor definido</span>' : `<span class="tr-meta">${formatarReais(p.tarifa)} / atendimento</span>`;
+        const botao = podeEditarValor ? `<button class="btn-sm ghost" onclick="abrirTarifa('${p.id}')">${p.tarifa === null ? 'Definir valor' : 'Alterar valor'}</button>` : '';
+        return `<div class="tablerow"><div class="tr-av">${escapeHtml(p.ini)}</div><div class="tr-body"><strong>${escapeHtml(p.nome)}</strong><span>${p.serv} atendimentos · nota ${p.nota.toFixed(1)} ★</span></div>${valor}${botao}<span class="chip ${p.ativa ? 'chip-on' : 'chip-off'}">${p.ativa ? 'ativa' : 'inativa'}</span></div>`;
+      }).join('');
+    }
+
+    /* Valor por atendimento (quanto a franquia paga a cada prestadora) */
+    let tarifaPrestadoraId = null, tarifaOcupada = false;
+    function formatarReais(v) { return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function abrirTarifa(prestadoraId) {
+      const p = (equipeData[currentUnit] || []).find(x => x.id === prestadoraId);
+      if (!p) return;
+      tarifaPrestadoraId = prestadoraId;
+      document.getElementById('tarifa-nome').textContent = p.nome;
+      document.getElementById('tarifa-valor').value = p.tarifa === null ? '' : p.tarifa.toFixed(2).replace('.', ',');
+      document.getElementById('modal-tarifa').classList.add('show');
+      document.getElementById('tarifa-valor').focus();
+    }
+    function fecharTarifa() { document.getElementById('modal-tarifa').classList.remove('show'); }
+    async function salvarTarifa() {
+      if (tarifaOcupada || !tarifaPrestadoraId) return;
+      // campo de texto de propósito: <input type="number"> descarta a vírgula em alguns
+      // navegadores ("120,50" virava 12050). Aceita "120,50", "120.50" e "120".
+      const valor = document.getElementById('tarifa-valor').value.trim().replace(/^R\$\s*/i, '').replace(',', '.');
+      if (valor !== '' && !/^\d{1,5}(\.\d{1,2})?$/.test(valor)) { toast('Informe um valor válido (ex.: 80,00).'); return; }
+      tarifaOcupada = true;
+      const botao = document.getElementById('tarifa-salvar'); botao.disabled = true;
+      try {
+        await api(`/unidades/${currentUnit}/admin/equipe/${tarifaPrestadoraId}`, { method: 'PATCH', body: JSON.stringify({ valor_por_atendimento: valor === '' ? null : valor }) });
+        fecharTarifa();
+        await carregarEquipeClientesAvaliacoes(currentUnit);
+        renderEquipe();
+        toast(valor === '' ? 'Valor removido.' : 'Valor por atendimento atualizado.');
+      } catch (err) { toast('Erro ao salvar o valor: ' + err.message); }
+      finally { tarifaOcupada = false; botao.disabled = false; }
     }
     function renderClientes() {
       const arr = clientesData[currentUnit];
@@ -5171,7 +5377,9 @@
     document.addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
       // fecha um de cada vez, o que estiver "por cima" primeiro
-      if (document.getElementById('modal-perfil').classList.contains('show')) fecharPerfil();
+      if (document.getElementById('modal-recuperar').classList.contains('show')) fecharRecuperar();
+      else if (document.getElementById('modal-tarifa').classList.contains('show')) fecharTarifa();
+      else if (document.getElementById('modal-perfil').classList.contains('show')) fecharPerfil();
       else if (document.getElementById('modal-atendimento').classList.contains('show')) fecharModalAtendimento();
       else if (document.getElementById('modal-recorrente').classList.contains('show')) fecharModalRecorrente();
       else if (document.getElementById('reatribuir-pop')) fecharReatribuirPop();
@@ -5182,6 +5390,13 @@
     ['login-user', 'login-pass'].forEach(id => {
       document.getElementById(id).addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); doLogin(); }
+      });
+    });
+
+    // Enter nos modais de recuperar senha e de valor por atendimento também confirma.
+    [['rec-ident', recuperarEnviarCodigo], ['rec-codigo', recuperarConfirmar], ['rec-senha', recuperarConfirmar], ['rec-senha2', recuperarConfirmar], ['tarifa-valor', salvarTarifa]].forEach(([id, acao]) => {
+      document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); acao(); }
       });
     });
 

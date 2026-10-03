@@ -38,6 +38,16 @@ async function pertenceAUnidade(tabela, id, unidadeId) {
   return !!row;
 }
 
+// Anexa ao atendimento o quanto a prestadora recebe por ele (valor_pago): o valor
+// travado no aceite ou, antes disso, a tarifa atual dela. O aviso de WhatsApp pra
+// prestadora usa isso — ela nunca vê o preço cobrado do cliente (atendimentos.valor).
+async function comValorPago(atendimento) {
+  if (!atendimento || !atendimento.prestadora_id) return atendimento;
+  const { rows: [p] } = await pool.query('select valor_por_atendimento from prestadoras where id = $1', [atendimento.prestadora_id]);
+  const valor = atendimento.valor_prestadora ?? p?.valor_por_atendimento ?? null;
+  return { ...atendimento, valor_pago: valor === null ? null : Number(valor) };
+}
+
 // Pedido de orçamento pela home — público, entra como 'pedido' na agenda da unidade
 router.post('/', limitePedidoPublico, asyncHandler(async (req, res) => {
   const { unidade_slug, tipo_servico, area, data_atendimento, hora_atendimento, origem } = req.body;
@@ -114,13 +124,13 @@ router.post('/admin/:slug/:id/propor', requireAuth, requireAcessoUnidade('agenda
   }
 
   const { rows: [atendimento] } = await pool.query(
-    `update atendimentos set prestadora_id = $1, status = 'proposto', profissional_externo = null, atualizado_em = now()
+    `update atendimentos set prestadora_id = $1, status = 'proposto', profissional_externo = null, valor_prestadora = null, atualizado_em = now()
      where id = $2 and unidade_id = $3 and status = 'pedido'
      returning *`,
     [prestadora_id, req.params.id, req.unidadeId]
   );
   if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado ou não está em status "pedido"' });
-  res.json(atendimento);
+  res.json(await comValorPago(atendimento));
 }));
 
 // Reatribui (ou remove) a prestadora de um atendimento em qualquer status não-terminal.
@@ -136,12 +146,30 @@ router.post('/admin/:slug/:id/reatribuir', requireAuth, requireAcessoUnidade('ag
        prestadora_id = $1::uuid,
        status = case when status in ('pedido', 'recusado') and $1::uuid is not null then 'proposto' else status end,
        profissional_externo = case when $1::uuid is not null then null else profissional_externo end,
+       -- quem já estava aceito continua aceito com a nova prestadora: trava a tarifa dela
+       valor_prestadora = case when status = 'aceito' then (select valor_por_atendimento from prestadoras where id = $1::uuid) else null end,
        atualizado_em = now()
      where id = $2 and unidade_id = $3 and status not in ('concluido', 'cancelado')
      returning *`,
     [prestadoraId, req.params.id, req.unidadeId]
   );
   if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado ou já concluído/cancelado' });
+  res.json(await comValorPago(atendimento));
+}));
+
+// Local do atendimento (bairro/endereço) — o admin corrige ou preenche; vazio
+// apaga o campo (nas telas, atendimento sem local simplesmente não mostra a linha).
+router.patch('/admin/:slug/:id/local', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
+  const local = String(req.body.area ?? '').trim();
+  if (local.length > 500) return res.status(400).json({ erro: 'O local excede 500 caracteres' });
+
+  const { rows: [atendimento] } = await pool.query(
+    `update atendimentos set area = $1, atualizado_em = now()
+     where id = $2 and unidade_id = $3 and status <> 'cancelado'
+     returning *`,
+    [local || null, req.params.id, req.unidadeId]
+  );
+  if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado ou cancelado' });
   res.json(atendimento);
 }));
 
@@ -218,7 +246,7 @@ router.post('/admin/:slug', requireAuth, requireAcessoUnidade('agenda'), asyncHa
        hora_atendimento, duracao, valorNum, prestadora_id ? 'proposto' : 'pedido']
     );
     await client.query('COMMIT');
-    res.status(201).json(atendimento);
+    res.status(201).json(await comValorPago(atendimento));
   } catch (erro) {
     await client.query('ROLLBACK');
     throw erro;
@@ -256,8 +284,9 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
   const jaTem = new Set(jaImportados.map(r => r.codigo_externo));
   const novas = lido.linhas.filter(l => !jaTem.has(l.codigo));
 
-  const { rows: prestadoras } = await pool.query('select id, nome from prestadoras where unidade_id = $1', [req.unidadeId]);
+  const { rows: prestadoras } = await pool.query('select id, nome, valor_por_atendimento from prestadoras where unidade_id = $1', [req.unidadeId]);
   const idPrestadora = new Map(prestadoras.map(p => [normalizarTexto(p.nome), p.id]));
+  const tarifaPrestadora = new Map(prestadoras.map(p => [p.id, p.valor_por_atendimento]));
   const { rows: clientes } = await pool.query('select id, nome from clientes where unidade_id = $1', [req.unidadeId]);
   const idCliente = new Map(clientes.map(c => [normalizarTexto(c.nome), c.id]));
 
@@ -311,11 +340,13 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
       const r = await client.query(
         `insert into atendimentos
            (unidade_id, cliente_id, prestadora_id, tipo_servico, data_atendimento, hora_atendimento, duracao_horas,
-            status, origem, codigo_externo, orcamento_externo, profissional_externo)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, 'importacao', $9, $10, $11)
+            status, origem, codigo_externo, orcamento_externo, profissional_externo, valor_prestadora)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, 'importacao', $9, $10, $11, $12)
          on conflict (unidade_id, codigo_externo) where codigo_externo is not null do nothing`,
         [req.unidadeId, clienteId, prestadoraId, l.tipo_servico, l.data, l.hora, l.duracao_horas, status,
-         l.codigo, l.orcamento, l.profissional && !prestadoraId ? l.profissional : null]
+         l.codigo, l.orcamento, l.profissional && !prestadoraId ? l.profissional : null,
+         // já realizado/aceito: trava a tarifa de hoje; ainda não aceito: fica nulo até o aceite
+         prestadoraId && (status === 'concluido' || status === 'aceito') ? tarifaPrestadora.get(prestadoraId) ?? null : null]
       );
       importados += r.rowCount;
     }
@@ -418,10 +449,17 @@ router.post('/admin/:slug/serie/:serieId/cancelar', requireAuth, requireAcessoUn
   res.json({ cancelados: rows.length });
 }));
 
+// A prestadora enxerga só o que a FRANQUIA paga a ela por atendimento (valor_pago),
+// nunca o preço cobrado do cliente. Já aceito: o valor travado no aceite; ainda
+// convite (ou aceito antes da tarifa existir): a tarifa atual dela.
+const COLUNAS_PRESTADORA = `a.id, a.tipo_servico, a.area, a.data_atendimento, a.hora_atendimento, a.duracao_horas, a.status,
+  coalesce(a.valor_prestadora, p.valor_por_atendimento) as valor_pago`;
+
 // Convites pendentes de aceite pela prestadora logada
 router.get('/prestadora/me/convites', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `select * from atendimentos where prestadora_id = $1 and status = 'proposto' order by data_atendimento, hora_atendimento`,
+    `select ${COLUNAS_PRESTADORA} from atendimentos a join prestadoras p on p.id = a.prestadora_id
+     where a.prestadora_id = $1 and a.status = 'proposto' order by a.data_atendimento, a.hora_atendimento`,
     [req.user.id]
   );
   res.json(rows);
@@ -430,10 +468,48 @@ router.get('/prestadora/me/convites', requireAuth, requireRole('prestadora'), as
 // Agenda já aceita pela prestadora logada
 router.get('/prestadora/me/agenda', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `select * from atendimentos where prestadora_id = $1 and status = 'aceito' order by data_atendimento, hora_atendimento`,
+    `select ${COLUNAS_PRESTADORA} from atendimentos a join prestadoras p on p.id = a.prestadora_id
+     where a.prestadora_id = $1 and a.status = 'aceito' order by a.data_atendimento, a.hora_atendimento`,
     [req.user.id]
   );
   res.json(rows);
+}));
+
+// Quanto ela tem a receber: tarifa por atendimento × atendimentos aceitos/concluídos.
+// Calculado aqui (e não no navegador) pra semana/mês seguirem o fuso de Brasília
+// e a conta ser uma só. "Realizado" = aceito/concluído em data que já passou (ou
+// concluído); "previsto" = aceito de hoje em diante. Semana começa no domingo,
+// igual ao painel dela.
+router.get('/prestadora/me/resumo', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
+  const { rows: [r] } = await pool.query(
+    `with datas as (
+       select (now() at time zone 'America/Sao_Paulo')::date as hoje
+     ), dados as (
+       select a.data_atendimento as dia, a.status,
+              coalesce(a.valor_prestadora, p.valor_por_atendimento) as valor
+       from atendimentos a join prestadoras p on p.id = a.prestadora_id
+       where a.prestadora_id = $1 and a.status in ('aceito', 'concluido')
+     )
+     select
+       (select valor_por_atendimento from prestadoras where id = $1) as valor_por_atendimento,
+       count(*) filter (where dia >= hoje - extract(dow from hoje)::int and dia < hoje - extract(dow from hoje)::int + 7)::int as semana_qtd,
+       coalesce(sum(valor) filter (where dia >= hoje - extract(dow from hoje)::int and dia < hoje - extract(dow from hoje)::int + 7), 0) as semana_total,
+       count(*) filter (where date_trunc('month', dia) = date_trunc('month', hoje) and (status = 'concluido' or dia < hoje))::int as mes_realizados_qtd,
+       coalesce(sum(valor) filter (where date_trunc('month', dia) = date_trunc('month', hoje) and (status = 'concluido' or dia < hoje)), 0) as mes_realizados_total,
+       count(*) filter (where date_trunc('month', dia) = date_trunc('month', hoje) and status = 'aceito' and dia >= hoje)::int as mes_previstos_qtd,
+       coalesce(sum(valor) filter (where date_trunc('month', dia) = date_trunc('month', hoje) and status = 'aceito' and dia >= hoje), 0) as mes_previstos_total
+     from dados, datas`,
+    [req.user.id]
+  );
+  const n = v => (v === null || v === undefined ? null : Number(v));
+  res.json({
+    valor_por_atendimento: n(r.valor_por_atendimento),
+    semana: { qtd: r.semana_qtd, total: n(r.semana_total) },
+    mes: {
+      realizados_qtd: r.mes_realizados_qtd, realizados_total: n(r.mes_realizados_total),
+      previstos_qtd: r.mes_previstos_qtd, previstos_total: n(r.mes_previstos_total),
+    },
+  });
 }));
 
 // Prestadora só pode confirmar (aceitar) um convite a partir de 2 dias antes
@@ -456,17 +532,20 @@ router.post('/prestadora/me/:id/aceitar', requireAuth, requireRole('prestadora')
   }
 
   const { rows: [atendimento] } = await pool.query(
-    `update atendimentos set status = 'aceito', atualizado_em = now() where id = $1 returning *`,
-    [req.params.id]
+    // ao aceitar, trava a tarifa vigente: o que ela viu no convite é o que vale
+    `update atendimentos set status = 'aceito', atualizado_em = now(),
+       valor_prestadora = (select valor_por_atendimento from prestadoras where id = $2)
+     where id = $1 returning id, tipo_servico, area, data_atendimento, hora_atendimento, status, valor_prestadora as valor_pago`,
+    [req.params.id, req.user.id]
   );
   res.json(atendimento);
 }));
 
 router.post('/prestadora/me/:id/recusar', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
   const { rows: [atendimento] } = await pool.query(
-    `update atendimentos set status = 'recusado', prestadora_id = null, atualizado_em = now()
+    `update atendimentos set status = 'recusado', prestadora_id = null, valor_prestadora = null, atualizado_em = now()
      where id = $1 and prestadora_id = $2 and status = 'proposto'
-     returning *`,
+     returning id, tipo_servico, area, data_atendimento, hora_atendimento, status`,
     [req.params.id, req.user.id]
   );
   if (!atendimento) return res.status(404).json({ erro: 'Convite não encontrado' });

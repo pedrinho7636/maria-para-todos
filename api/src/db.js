@@ -66,6 +66,13 @@ const MIGRACOES = [
   `create index if not exists idx_atendimentos_serie on atendimentos(serie_id) where serie_id is not null`,
   `create unique index if not exists uq_atendimentos_codigo_externo on atendimentos(unidade_id, codigo_externo) where codigo_externo is not null`,
 
+  // quanto a franquia paga à prestadora por atendimento; o valor é "travado" no
+  // atendimento (valor_prestadora) quando ela aceita, pra mudar a tarifa depois
+  // não alterar o que já foi combinado/realizado
+  `alter table prestadoras  add column if not exists valor_por_atendimento numeric(10,2)`,
+  `alter table prestadoras  add column if not exists atualizado_em timestamptz not null default now()`,
+  `alter table atendimentos add column if not exists valor_prestadora numeric(10,2)`,
+
   // índices que a sincronização entre usuários consulta a cada poucos segundos
   `create index if not exists idx_atendimentos_unidade_atualizado on atendimentos(unidade_id, atualizado_em)`,
   `create index if not exists idx_atendimentos_cliente on atendimentos(cliente_id)`,

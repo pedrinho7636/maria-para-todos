@@ -6,13 +6,17 @@ const { enviarEmail, htmlCodigo } = require('./email');
 // prestadora, cliente) e na troca de e-mail do perfil. Nunca por WhatsApp (não
 // existe API de WhatsApp de verdade). crypto.randomInt, e não Math.random: é
 // um segredo de autenticação, não pode ser previsível.
-async function enviarCodigoConfirmacao(destino, { assunto, motivo }) {
+// `destino` é a chave sob a qual o código é guardado/conferido; por padrão é o
+// próprio e-mail. `para` separa as duas coisas quando preciso (recuperação de
+// senha guarda o código sob uma chave própria, pra um código de cadastro nunca
+// servir pra redefinir senha, e vice-versa).
+async function enviarCodigoConfirmacao(destino, { assunto, motivo, para }) {
   const codigo = String(crypto.randomInt(100000, 1000000));
   await pool.query(
     `insert into codigos_verificacao (destino, codigo, expira_em) values ($1, $2, now() + interval '15 minutes')`,
     [destino, codigo]
   );
-  return enviarEmail({ to: destino, subject: assunto, html: htmlCodigo(codigo, motivo) });
+  return enviarEmail({ to: para || destino, subject: assunto, html: htmlCodigo(codigo, motivo) });
 }
 
 // Confere o código contra o destino e marca como usado, tudo numa instrução só
@@ -40,4 +44,6 @@ const confirmarCodigo = (destino, codigo) => consumirCodigo(pool, destino, codig
 const MOTIVO_CADASTRO = { assunto: 'Confirme seu cadastro — Portal da Maria', motivo: 'confirmar seu cadastro' };
 const MOTIVO_TROCA_EMAIL = { assunto: 'Confirme seu novo e-mail — Portal da Maria', motivo: 'confirmar a troca do seu e-mail' };
 
-module.exports = { enviarCodigoConfirmacao, consumirCodigo, confirmarCodigo, MOTIVO_CADASTRO, MOTIVO_TROCA_EMAIL };
+const MOTIVO_RECUPERACAO = { assunto: 'Redefinição de senha — Portal da Maria', motivo: 'redefinir a sua senha' };
+
+module.exports = { enviarCodigoConfirmacao, consumirCodigo, confirmarCodigo, MOTIVO_CADASTRO, MOTIVO_TROCA_EMAIL, MOTIVO_RECUPERACAO };

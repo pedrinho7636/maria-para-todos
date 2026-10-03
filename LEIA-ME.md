@@ -1,8 +1,8 @@
-# Portal da Maria — v1.1.0
+# Portal da Maria — versão de entrega final (0.0.0.0)
 
 Sistema de gestão para franquias de serviços de limpeza (TCC), com 3 perfis de acesso principais — administrador
 (franqueado), prestadora e cliente — mais sub-administradores com permissões por módulo. Roda 100% local:
-`Portal Da Maria - V1.1.0.html` (frontend) fala com uma API própria em Node/Express (`api/`), que conversa com um
+`Portal Da Maria.html` (frontend) fala com uma API própria em Node/Express (`api/`), que conversa com um
 PostgreSQL rodando na sua máquina.
 
 ---
@@ -74,6 +74,10 @@ falhas comuns (código errado, CNPJ/telefone em outro formato, conta duplicada),
 limite de login, e apaga tudo que criou. Dica: pra ele não disparar e-mail de verdade, suba a API de teste com
 `SMTP_USER= SMTP_PASS= RESEND_API_KEY= npm start`.
 
+Outro teste, `npm run teste:recuperacao`, cobre recuperação de senha (todos os perfis e os limites contra abuso), o valor
+por atendimento das prestadoras e o local do atendimento. Ele dispara pedidos de código, então rode contra uma API de
+teste **sem** provedor de e-mail (instruções no cabeçalho de `api/scripts/testar-recuperacao-valores.js`).
+
 ### 3.1 (Opcional) Envio real de e-mail
 
 Sem configurar nada, os códigos de verificação (cadastro e troca de e-mail no perfil) só aparecem no console da
@@ -102,7 +106,7 @@ Resend e trocar `EMAIL_FROM` pra usar esse domínio.
 
 ## 4. Abrir o frontend
 
-O `Portal Da Maria - V1.1.0.html` faz `fetch()` para `http://localhost:3001/api`, então **precisa ser servido por um
+O `Portal Da Maria.html` faz `fetch()` para `http://localhost:3001/api`, então **precisa ser servido por um
 servidor local** (não abrir com duplo-clique) por causa de CORS:
 
 - **VS Code:** extensão "Live Server" → botão direito no arquivo → "Open with Live Server".
@@ -145,12 +149,13 @@ api/
       importarPlanilha.js    — lê e valida a planilha .xlsx de atendimentos (cabeçalho flexível, datas/horas)
     scripts/testar-email.js  — `npm run email:teste -- destino@x.com`: testa o provedor de e-mail do .env
     scripts/testar-cadastros.js — `npm run teste:cadastros`: teste de ponta a ponta de cadastro/acesso/sincronização
+    scripts/testar-recuperacao-valores.js — `npm run teste:recuperacao`: recuperação de senha, valor por atendimento, local
       asyncHandler.js        — evita que erro numa rota derrube o processo
     routes/
-      auth.js                — cadastro (admin/prestadora/cliente) + login unificado
-      unidades.js             — dados institucionais + dashboard/equipe/clientes do admin
-      atendimentos.js          — pedido público, agenda (calendário/dia), propor/reatribuir/concluir,
-                                  atendimento recorrente (padrão semanal), convites/aceitar/recusar (prestadora)
+      auth.js                — cadastro (admin/prestadora/cliente) + login unificado + recuperação de senha
+      unidades.js             — dados institucionais + dashboard/equipe/clientes do admin + valor por atendimento
+      atendimentos.js          — pedido público, agenda (calendário/dia), propor/reatribuir/concluir, local do atendimento,
+                                  atendimento recorrente (padrão semanal), convites/aceitar/recusar e resumo de ganhos (prestadora)
       avaliacoes.js             — cliente envia, admin/sub-admin modera, prestadora vê aprovadas
       sync.js                   — impressão digital do que cada usuário enxerga (a tela consulta a cada 4s)
       subadministradores.js     — CRUD de sub-administradores (só admin completo)
@@ -168,6 +173,30 @@ um convite criado pelo administrador aparece na tela da prestadora em poucos seg
 pra aceite/recusa, avaliações, importação, e pra permissão/desativação de funcionário (que sai da tela na hora).
 Abas em segundo plano pausam a checagem e conferem assim que voltam ao foco.
 
+**Recuperação de senha:** "Esqueci a senha" na tela de login (administrador/funcionário e cliente por e-mail;
+prestadora por telefone **ou** e-mail). A API manda um código de 6 dígitos (vale 15 min) para o e-mail cadastrado
+da conta e, com ele, a pessoa define a nova senha e já entra. Detalhes de segurança: a resposta do pedido é sempre a
+mesma, exista a conta ou não (ninguém descobre quem tem cadastro); o código fica guardado sob uma chave própria
+(`recuperar:perfil:e-mail`), então um código de cadastro nunca redefine senha; limites **por conta**, não por IP — 5
+pedidos e 8 erros de código a cada 15 min. Só contas com senha e e-mail entram: uma prestadora antiga **sem e-mail**
+não consegue recuperar sozinha (precisa de um e-mail no cadastro). E-mail de prestadora não é único, então pedir por
+e-mail redefine as contas ligadas a ele; pelo telefone é sempre uma só. A sessão que já estava aberta noutro
+aparelho continua valendo até o JWT expirar (7 dias) — ele não é revogado ao trocar a senha.
+
+**Valor por atendimento (prestadora):** na tela **Equipe** o administrador define, por prestadora, quanto a
+franquia paga por atendimento (só administrador completo altera; funcionário com o módulo Equipe apenas vê). A
+prestadora passa a ver esse valor nos convites e na agenda — **nunca o preço cobrado do cliente** — e a tela dela
+mostra "Previsto na semana" e "A receber no mês" (realizados + a realizar), calculados pela API
+(`GET /atendimentos/prestadora/me/resumo`, semana começando no domingo, fuso de Brasília). O valor é **travado no
+atendimento quando ela aceita** (`atendimentos.valor_prestadora`): mudar a tarifa depois vale só pros próximos
+aceites; o que já foi aceito mantém o valor combinado. Convites ainda não aceitos mostram a tarifa atual; sem
+tarifa definida o valor simplesmente não aparece. Atendimentos "aceitos" com data passada contam como realizados
+(o sistema ainda não tem um botão de concluir).
+
+**Local do atendimento:** na agenda, clique no atendimento → o balão traz **Prestadora** e **Local / bairro**.
+Dá pra corrigir ou preencher o local (administrador e funcionário com agenda), inclusive em atendimento concluído;
+deixar vazio apaga. Nas telas de quem lê (prestadora, avisos de WhatsApp) atendimento sem local não mostra a linha.
+
 **Limite de login:** só tentativas ERRADAS contam (10 por conta+IP em 15 min; 60 por IP) — logins certos, mesmo
 muitos seguidos, nunca bloqueiam.
 
@@ -182,10 +211,12 @@ com `<script>` no lugar do serviço executaria no navegador de quem visualizasse
 
 - **Administrador**: dashboard da unidade, agenda em calendário (mês + linha do tempo do dia) com reatribuição de
   prestadora, atendimento recorrente por semana-padrão, moderação de avaliações, equipe, clientes, telefone de
-  WhatsApp da unidade editável, e uma tela de **Acessos** pra criar/editar sub-administradores com permissão por
+  WhatsApp da unidade editável, valor por atendimento de cada prestadora (tela Equipe), local de cada atendimento
+  editável na própria agenda, e uma tela de **Acessos** pra criar/editar sub-administradores com permissão por
   módulo.
 - **Prestadora**: convites pendentes (só pode confirmar a partir de 2 dias antes do atendimento), agenda confirmada,
-  calendário dos próprios atendimentos, avaliações recebidas.
+  calendário dos próprios atendimentos, avaliações recebidas, e o que tem a receber (valor por atendimento definido
+  pela franquia × atendimentos da semana/do mês).
 - **Cliente**: pedido de orçamento pela home (sem login), avaliação de atendimentos concluídos.
 - **Cadastro de atendimentos (agenda do admin → "+ Novo atendimento / importar planilha")**: duas abas.
   *Atendimento único*: data, horário, serviço, duração, cliente (existente ou novo), prestadora e valor opcionais —
@@ -212,7 +243,7 @@ com `<script>` no lugar do serviço executaria no navegador de quem visualizasse
 ## 7. Fora de escopo por enquanto
 
 - **Integração com a API oficial de WhatsApp Business (Meta Cloud API)** — pausada; a verificação de conta
-  comercial exigida pela Meta se mostrou mais trabalhosa do que o previsto. O que existe hoje (v1.1.0) é o link
+  comercial exigida pela Meta se mostrou mais trabalhosa do que o previsto. O que existe hoje (versão 0.0.0.0) é o link
   "clique pra conversar" (`wa.me`), que não depende de conta verificada nem de token — só não envia sozinho nem
   processa a resposta automaticamente. A API oficial fica pra uma versão futura.
 - Atualizar atendimentos já importados quando uma planilha mais nova traz mudança neles (ex.: "Previsto" que virou

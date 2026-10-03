@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
 const { normalizarEmail, normalizarTelefone, normalizarCnpj } = require('../utils/normalizacao');
 const { senhaValida, emailValido, nomeValido, telefoneValido } = require('../utils/validacao');
-const { enviarCodigoConfirmacao, consumirCodigo, MOTIVO_CADASTRO } = require('../utils/verificacaoEmail');
+const { enviarCodigoConfirmacao, consumirCodigo, MOTIVO_CADASTRO, MOTIVO_RECUPERACAO } = require('../utils/verificacaoEmail');
 const { unidadesDoAdmin } = require('../utils/permissoes');
 
 const router = express.Router();
@@ -332,6 +332,89 @@ router.post('/login', async (req, res) => {
   } catch (erro) {
     console.error(erro);
     res.status(500).json({ erro: 'Erro ao fazer login' });
+  }
+});
+
+// Recuperação de senha — código de 6 dígitos enviado ao e-mail da conta, em duas
+// etapas (pedir o código / trocar a senha com ele). A identidade é provada por
+// controlar a caixa de e-mail, o mesmo critério do cadastro.
+//
+// O pedido SEMPRE responde igual, exista a conta ou não: do contrário a rota
+// viraria um "descobridor" de quem tem cadastro. O e-mail só sai se a conta existe.
+// O código fica guardado sob uma chave própria ("recuperar:perfil:email"), então
+// um código de cadastro nunca serve pra redefinir senha.
+const MENSAGEM_RECUPERACAO = 'Se existir uma conta com esse dado, enviamos um código de 6 dígitos para o e-mail cadastrado. Ele vale por 15 minutos.';
+
+// Acha a(s) conta(s) do perfil pelo identificador digitado (mesmas regras do login:
+// administrador/funcionário e cliente por e-mail, prestadora por telefone OU e-mail).
+// Só entram contas que têm senha (login de verdade) e e-mail pra receber o código.
+// E-mail de prestadora não é único, então todas as contas ligadas a ele são devolvidas.
+async function acharContasParaRecuperar(perfil, identificador) {
+  const id = String(identificador ?? '').trim();
+  if (!id) return null;
+  let candidatas;
+  if (perfil === 'administrador') candidatas = [['administradores', 'email'], ['sub_administradores', 'email']];
+  else if (perfil === 'prestadora') candidatas = [['prestadoras', id.includes('@') ? 'email' : 'telefone']];
+  else if (perfil === 'cliente') candidatas = [['clientes', 'email']];
+  else return null;
+
+  for (const [tabela, campo] of candidatas) { // nomes de tabela/coluna são literais acima
+    const valor = campo === 'telefone' ? normalizarTelefone(id) : normalizarEmail(id);
+    const { rows } = await pool.query(
+      `select id, email from ${tabela} where ${campo} = $1 and senha_hash is not null and email is not null`, [valor]
+    );
+    if (rows.length > 0) {
+      const email = normalizarEmail(rows[0].email);
+      return { tabela, ids: rows.map(r => r.id), email, chave: `recuperar:${perfil}:${email}` };
+    }
+  }
+  return null;
+}
+
+const PERFIS_RECUPERACAO = ['administrador', 'prestadora', 'cliente'];
+
+router.post('/recuperar-senha', async (req, res) => {
+  const { perfil, identificador } = req.body;
+  if (!PERFIS_RECUPERACAO.includes(perfil)) return res.status(400).json({ erro: 'Perfil inválido' });
+  if (!String(identificador ?? '').trim()) return res.status(400).json({ erro: 'Informe seu e-mail (ou telefone, no caso de prestadora)' });
+
+  try {
+    const conta = await acharContasParaRecuperar(perfil, identificador);
+    if (conta) {
+      const envio = await enviarCodigoConfirmacao(conta.chave, { ...MOTIVO_RECUPERACAO, para: conta.email });
+      // a resposta não revela nada, mas quem opera a API precisa saber se o e-mail não saiu
+      if (!envio.enviado) console.warn(`[recuperar-senha] e-mail não enviado (${envio.motivo}) — o código foi logado acima.`);
+    }
+    res.json({ ok: true, mensagem: MENSAGEM_RECUPERACAO });
+  } catch (erro) {
+    console.error(erro);
+    res.status(500).json({ erro: 'Não foi possível enviar o código agora. Tente de novo.' });
+  }
+});
+
+router.post('/recuperar-senha/confirmar', async (req, res) => {
+  const { perfil, identificador, codigo, senha } = req.body;
+  if (!PERFIS_RECUPERACAO.includes(perfil)) return res.status(400).json({ erro: 'Perfil inválido' });
+  if (!String(identificador ?? '').trim() || !codigo || !senha) {
+    return res.status(400).json({ erro: 'Informe o e-mail/telefone, o código e a nova senha' });
+  }
+  if (!senhaValida(senha)) return res.status(400).json({ erro: 'A nova senha precisa ter ao menos 8 caracteres' });
+
+  try {
+    const conta = await acharContasParaRecuperar(perfil, identificador);
+    // conta inexistente responde igual a código errado
+    if (!conta) return res.status(400).json({ erro: 'Código inválido ou expirado' });
+
+    const senhaHash = await bcrypt.hash(senha, SALT_ROUNDS);
+    await emTransacao(async (db) => {
+      if (!await consumirCodigo(db, conta.chave, String(codigo).trim())) throw new ErroNegocio(400, 'Código inválido ou expirado');
+      await db.query(`update ${conta.tabela} set senha_hash = $1 where id = any($2::uuid[])`, [senhaHash, conta.ids]);
+    });
+    res.json({ ok: true, mensagem: 'Senha redefinida! Entre com a nova senha.' });
+  } catch (erro) {
+    if (erro instanceof ErroNegocio) return res.status(erro.status).json({ erro: erro.message });
+    console.error(erro);
+    res.status(500).json({ erro: 'Erro ao redefinir a senha. Tente de novo.' });
   }
 });
 

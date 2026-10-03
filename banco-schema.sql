@@ -1,5 +1,5 @@
 -- ============================================================================
--- Portal da Maria — Schema PostgreSQL (v1.1.0)
+-- Portal da Maria — Schema PostgreSQL (versão 0.0.0.0)
 -- Autenticação e autorização são responsabilidade da API Node/Express em
 -- api/ (bcrypt para senha, JWT para sessão, checagem de permissão por
 -- unidade/módulo nas próprias rotas) — não depende de Supabase Auth nem de
@@ -339,6 +339,14 @@ alter table atendimentos add column orcamento_externo text;        -- coluna "Or
 alter table atendimentos add column duracao_horas numeric(4,1);    -- coluna "Horas"; nulo = bloco de 1h na agenda
 alter table atendimentos add column profissional_externo text;     -- nome da planilha quando não casou com nenhuma prestadora cadastrada
 create unique index uq_atendimentos_codigo_externo on atendimentos(unidade_id, codigo_externo) where codigo_externo is not null;
+
+-- Quanto a franquia paga à prestadora por atendimento (definido pelo admin na
+-- tela Equipe). O valor é "travado" em atendimentos.valor_prestadora quando a
+-- prestadora aceita: mudar a tarifa depois não altera o que já foi combinado.
+-- Atendimentos sem valor travado (aceitos antes da tarifa existir) usam a tarifa atual.
+alter table prestadoras  add column valor_por_atendimento numeric(10,2);
+alter table prestadoras  add column atualizado_em timestamptz not null default now();
+alter table atendimentos add column valor_prestadora numeric(10,2);
 
 create table sub_administradores (
   id              uuid primary key default gen_random_uuid(),

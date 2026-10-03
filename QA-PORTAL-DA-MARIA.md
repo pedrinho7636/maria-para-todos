@@ -1,6 +1,6 @@
 # QA — Portal da Maria (v1.1.0)
 
-> Relatório de auditoria técnica gerado a partir da leitura completa dos arquivos **atuais** na pasta do projeto (`Portal Da Maria - V1.1.0.html`, `api/`, `banco-schema.sql`, `README.md`, `LEIA-ME.md`, `DOCUMENTACAO-PORTAL-DA-MARIA.md`). Versões antigas do protótipo (v0.0.3, SIMULADO, Supabase) foram ignoradas conforme pedido — esta análise reflete só o que existe hoje: frontend em arquivo único + API própria Node/Express + PostgreSQL local.
+> Relatório de auditoria técnica gerado a partir da leitura completa dos arquivos **atuais** na pasta do projeto (`Portal Da Maria.html`, `api/`, `banco-schema.sql`, `README.md`, `LEIA-ME.md`, `DOCUMENTACAO-PORTAL-DA-MARIA.md`). Versões antigas do protótipo (v0.0.3, SIMULADO, Supabase) foram ignoradas conforme pedido — esta análise reflete só o que existe hoje: frontend em arquivo único + API própria Node/Express + PostgreSQL local.
 >
 > **Como usar:** cada ponto abaixo tem problema, onde está, risco/impacto e a solução recomendada (às vezes com uma alternativa mais estrutural). Pode ser colado inteiro num prompt para o assistente que está implementando o projeto — cada seção é independente e acionável.
 
@@ -65,7 +65,7 @@ CNPJ é um dado **público** (consta em notas fiscais, Receita Federal, Google M
 
 ### 1.2 — XSS persistente via comentário de avaliação e via pedido público → roubo do token de sessão do administrador
 
-**Onde:** `Portal Da Maria - V1.1.0.html`, renderizações que usam `innerHTML` com dados vindos da API sem nenhum escape (linhas ~3896, ~4057, ~4202-4204, ~4323-4326 no arquivo atual) + `api/src/routes/avaliacoes.js` (`POST /avaliacoes`, aceita `comentario` livre) + `api/src/routes/atendimentos.js` (`POST /` — pedido de orçamento público, aceita `tipo_servico`/`area` livres).
+**Onde:** `Portal Da Maria.html`, renderizações que usam `innerHTML` com dados vindos da API sem nenhum escape (linhas ~3896, ~4057, ~4202-4204, ~4323-4326 no arquivo atual) + `api/src/routes/avaliacoes.js` (`POST /avaliacoes`, aceita `comentario` livre) + `api/src/routes/atendimentos.js` (`POST /` — pedido de orçamento público, aceita `tipo_servico`/`area` livres).
 
 **Problema (a cadeia completa):**
 1. `POST /api/atendimentos` (pedido de orçamento) é uma rota **pública, sem autenticação**, e aceita `tipo_servico`/`area` como texto livre, sem limite de tamanho e sem sanitização.
@@ -230,7 +230,7 @@ antes do `INSERT`. Padrão a repetir: sempre que existir uma constraint de banco
 
 ### 3.4 — Frontend não trata token expirado / 401 de forma global
 
-**Onde:** `Portal Da Maria - V1.1.0.html`, função `api()` (linha ~3428).
+**Onde:** `Portal Da Maria.html`, função `api()` (linha ~3428).
 
 **Problema:** `api()` lança um `Error` genérico em qualquer resposta não-ok, mas não existe nenhum tratamento especial para `401` (token expirado ou inválido, o que acontece naturalmente após 7 dias, ou se o `JWT_SECRET` mudar). O usuário fica numa tela autenticada vendo erros de "Erro 401" espalhados nos `toast()` de cada ação, sem ser redirecionado para o login.
 
@@ -271,7 +271,7 @@ aplicado tanto no cadastro quanto no login, e usado como o valor efetivamente sa
 
 ### 4.1 — Frontend inteiro em um único arquivo HTML (~166 KB / ~4400 linhas)
 
-**Problema:** todo o CSS, HTML de 6 telas e toda a lógica JS (renderização, chamadas de API, estado) vivem em `Portal Da Maria - V1.1.0.html`. Funciona hoje porque o app é servido por um Live Server simples, sem build step — mas à medida que o projeto cresce (e já tem bastante lógica de negócio: recorrência, permissões por módulo, calendário), fica cada vez mais caro achar/alterar coisas com segurança num arquivo desse tamanho, e o risco de duas partes do código divergirem silenciosamente (ex.: duas cópias parecidas de uma função de formatação) aumenta.
+**Problema:** todo o CSS, HTML de 6 telas e toda a lógica JS (renderização, chamadas de API, estado) vivem em `Portal Da Maria.html`. Funciona hoje porque o app é servido por um Live Server simples, sem build step — mas à medida que o projeto cresce (e já tem bastante lógica de negócio: recorrência, permissões por módulo, calendário), fica cada vez mais caro achar/alterar coisas com segurança num arquivo desse tamanho, e o risco de duas partes do código divergirem silenciosamente (ex.: duas cópias parecidas de uma função de formatação) aumenta.
 
 **Solução recomendada (curto prazo, sem mudar arquitetura):** pelo menos separar em 3 arquivos estáticos (`app.css`, `app.js`, `index.html`) — zero mudança de comportamento, só organização, continua funcionando com Live Server/`npx serve` sem build step.
 
@@ -315,7 +315,7 @@ e, se `.claude/settings.local.json` já estiver commitado, rodar `git rm --cache
 
 ### 4.5 — `API_BASE` fixo em `localhost`, sem variável de ambiente
 
-**Onde:** `Portal Da Maria - V1.1.0.html`, `const API_BASE = "http://localhost:3001/api";`.
+**Onde:** `Portal Da Maria.html`, `const API_BASE = "http://localhost:3001/api";`.
 
 **Problema:** consistente com o projeto rodar "100% local" hoje (declarado no README, é um TCC), mas é um hardcode que vai exigir editar o HTML na mão no dia em que o projeto for hospedado em algum lugar.
 

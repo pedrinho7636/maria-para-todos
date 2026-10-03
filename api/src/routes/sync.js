@@ -42,7 +42,7 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
     const { rows: [r] } = await pool.query(
       `select
          ${marca('atendimentos', 'atualizado_em', 'unidade_id = $1')} as atendimentos,
-         ${marca('prestadoras', 'criado_em', 'unidade_id = $1')} as prestadoras,
+         ${marca('prestadoras', 'atualizado_em', 'unidade_id = $1')} as prestadoras,
          ${marca('clientes', 'criado_em', 'unidade_id = $1')} as clientes,
          (select count(*) || ':' || coalesce(extract(epoch from max(coalesce(av.moderado_em, av.criado_em)))::text, '0')
             from avaliacoes av join prestadoras p on p.id = av.prestadora_id where p.unidade_id = $1) as avaliacoes`,
@@ -53,11 +53,12 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
     const { rows: [r] } = await pool.query(
       `select
          ${marca('atendimentos', 'atualizado_em', 'prestadora_id = $1')} as atendimentos,
+         ${marca('prestadoras', 'atualizado_em', 'id = $1')} as tarifa,
          (select count(*) || ':' || coalesce(extract(epoch from max(coalesce(moderado_em, criado_em)))::text, '0')
             from avaliacoes where prestadora_id = $1 and status = 'aprovada') as avaliacoes`,
       [id]
     );
-    partes = [r.atendimentos, r.avaliacoes];
+    partes = [r.atendimentos, r.tarifa, r.avaliacoes];
   } else if (perfil === 'cliente') {
     const { rows: [r] } = await pool.query(
       `select

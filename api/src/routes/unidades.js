@@ -35,10 +35,37 @@ router.get('/:slug/admin/dashboard', requireAuth, requireAcessoUnidade('dashboar
 
 router.get('/:slug/admin/equipe', requireAuth, requireAcessoUnidade('equipe'), asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    'select * from vw_equipe_unidade where unidade_id = $1 order by nome',
+    `select v.*, p.valor_por_atendimento
+     from vw_equipe_unidade v join prestadoras p on p.id = v.prestadora_id
+     where v.unidade_id = $1 order by v.nome`,
     [req.unidadeId]
   );
   res.json(rows);
+}));
+
+// Quanto a franquia paga a esta prestadora por atendimento. Vazio/null remove a
+// tarifa. Só vale pros próximos aceites — o que já foi aceito mantém o valor
+// combinado na hora (atendimentos.valor_prestadora). É dinheiro: só administrador
+// completo altera (funcionário com módulo "Equipe" enxerga, mas não muda).
+router.patch('/:slug/admin/equipe/:prestadoraId', requireAuth, requireRole('administrador'), requireAcessoUnidade('equipe'), asyncHandler(async (req, res) => {
+  const bruto = req.body.valor_por_atendimento;
+  let valor = null;
+  if (bruto !== null && bruto !== undefined && String(bruto).trim() !== '') {
+    valor = Number(String(bruto).trim().replace(',', '.'));
+    if (!Number.isFinite(valor) || valor < 0 || valor >= 100000) {
+      return res.status(400).json({ erro: 'Valor inválido — informe um número entre 0 e 99.999,99' });
+    }
+    valor = Math.round(valor * 100) / 100;
+  }
+
+  const { rows: [prestadora] } = await pool.query(
+    `update prestadoras set valor_por_atendimento = $1, atualizado_em = now()
+     where id = $2 and unidade_id = $3
+     returning id, nome, valor_por_atendimento`,
+    [valor, req.params.prestadoraId, req.unidadeId]
+  );
+  if (!prestadora) return res.status(404).json({ erro: 'Prestadora não encontrada nesta unidade' });
+  res.json(prestadora);
 }));
 
 router.get('/:slug/admin/clientes', requireAuth, requireAcessoUnidade('clientes'), asyncHandler(async (req, res) => {
