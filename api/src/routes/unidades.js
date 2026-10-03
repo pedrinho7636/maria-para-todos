@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
-const { requireAuth, requireAcessoUnidade } = require('../middleware/auth');
+const { requireAuth, requireRole, requireAcessoUnidade } = require('../middleware/auth');
+const { unidadeDoAdmin } = require('../utils/permissoes');
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
@@ -46,6 +47,22 @@ router.get('/:slug/admin/clientes', requireAuth, requireAcessoUnidade('clientes'
     [req.unidadeId]
   );
   res.json(rows);
+}));
+
+// Telefone (WhatsApp) da unidade — configuração da franquia, não é um módulo
+// delegável: só administrador completo mexe, nunca sub-administrador.
+router.patch('/:slug/telefone', requireAuth, requireRole('administrador'), asyncHandler(async (req, res) => {
+  const unidadeId = await unidadeDoAdmin(req.user.id, req.params.slug);
+  if (!unidadeId) return res.status(403).json({ erro: 'Sem acesso a esta unidade' });
+
+  const telefone = (req.body.telefone || '').trim();
+  if (!telefone) return res.status(400).json({ erro: 'telefone é obrigatório' });
+
+  const { rows: [unidade] } = await pool.query(
+    'update unidades set telefone = $1 where id = $2 returning slug, nome, uf, telefone, endereco, endereco_curto',
+    [telefone, unidadeId]
+  );
+  res.json(unidade);
 }));
 
 module.exports = router;

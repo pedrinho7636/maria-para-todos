@@ -9,6 +9,12 @@ const router = express.Router();
 router.post('/', requireAuth, requireRole('cliente'), asyncHandler(async (req, res) => {
   const { atendimento_id, nota, comentario } = req.body;
   if (!atendimento_id || !nota) return res.status(400).json({ erro: 'atendimento_id e nota são obrigatórios' });
+  if (!Number.isInteger(nota) || nota < 1 || nota > 5) {
+    return res.status(400).json({ erro: 'nota deve ser um número inteiro entre 1 e 5' });
+  }
+  if (comentario && comentario.length > 1000) {
+    return res.status(400).json({ erro: 'comentario excede o tamanho máximo permitido' });
+  }
 
   const { rows: [atendimento] } = await pool.query(
     `select * from atendimentos where id = $1 and cliente_id = $2 and status = 'concluido'`,

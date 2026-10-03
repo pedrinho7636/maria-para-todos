@@ -1,5 +1,5 @@
 -- ============================================================================
--- Portal da Maria — Schema PostgreSQL (v1.0.0)
+-- Portal da Maria — Schema PostgreSQL (v1.1.0)
 -- Autenticação e autorização são responsabilidade da API Node/Express em
 -- api/ (bcrypt para senha, JWT para sessão, checagem de permissão por
 -- unidade/módulo nas próprias rotas) — não depende de Supabase Auth nem de
@@ -62,6 +62,8 @@ create table administradores (
   nome        text not null,
   sobrenome   text not null,
   email       text unique not null,
+  telefone    text,
+  foto        text,           -- data URL (base64) da foto de perfil; sem storage de arquivo por ora
   senha_hash  text not null,  -- hash bcrypt gerado pela API no cadastro (não é mais "gerenciado pelo Supabase")
   criado_em   timestamptz not null default now()
 );
@@ -84,14 +86,17 @@ comment on table administrador_unidades is 'Vínculo N:N administrador<->unidade
 create table prestadoras (
   id          uuid primary key default gen_random_uuid(),
   nome        text not null,
-  telefone    text not null unique,       -- usado no cadastro/verificação via WhatsApp e como login
+  telefone    text not null unique,       -- login da prestadora
+  email       text,                       -- usado pra verificar identidade no cadastro (não há API de WhatsApp
+                                           -- de verdade); nulo só pra prestadoras cadastradas antes dessa mudança
+  foto        text,                       -- data URL (base64) da foto de perfil
   senha_hash  text not null,              -- hash bcrypt gerado pela API no cadastro
   unidade_id  uuid not null references unidades(id),
   ativa       boolean not null default true,
   criado_em   timestamptz not null default now()
 );
 
-comment on table prestadoras is 'Cadastro vinculado à unidade desde a verificação por WhatsApp (regra observada no fluxo de cadastro do protótipo).';
+comment on table prestadoras is 'Cadastro vinculado à unidade desde o cadastro, com identidade confirmada por e-mail (sem API de WhatsApp de verdade, a verificação nunca foi por telefone).';
 
 -- ============================================================================
 -- CLIENTES (equivalente a `clientesData` no HTML)
@@ -102,6 +107,7 @@ create table clientes (
   nome        text not null,               -- pode ser pessoa física ou nome fantasia (ex: 'Cond. Primavera')
   telefone    text,
   email       text unique,
+  foto        text,                        -- data URL (base64) da foto de perfil
   senha_hash  text,                        -- nulo para clientes cadastrados via pedido avulso (sem login ainda)
   unidade_id  uuid not null references unidades(id),
   criado_em   timestamptz not null default now()
@@ -170,7 +176,7 @@ create table codigos_verificacao (
   criado_em   timestamptz not null default now()
 );
 
-comment on table codigos_verificacao is 'Códigos de 6 dígitos para verificação de e-mail (admin) ou WhatsApp (prestadora) no cadastro. Hoje simulado; troca por WhatsApp Business API fica pra depois.';
+comment on table codigos_verificacao is 'Códigos/tokens de verificação por e-mail — cadastro (admin/prestadora/cliente, 6 dígitos) e troca de e-mail no perfil (link "clique OK", qualquer perfil). Sempre por e-mail: não há API de WhatsApp de verdade. Envio real de e-mail é simulado (logado no console) por ora.';
 
 -- ============================================================================
 -- VIEWS — substituem os campos pré-calculados que existiam nos mocks
@@ -225,9 +231,12 @@ group by c.id, c.unidade_id, c.nome;
 -- ============================================================================
 
 -- Unidades (`cidades` / `unidades`)
+-- telefone é o número (WhatsApp) da franquia usado nos links de "clique pra
+-- conversar" do site — editável pelo administrador em runtime (PATCH
+-- /unidades/:slug/telefone), estes são só os valores de partida.
 insert into unidades (id, slug, nome, uf, cnpj, telefone, endereco, endereco_curto) values
-  ('11111111-1111-1111-1111-111111111111', 'carazinho', 'Carazinho', 'RS', '12.345.678/0001-90', '(54) 9 9999-0001', 'Rua Exemplo, 123 — Centro, Carazinho/RS', 'Rua Exemplo, 123 — Centro'),
-  ('22222222-2222-2222-2222-222222222222', 'panambi',   'Panambi',   'RS', '12.345.678/0002-71', '(55) 9 9999-0002', 'Av. Exemplo, 456 — Centro, Panambi/RS',   'Av. Exemplo, 456 — Centro');
+  ('11111111-1111-1111-1111-111111111111', 'carazinho', 'Carazinho', 'RS', '12.345.678/0001-90', '(54) 9 9909-310', 'Rua Exemplo, 123 — Centro, Carazinho/RS', 'Rua Exemplo, 123 — Centro'),
+  ('22222222-2222-2222-2222-222222222222', 'panambi',   'Panambi',   'RS', '12.345.678/0002-71', '(55) 9680-6226', 'Av. Exemplo, 456 — Centro, Panambi/RS',   'Av. Exemplo, 456 — Centro');
 
 -- Administrador de exemplo — senha: senha123
 insert into administradores (id, nome, sobrenome, email, senha_hash) values
@@ -238,14 +247,17 @@ insert into administrador_unidades (administrador_id, unidade_id) values
   ('d0000000-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222');
 
 -- Prestadoras (`equipeData`) — senha: senha123
+-- telefone gravado só com dígitos (sem DDD com parênteses/espaço) — o backend
+-- normaliza pro mesmo formato tanto no cadastro quanto no login, então
+-- digitar "(54) 9 9000-0001" ou "54990000001" no login funciona igual.
 insert into prestadoras (id, nome, telefone, senha_hash, unidade_id, ativa) values
-  ('a0000000-0000-0000-0000-000000000001', 'Fabiana S.',  '(54) 9 9000-0001', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
-  ('a0000000-0000-0000-0000-000000000002', 'Cláudia B.',  '(54) 9 9000-0002', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
-  ('a0000000-0000-0000-0000-000000000003', 'Joana R.',    '(54) 9 9000-0003', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
-  ('a0000000-0000-0000-0000-000000000004', 'Patrícia L.', '(54) 9 9000-0004', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', false),
-  ('a0000000-0000-0000-0000-000000000005', 'Rosa M.',     '(55) 9 9000-0005', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true),
-  ('a0000000-0000-0000-0000-000000000006', 'Inês K.',     '(55) 9 9000-0006', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true),
-  ('a0000000-0000-0000-0000-000000000007', 'Daniel T.',   '(55) 9 9000-0007', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true);
+  ('a0000000-0000-0000-0000-000000000001', 'Fabiana S.',  '54990000001', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
+  ('a0000000-0000-0000-0000-000000000002', 'Cláudia B.',  '54990000002', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
+  ('a0000000-0000-0000-0000-000000000003', 'Joana R.',    '54990000003', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', true),
+  ('a0000000-0000-0000-0000-000000000004', 'Patrícia L.', '54990000004', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '11111111-1111-1111-1111-111111111111', false),
+  ('a0000000-0000-0000-0000-000000000005', 'Rosa M.',     '55990000005', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true),
+  ('a0000000-0000-0000-0000-000000000006', 'Inês K.',     '55990000006', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true),
+  ('a0000000-0000-0000-0000-000000000007', 'Daniel T.',   '55990000007', '$2b$10$OXiJF9wC56zrf6o1ozs7oeztV5wd4e61DicovoZueBYeeBbaM1E4O', '22222222-2222-2222-2222-222222222222', true);
 
 -- Clientes (`clientesData`)
 insert into clientes (id, nome, unidade_id) values
@@ -318,11 +330,23 @@ alter table atendimentos add column serie_id uuid;
 comment on column atendimentos.serie_id is 'Tag compartilhada pelas linhas geradas de uma vez por um atendimento recorrente.';
 create index idx_atendimentos_serie on atendimentos(serie_id) where serie_id is not null;
 
+-- Importação de planilha de atendimentos (.xlsx do sistema da franquia).
+-- codigo_externo = coluna "Número" da planilha: é a chave que impede duplicar
+-- na reimportação (único por unidade; atendimentos criados no portal ficam nulos).
+alter type origem_pedido add value 'importacao';
+alter table atendimentos add column codigo_externo text;
+alter table atendimentos add column orcamento_externo text;        -- coluna "Orçamento" (agrupa vários atendimentos)
+alter table atendimentos add column duracao_horas numeric(4,1);    -- coluna "Horas"; nulo = bloco de 1h na agenda
+alter table atendimentos add column profissional_externo text;     -- nome da planilha quando não casou com nenhuma prestadora cadastrada
+create unique index uq_atendimentos_codigo_externo on atendimentos(unidade_id, codigo_externo) where codigo_externo is not null;
+
 create table sub_administradores (
   id              uuid primary key default gen_random_uuid(),
   nome            text not null,
   sobrenome       text not null,
   email           text unique not null,
+  telefone        text,
+  foto            text,           -- data URL (base64) da foto de perfil
   senha_hash      text not null,
   unidade_id      uuid not null references unidades(id),
   ativo           boolean not null default true,

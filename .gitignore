@@ -10,3 +10,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Configuração local do Claude Code (pode conter comandos de teste com
+# credenciais/hashes usados durante o desenvolvimento) — nunca é do projeto
+.claude/settings.local.json

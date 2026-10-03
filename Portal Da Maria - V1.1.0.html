@@ -1647,6 +1647,97 @@
       margin-bottom: 6px
     }
 
+    /* Modais de ajuste (perfil, recorrência) só fecham por este botão, pelo
+       "Fechar/Cancelar" ou pelo ESC — clicar fora não deve descartar o que a
+       pessoa estava preenchendo. */
+    .modal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px
+    }
+
+    .modal-close {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 26px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0 6px;
+      border-radius: 8px
+    }
+
+    .modal-close:hover {
+      color: var(--ink);
+      background: var(--green-soft)
+    }
+
+    /* abas do modal "Cadastrar atendimento" */
+    .mini-tabs {
+      display: flex;
+      gap: 6px;
+      background: var(--bg);
+      padding: 4px;
+      border-radius: 10px;
+      margin-bottom: 16px
+    }
+
+    .mini-tabs button {
+      flex: 1;
+      border: 0;
+      background: transparent;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer
+    }
+
+    .mini-tabs button.active {
+      background: var(--surface);
+      color: var(--green-strong);
+      box-shadow: var(--shadow)
+    }
+
+    .atd-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px
+    }
+
+    .atd-stat {
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+      min-width: 0
+    }
+
+    .atd-stat b {
+      display: block;
+      font-size: 20px;
+      color: var(--green-strong)
+    }
+
+    .atd-stat span {
+      font-size: 11.5px;
+      color: var(--muted)
+    }
+
+    .atd-aviso {
+      font-size: 12.5px;
+      color: var(--muted);
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      line-height: 1.5
+    }
+
     .modal-card p {
       font-size: 13.5px;
       color: var(--muted);
@@ -2102,6 +2193,21 @@
       font-size: 11.5px
     }
 
+    /* uma linha por informação, cortada com reticências (vários blocos lado a lado ficam estreitos) */
+    .tl-block .tl-linha {
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    /* concluído: neutro, pra não competir com o que ainda vai acontecer */
+    .tl-block.concluido {
+      background: var(--bg);
+      border-color: var(--line);
+      color: var(--muted)
+    }
+
     .reatribuir-pop {
       position: absolute;
       z-index: 20;
@@ -2392,7 +2498,7 @@
           pertinho de você.</p>
         <div class="hero-cta">
           <button class="btn-lg green" onclick="goSection('contato')">Pedir um orçamento</button>
-          <button class="btn-lg wa" onclick="toast('Abriria o WhatsApp da unidade de '+cidades[regiao].nome+'.')">
+          <button class="btn-lg wa" onclick="abrirWhatsApp(cidades[regiao].tel, 'Olá! Gostaria de falar sobre um serviço de limpeza com a unidade de ' + cidades[regiao].nome + '.')">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2a10 10 0 0 0-8.7 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2z" />
             </svg>Falar no WhatsApp
@@ -2794,7 +2900,7 @@
 
         <!-- PRESTADORA -->
         <div id="cad-fields-prestadora" style="display:none">
-          <div class="field"><label>Nome completo</label><input type="text" placeholder="Seu nome"></div>
+          <div class="field"><label>Nome completo</label><input id="cad-prestadora-nome" type="text" placeholder="Seu nome"></div>
           <div class="field"><label>Região / unidade</label>
             <select id="cad-prest-regiao">
               <option value="">Selecione a sua cidade...</option>
@@ -2802,28 +2908,23 @@
               <option value="panambi">Panambi</option>
             </select>
           </div>
+          <div class="field"><label>Telefone</label><input id="prest-phone" type="tel" placeholder="(00) 0 0000-0000"></div>
           <div class="field">
-            <label>Telefone (WhatsApp)</label>
+            <label>E-mail</label>
             <div class="field-inline">
-              <input id="prest-phone" type="tel" placeholder="(00) 0 0000-0000">
-              <button class="btn-verify" id="prest-phone-verifybtn"
-                onclick="enviarCodigo('prest-phone')">Verificar</button>
+              <input id="prestadora-email" type="email" placeholder="voce@exemplo.com">
+              <button class="btn-verify" id="prestadora-email-verifybtn"
+                onclick="enviarCodigo('prestadora-email')">Verificar</button>
             </div>
-            <div class="warn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2">
-                <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-                <path d="M12 9v4M12 17h.01" />
-              </svg><span>Selecione a sua região primeiro: a <b>unidade escolhida</b> envia um código de verificação
-                para o seu WhatsApp.</span></div>
-            <div class="codebox" id="prest-phone-codebox">
-              <p id="prest-phone-codemsg">A unidade enviou um código de <b>6 dígitos</b> para o seu WhatsApp.</p>
-              <div class="code-row"><input id="prest-phone-codeinput" maxlength="6" inputmode="numeric"
-                  placeholder="000000"><button onclick="confirmarCodigo('prest-phone')">Confirmar</button></div>
+            <div class="codebox" id="prestadora-email-codebox">
+              <p>Enviamos um código de <b>6 dígitos</b> para o seu e-mail, para confirmar que ele é realmente seu.</p>
+              <div class="code-row"><input id="prestadora-email-codeinput" maxlength="6" inputmode="numeric"
+                  placeholder="000000"><button onclick="confirmarCodigo('prestadora-email')">Confirmar</button></div>
             </div>
-            <div class="okmark" id="prest-phone-ok"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+            <div class="okmark" id="prestadora-email-ok"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="3">
                 <path d="M20 6L9 17l-5-5" />
-              </svg>Telefone verificado</div>
+              </svg>E-mail verificado</div>
           </div>
           <div class="field"><label>Senha</label><input id="cad-prestadora-senha" type="password"
               placeholder="Crie uma senha"></div>
@@ -2833,11 +2934,27 @@
 
         <!-- CLIENTE -->
         <div id="cad-fields-cliente" style="display:none">
-          <div class="field"><label>Nome completo</label><input type="text" placeholder="Seu nome"></div>
-          <div class="field"><label>E-mail</label><input type="email" placeholder="voce@exemplo.com"></div>
-          <div class="field"><label>Telefone (WhatsApp)</label><input type="tel" placeholder="(00) 0 0000-0000"></div>
+          <div class="field"><label>Nome completo</label><input id="cad-cliente-nome" type="text" placeholder="Seu nome"></div>
+          <div class="field">
+            <label>E-mail</label>
+            <div class="field-inline">
+              <input id="cliente-email" type="email" placeholder="voce@exemplo.com">
+              <button class="btn-verify" id="cliente-email-verifybtn"
+                onclick="enviarCodigo('cliente-email')">Verificar</button>
+            </div>
+            <div class="codebox" id="cliente-email-codebox">
+              <p>Enviamos um código de <b>6 dígitos</b> para o seu e-mail, para confirmar que ele é realmente seu.</p>
+              <div class="code-row"><input id="cliente-email-codeinput" maxlength="6" inputmode="numeric"
+                  placeholder="000000"><button onclick="confirmarCodigo('cliente-email')">Confirmar</button></div>
+            </div>
+            <div class="okmark" id="cliente-email-ok"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="3">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>E-mail verificado</div>
+          </div>
+          <div class="field"><label>Telefone</label><input id="cad-cliente-telefone" type="tel" placeholder="(00) 0 0000-0000"></div>
           <div class="field"><label>Sua cidade</label>
-            <select>
+            <select id="cad-cliente-regiao">
               <option value="">Selecione...</option>
               <option value="carazinho">Carazinho</option>
               <option value="panambi">Panambi</option>
@@ -2877,7 +2994,7 @@
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <path d="M16 17l5-5-5-5M21 12H9" />
             </svg>Sair</div>
-          <div class="avatar">RG</div>
+          <div class="avatar" id="topbar-avatar-admin" onclick="abrirPerfil()" style="cursor:pointer">RG</div>
         </div>
       </div>
     </header>
@@ -3010,8 +3127,9 @@
               <div class="cal-dow">D</div><div class="cal-dow">S</div><div class="cal-dow">T</div><div class="cal-dow">Q</div><div class="cal-dow">Q</div><div class="cal-dow">S</div><div class="cal-dow">S</div>
             </div>
             <div class="calendar-grid" id="agv-cal-grid"></div>
-            <div class="form-actions" style="margin-top:16px">
-              <button class="btn-sm" style="width:100%" onclick="abrirModalRecorrente()">+ Atendimento recorrente</button>
+            <div style="margin-top:16px;display:grid;gap:8px">
+              <button class="btn-sm" style="width:100%" onclick="abrirModalAtendimento()">+ Novo atendimento / importar planilha</button>
+              <button class="btn-sm ghost" style="width:100%" onclick="abrirModalRecorrente()">+ Atendimento recorrente</button>
             </div>
           </div>
           <div class="panel">
@@ -3087,6 +3205,20 @@
           </div><span class="back-link" onclick="adminView('visaogeral')">← Visão geral</span>
         </div>
         <div class="panel" style="margin-bottom:26px">
+          <div class="panel-head"><h2>Telefone (WhatsApp) da unidade</h2></div>
+          <div class="form-card" style="padding:20px;border-radius:0">
+            <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Número usado nos links de WhatsApp do
+              site e nos avisos automáticos de atendimento (com DDD, sem o +55).</p>
+            <div class="field-row">
+              <div class="field"><label>Telefone</label><input id="sa-tel-unidade" placeholder="(00) 0 0000-0000">
+              </div>
+              <div class="field" style="flex:0 0 auto;align-self:flex-end">
+                <button class="btn-sm" onclick="salvarTelefoneUnidade()">Salvar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="panel" style="margin-bottom:26px">
           <div class="panel-head"><h2 id="sa-form-titulo">Adicionar funcionário</h2></div>
           <div class="form-card" style="padding:20px;border-radius:0">
             <div class="field-row">
@@ -3141,7 +3273,7 @@
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <path d="M16 17l5-5-5-5M21 12H9" />
             </svg>Sair</div>
-          <div class="avatar" style="background:var(--green)">FS</div>
+          <div class="avatar" id="topbar-avatar-prestadora" onclick="abrirPerfil()" style="background:var(--green);cursor:pointer">FS</div>
         </div>
       </div>
     </header>
@@ -3149,8 +3281,8 @@
       <section class="hero">
         <div>
           <div class="eyebrow">Minha área</div>
-          <h1>Olá, Fabiana.</h1>
-          <p>Prestadora vinculada à unidade <strong>Carazinho</strong> · segunda-feira, 22 de junho</p>
+          <h1 id="ps-saudacao">Olá.</h1>
+          <p>Prestadora vinculada à unidade <strong id="ps-unidade">—</strong> · <span class="data-hoje">hoje</span></p>
         </div>
       </section>
       <section class="pstat">
@@ -3242,7 +3374,7 @@
           <div class="brand-name">Portal da Maria <span>· cliente</span></div>
         </div>
         <div class="topbar-right">
-          <button class="btn-wa" onclick="toast('Abriria o WhatsApp da unidade de '+cidades[regiao].nome+'.')"><svg
+          <button class="btn-wa" onclick="abrirWhatsApp(cidades[regiao].tel, 'Olá! Preciso falar sobre um atendimento com a unidade de ' + cidades[regiao].nome + '.')"><svg
               width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2a10 10 0 0 0-8.7 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2z" />
             </svg>Falar com a unidade</button>
@@ -3251,7 +3383,7 @@
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <path d="M16 17l5-5-5-5M21 12H9" />
             </svg>Sair</div>
-          <div class="avatar" style="background:var(--blue)">AC</div>
+          <div class="avatar" id="topbar-avatar-cliente" onclick="abrirPerfil()" style="background:var(--blue);cursor:pointer">AC</div>
         </div>
       </div>
     </header>
@@ -3259,7 +3391,7 @@
       <section class="hero">
         <div>
           <div class="eyebrow">Meus serviços</div>
-          <h1>Olá, Amanda.</h1>
+          <h1 id="cli-saudacao">Olá.</h1>
           <p>Cliente da unidade <strong id="cli-unit">Carazinho</strong> · acompanhe seus atendimentos</p>
         </div>
         <button class="btn-lg green" onclick="show('screen-home');goSection('contato')">Pedir novo serviço</button>
@@ -3306,7 +3438,7 @@
             <p style="font-size:13.5px;color:var(--muted);line-height:1.6;margin-bottom:16px">Fale direto com a sua
               unidade para tirar dúvidas, remarcar ou pedir um novo serviço.</p>
             <button class="btn-lg wa" style="width:100%;justify-content:center;margin-bottom:10px"
-              onclick="toast('Abriria o WhatsApp da unidade de '+cidades[regiao].nome+'.')"><svg width="16" height="16"
+              onclick="abrirWhatsApp(cidades[regiao].tel, 'Olá! Preciso de ajuda com um atendimento na unidade de ' + cidades[regiao].nome + '.')"><svg width="16" height="16"
                 viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2a10 10 0 0 0-8.7 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2z" />
               </svg>Chamar no WhatsApp</button>
@@ -3363,7 +3495,8 @@
 
   <div class="modal" id="modal-recorrente">
     <div class="modal-card" style="max-width:480px;max-height:88vh;overflow-y:auto">
-      <h3>Atendimento recorrente</h3>
+      <div class="modal-head"><h3>Atendimento recorrente</h3>
+        <button class="modal-close" onclick="fecharModalRecorrente()" aria-label="Fechar" title="Fechar (Esc)">×</button></div>
       <p>Monte os atendimentos de uma semana-modelo; o sistema repete esse padrão.</p>
       <div class="field-row">
         <div class="field"><label>Semana de início (qualquer dia dela)</label><input id="rec-data" type="date"></div>
@@ -3379,6 +3512,117 @@
       <div class="form-actions">
         <button class="btn-sm ghost" onclick="fecharModalRecorrente()">Cancelar</button>
         <button class="btn-sm" onclick="salvarRecorrente()">Gerar ocorrências</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-atendimento">
+    <div class="modal-card" style="max-width:520px;max-height:88vh;overflow-y:auto">
+      <div class="modal-head"><h3>Cadastrar atendimento</h3>
+        <button class="modal-close" onclick="fecharModalAtendimento()" aria-label="Fechar" title="Fechar (Esc)">×</button></div>
+      <div class="mini-tabs">
+        <button id="atd-tab-unico" class="active" onclick="atdAba('unico')">Atendimento único</button>
+        <button id="atd-tab-importar" onclick="atdAba('importar')">Importar planilha</button>
+      </div>
+
+      <div id="atd-painel-unico">
+        <div class="field-row">
+          <div class="field"><label>Data</label><input id="atd-data" type="date" onchange="atdDataMudou(this)"></div>
+          <div class="field"><label>Horário</label><input id="atd-hora" type="time"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Serviço</label>
+            <input id="atd-servico" list="atd-servicos" placeholder="Limpeza residencial">
+            <datalist id="atd-servicos"><option value="Limpeza residencial"><option value="Limpeza empresarial"><option value="Passadoria"><option value="Limpeza pós-obra"><option value="Limpeza de vidros"></datalist>
+          </div>
+          <div class="field"><label>Duração (horas)</label><input id="atd-duracao" type="number" min="0.5" max="24" step="0.5" value="4"></div>
+        </div>
+        <div class="field"><label>Local / bairro (opcional)</label><input id="atd-area" placeholder="Bairro Centro"></div>
+        <div class="field"><label>Cliente</label><select id="atd-cliente" onchange="atdClienteMudou()"></select></div>
+        <div class="field-row" id="atd-cliente-novo" style="display:none">
+          <div class="field"><label>Nome do cliente</label><input id="atd-cliente-nome"></div>
+          <div class="field"><label>Telefone (opcional)</label><input id="atd-cliente-tel" type="tel" placeholder="(00) 0 0000-0000"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Prestadora (opcional)</label><select id="atd-prestadora"></select></div>
+          <div class="field"><label>Valor R$ (opcional)</label><input id="atd-valor" type="number" min="0" step="0.01"></div>
+        </div>
+        <p style="font-size:12px;margin:0 0 14px">Ao escolher uma prestadora, o atendimento vira um convite e abrimos o WhatsApp
+          com o aviso e o link pra ela confirmar.</p>
+        <div class="form-actions">
+          <button class="btn-sm ghost" onclick="fecharModalAtendimento()">Cancelar</button>
+          <button class="btn-sm" id="atd-salvar" onclick="salvarAtendimentoUnico()">Cadastrar</button>
+        </div>
+      </div>
+
+      <div id="atd-painel-importar" style="display:none">
+        <p style="margin-bottom:12px">Envie a planilha <b>.xlsx</b> exportada do sistema da franquia. Dá pra reenviar o mesmo
+          arquivo (ou um export mais novo) quantas vezes quiser: só entra o que ainda não foi importado.</p>
+        <div class="field"><input id="atd-arquivo" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onchange="atdArquivoEscolhido(this)"></div>
+        <div id="atd-resumo"></div>
+        <div class="form-actions">
+          <button class="btn-sm ghost" onclick="fecharModalAtendimento()">Cancelar</button>
+          <button class="btn-sm" id="atd-importar" onclick="confirmarImportacao()" disabled>Importar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-perfil">
+    <div class="modal-card" style="max-width:460px;max-height:88vh;overflow-y:auto">
+      <div class="modal-head"><h3>Meu perfil</h3>
+        <button class="modal-close" onclick="fecharPerfil()" aria-label="Fechar" title="Fechar (Esc)">×</button></div>
+      <p>Seus dados de acesso — visíveis só pra você.</p>
+
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+        <div id="perfil-foto-preview" class="avatar" style="width:64px;height:64px;font-size:20px;background-size:cover;background-position:center"></div>
+        <div>
+          <label class="btn-sm ghost" style="cursor:pointer;display:inline-block">Trocar foto
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" onchange="perfilFotoSelecionada(this)">
+          </label>
+          <button class="btn-sm ghost" onclick="removerFotoPerfil()">Remover</button>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field"><label>Nome</label><input id="perfil-nome"></div>
+        <div class="field" id="perfil-sobrenome-wrap" style="display:none"><label>Sobrenome</label><input id="perfil-sobrenome"></div>
+      </div>
+      <div class="field"><label>Telefone</label><input id="perfil-telefone" placeholder="(00) 0 0000-0000"></div>
+      <div class="form-actions" style="margin-bottom:18px">
+        <button class="btn-sm" style="width:100%" onclick="salvarPerfilBasico()">Salvar nome e telefone</button>
+      </div>
+
+      <div style="border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px">
+        <div class="field">
+          <label>E-mail</label>
+          <div class="field-inline">
+            <input id="perfil-email" type="email">
+            <button class="btn-verify" onclick="solicitarVerificacaoEmail()">Verificar e salvar</button>
+          </div>
+        </div>
+        <p id="perfil-email-hint" class="warn" style="display:none;font-size:12px"></p>
+        <div class="codebox" id="perfil-email-codebox" style="display:none">
+          <p>Enviamos um código de <b>6 dígitos</b> para o novo e-mail. Digite-o abaixo pra confirmar a troca.</p>
+          <div class="code-row"><input id="perfil-email-codigo" maxlength="6" inputmode="numeric" placeholder="000000">
+            <button onclick="confirmarEmailPerfil()">Confirmar</button></div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--line);padding-top:14px">
+        <label style="font-weight:500;font-size:13px;display:block;margin-bottom:8px">Alterar senha</label>
+        <div class="field"><label>Senha atual</label><input id="perfil-senha-atual" type="password"></div>
+        <div class="field-row">
+          <div class="field"><label>Nova senha</label><input id="perfil-senha-nova" type="password"></div>
+          <div class="field"><label>Confirmar nova senha</label><input id="perfil-senha-nova2" type="password"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-sm" style="width:100%" onclick="alterarSenhaPerfil()">Alterar senha</button>
+        </div>
+      </div>
+
+      <div class="form-actions" style="margin-top:16px">
+        <button class="btn-sm ghost" style="width:100%" onclick="fecharPerfil()">Fechar</button>
       </div>
     </div>
   </div>
@@ -3416,6 +3660,18 @@
       if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
       const res = await fetch(API_BASE + path, { ...opts, headers });
       const dados = await res.json().catch(() => ({}));
+      // 401 de /auth/* é "e-mail/senha incorretos" (ou outro erro de cadastro), não
+      // sessão vencida — só vale o tratamento de sessão pra quem estava logado.
+      if (res.status === 401 && authToken && !path.startsWith('/auth/')) {
+        // Token ausente/expirado/inválido (JWT dura 7 dias) — sem isso, quem já
+        // estava logado ficava preso numa tela autenticada vendo "Erro 401" nos
+        // toasts de cada ação, sem entender que precisa entrar de novo.
+        const estavaLogado = !!authToken;
+        authToken = null; usuarioLogado = null;
+        try { localStorage.removeItem('pm-token'); } catch (e) { }
+        if (estavaLogado && typeof show === 'function') show('screen-home');
+        throw new Error('Sessão expirada — faça login novamente.');
+      }
       if (!res.ok) throw new Error(dados.erro || ('Erro ' + res.status));
       return dados;
     }
@@ -3437,6 +3693,63 @@
     let avaliacoes = [];
     let concluidos = [];
     let bancoCarregado = false;
+
+    // A API diz se o e-mail saiu de verdade (emailEnviado). Quando não saiu
+    // (servidor de e-mail sem chave configurada ou recusando o destinatário), o
+    // código fica só no console da API — isso é cenário de desenvolvimento, e a
+    // mensagem precisa dizer a verdade em vez de prometer um e-mail que não existe.
+    function mensagemEnvioEmail(enviado, email, motivo) {
+      if (enviado) return 'Enviamos um código de 6 dígitos para ' + email + '. Confira a caixa de entrada (e o spam).';
+      const detalhe = {
+        'nao-configurado': 'O servidor de e-mail da API não está configurado.',
+        'recusado-pelo-provedor': 'O provedor de e-mail recusou esse destinatário (conta de teste da Resend só entrega pro e-mail dono da conta).',
+        'erro-de-envio': 'O envio falhou (confira usuário/senha do SMTP e a conexão).',
+      }[motivo] || 'O envio falhou.';
+      return 'Não foi possível enviar o e-mail. ' + detalhe + ' Em desenvolvimento o código aparece no console da API.';
+    }
+
+    // "Hoje" no fuso do Brasil, não em UTC — new Date().toISOString() adianta o
+    // dia entre ~21h e 23h59 no horário de Brasília (UTC-3), o que descasava a
+    // regra "confirma a partir de 2 dias antes" (e o destaque de "hoje" no
+    // calendário) dependendo da hora exata em que a página era usada.
+    function hojeISOBrasil() {
+      return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    }
+    // "quinta-feira, 2 de outubro" — as telas mostravam um texto fixo do protótipo ("22 de junho").
+    function dataPorExtensoHoje() {
+      return new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Sao_Paulo' });
+    }
+    function primeiroNome(nome) { return (nome || '').trim().split(/\s+/)[0] || ''; }
+
+    // Qualquer texto que venha do banco e tenha se originado de um campo livre
+    // digitado por cliente/prestadora (nome, tipo_servico, area, comentário...)
+    // passa por aqui antes de entrar num innerHTML — sem isso, um pedido público
+    // ou uma avaliação com <script>/<img onerror=...> executa no navegador de
+    // quem visualizar a lista (ex.: o admin), podendo roubar o token da sessão.
+    function escapeHtml(valor) {
+      return String(valor ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    /* Links "clique pra conversar" do WhatsApp (wa.me) — sem API de negócios,
+       sem token, sem conta verificada: abre o app/web já com o número certo e
+       a mensagem pronta, mas quem abriu ainda precisa apertar enviar. Todo
+       telefone é salvo como DDD+número (sem código de país), por isso sempre
+       prefixamos 55 aqui, nunca condicional (o DDD de Panambi é 55 também,
+       então checar "já começa com 55" ia confundir DDD com código de país). */
+    function linkWhatsApp(telefoneArmazenado, mensagem) {
+      const digitos = (telefoneArmazenado || '').replace(/\D/g, '');
+      return 'https://wa.me/55' + digitos + '?text=' + encodeURIComponent(mensagem);
+    }
+    // Endereço do próprio site (onde quer que ele esteja hospedado) já apontando
+    // pro login da prestadora — ver o tratamento de ?perfil=prestadora no boot.
+    function linkAcessoPrestadora() {
+      return location.origin + location.pathname + '?perfil=prestadora';
+    }
+    // Uso direto num onclick síncrono (sem await no meio) — pode abrir a aba na hora.
+    function abrirWhatsApp(telefoneArmazenado, mensagem) {
+      if (!telefoneArmazenado) { toast('Esta unidade ainda não tem telefone de WhatsApp cadastrado.'); return; }
+      window.open(linkWhatsApp(telefoneArmazenado, mensagem), '_blank');
+    }
 
     // Permissões do painel administrativo: administrador completo enxerga tudo;
     // sub_administrador só o que foi marcado nele (colunas pode_* vindas do login).
@@ -3499,6 +3812,7 @@
         }
         bancoCarregado = true;
         document.getElementById('banco-loading')?.remove();
+        if (cidades[regiao]) setRegiao(regiao);
         console.log('[api local] unidades carregadas de', API_BASE);
       } catch (err) {
         console.error('[api local] falha ao carregar unidades:', err);
@@ -3581,9 +3895,19 @@
     function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0, 0); }
     function goLogin() { show('screen-login'); }
     function goCadastro() { show('screen-cadastro'); }
-    async function doLogin() {
-      const identificador = document.getElementById('login-user').value.trim();
-      const senha = document.getElementById('login-pass').value;
+    // Trava contra duplo envio (Enter segurado, clique + Enter): cada tentativa
+    // conta no limite de tentativas de login da API.
+    let loginEmAndamento = false;
+    // Sem argumentos (botão "Entrar"/Enter) lê os campos da tela; com argumentos é
+    // usado logo depois de confirmar um cadastro, pra entrar direto na conta nova.
+    async function doLogin(identificadorDado, senhaDada) {
+      if (loginEmAndamento) return;
+      loginEmAndamento = true;
+      try { await executarLogin(identificadorDado, senhaDada); } finally { loginEmAndamento = false; }
+    }
+    async function executarLogin(identificadorDado, senhaDada) {
+      const identificador = typeof identificadorDado === 'string' ? identificadorDado.trim() : document.getElementById('login-user').value.trim();
+      const senha = typeof senhaDada === 'string' ? senhaDada : document.getElementById('login-pass').value;
       if (!identificador || !senha) { toast('Preencha e-mail/telefone e senha.'); return; }
 
       const tipoInterno = { franqueado: 'administrador', prestadora: 'prestadora', cliente: 'cliente' }[perfil];
@@ -3597,6 +3921,17 @@
       // resp.perfil é o perfil resolvido pelo backend ('administrador' ou 'sub_administrador'
       // quando tipoInterno === 'administrador' — a mesma aba de login serve para os dois).
       usuarioLogado = { id: resp.usuario.id, tipo: resp.perfil || tipoInterno, dados: resp.usuario };
+      aplicarFotoNoCirculo(avatarTopoAtual(), resp.usuario.foto, resp.usuario.nome);
+      // Quem tem unidade fixa (funcionário, prestadora, cliente) entra na cidade
+      // dela — não na que estava selecionada na home (ex.: quem chega por um link).
+      if (resp.usuario.unidade_slug && cidades[resp.usuario.unidade_slug]) setRegiao(resp.usuario.unidade_slug);
+      // Administrador: só as unidades dele (um admin só de Panambi não pode abrir
+      // Carazinho) — o seletor de unidade esconde as que não são dele.
+      if (resp.usuario.unidades_slugs) {
+        const minhas = resp.usuario.unidades_slugs;
+        if (minhas.length && !minhas.includes(regiao) && cidades[minhas[0]]) setRegiao(minhas[0]);
+        for (const slug of ['carazinho', 'panambi']) document.getElementById('btn-' + slug).style.display = minhas.includes(slug) ? '' : 'none';
+      }
 
       try {
         if (tipoInterno === 'administrador') {
@@ -3609,22 +3944,113 @@
           const primeira = (ordem.find(([, modulo]) => p[modulo])?.[0]) || 'agenda';
           adminView(primeira); updateAvalBadge();
         } else if (tipoInterno === 'prestadora') {
-          prestadora = { id: resp.usuario.id, nome: resp.usuario.nome, unidade: regiao };
+          prestadora = { id: resp.usuario.id, nome: resp.usuario.nome, unidade: resp.usuario.unidade_slug || regiao };
           await carregarDadosPrestadora();
           show('screen-prestadora'); renderPrestadora(); renderCalendarioPrestadora();
         } else {
           await carregarDadosCliente();
+          document.getElementById('cli-saudacao').textContent = 'Olá, ' + primeiroNome(resp.usuario.nome) + '.';
           show('screen-cliente'); renderClienteAval();
         }
       } catch (err) {
         toast('Login ok, mas houve um erro ao carregar seus dados: ' + err.message);
       }
+      iniciarSincronizacao();
     }
     function logout() {
+      pararSincronizacao();
       authToken = null; usuarioLogado = null;
       try { localStorage.removeItem('pm-token'); } catch (e) { }
       show('screen-home');
     }
+
+    /* ===== Sincronização: o que outras pessoas fazem aparece aqui sozinho =====
+       Antes a tela buscava os dados UMA vez (no login) e só buscava de novo quando a
+       própria pessoa agia — então um convite criado pelo administrador só chegava
+       na prestadora quando ela relogava. Agora, a cada poucos segundos (e na hora
+       em que a aba volta ao foco), pergunta pra API uma "impressão digital" barata
+       do que o usuário enxerga; só se ela mudou é que recarrega os dados. */
+    const SYNC_INTERVALO_MS = 4000;
+    let syncTimer = null, syncVersao = null, syncOcupado = false;
+
+    const ehAdminTipo = () => usuarioLogado && (usuarioLogado.tipo === 'administrador' || usuarioLogado.tipo === 'sub_administrador');
+    function iniciarSincronizacao() {
+      pararSincronizacao();
+      syncTimer = setInterval(verificarAtualizacoes, SYNC_INTERVALO_MS);
+      verificarAtualizacoes(); // fixa a impressão inicial
+    }
+    function pararSincronizacao() {
+      clearInterval(syncTimer);
+      syncTimer = null; syncVersao = null;
+    }
+    async function verificarAtualizacoes() {
+      if (!authToken || !usuarioLogado) { pararSincronizacao(); return; }
+      if (document.hidden || syncOcupado) return; // aba em segundo plano: espera voltar ao foco
+      syncOcupado = true;
+      const unidadeChecada = currentUnit;
+      try {
+        const { versao } = await api('/sync' + (ehAdminTipo() ? '?unidade=' + encodeURIComponent(unidadeChecada) : ''));
+        if (!usuarioLogado || (ehAdminTipo() && unidadeChecada !== currentUnit)) return; // trocou de unidade/saiu durante a chamada
+        const mudou = syncVersao !== null && versao !== syncVersao;
+        syncVersao = versao;
+        if (mudou) await aplicarAtualizacoes();
+      } catch (err) {
+        // conta desativada pelo administrador: sai na hora, com o motivo
+        if (/desativad/i.test(err.message)) { toast(err.message); logout(); }
+        // qualquer outra falha (rede, API reiniciando) é silenciosa: tenta de novo no próximo ciclo
+      } finally { syncOcupado = false; }
+    }
+
+    async function aplicarAtualizacoes() {
+      const tipo = usuarioLogado.tipo;
+      if (tipo === 'prestadora') {
+        const tinha = new Set(convites.map(c => c.id));
+        await carregarDadosPrestadora();
+        const novos = convites.filter(c => !tinha.has(c.id)).length;
+        renderPrestadora();
+        selecionarDiaCalendarioPrestadora(diaSelecionadoCalendarioPrestadora || hojeISOBrasil()); // mantém o dia que ela estava olhando
+        if (novos) toast(novos === 1 ? 'Você recebeu um novo convite de atendimento.' : `Você recebeu ${novos} novos convites de atendimento.`);
+      } else if (tipo === 'cliente') {
+        // o que a pessoa já digitou/marcou numa avaliação em andamento não pode sumir no recarregamento
+        const rascunhos = {};
+        document.querySelectorAll('#cli-aval textarea').forEach(t => { rascunhos[t.id] = t.value; });
+        await carregarDadosCliente();
+        renderClienteAval();
+        for (const [id, valor] of Object.entries(rascunhos)) { const el = document.getElementById(id); if (el) el.value = valor; }
+        Object.keys(selRating).forEach(id => setStar(id, selRating[id]));
+      } else {
+        const slug = currentUnit;
+        await atualizarPermissoesFuncionario();
+        await Promise.all([carregarUnidadeAdmin(slug), carregarEquipeClientesAvaliacoes(slug)]);
+        if (!usuarioLogado || slug !== currentUnit) return;
+        setUnitUI(slug);
+        updateAvalBadge();
+        // re-desenha só a tela aberta, no mesmo ponto em que a pessoa estava (sem voltar pra hoje)
+        const aberta = id => document.getElementById('av-' + id)?.style.display === 'block';
+        if (aberta('agenda')) { await carregarPrestadorasAgenda(slug); await renderCalendarioMes(); }
+        else if (aberta('equipe')) renderEquipe();
+        else if (aberta('clientes')) renderClientes();
+        else if (aberta('avaliacoes')) renderAvaliacoesAdmin();
+      }
+    }
+
+    // Funcionário: se o administrador mudou as permissões dele, a tela acompanha na hora.
+    async function atualizarPermissoesFuncionario() {
+      if (usuarioLogado.tipo !== 'sub_administrador') return;
+      const antes = JSON.stringify(permissoesAtuais());
+      usuarioLogado.dados = { ...usuarioLogado.dados, ...(await api('/perfil')) };
+      if (JSON.stringify(permissoesAtuais()) === antes) return;
+      aplicarPermissoesAdminUI();
+      toast('Suas permissões foram atualizadas pelo administrador.');
+      const p = permissoesAtuais();
+      const modulos = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes']];
+      const aberta = modulos.find(([v]) => document.getElementById('av-' + v)?.style.display === 'block');
+      if (aberta && !p[aberta[1]]) adminView((modulos.find(([, m]) => p[m]) || ['agenda'])[0]); // a tela atual deixou de ser permitida
+    }
+
+    // A aba voltou ao foco (ou a internet voltou): confere na hora, sem esperar o próximo ciclo.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarAtualizacoes(); });
+    window.addEventListener('online', verificarAtualizacoes);
 
     /* cadastro */
     let cadPerfil = 'administrador';
@@ -3635,70 +4061,102 @@
         document.getElementById('cad-fields-' + x).style.display = (x === p ? 'block' : 'none');
       });
     }
-    let codes = {};
-    function enviarCodigo(ctx) {
-      if (ctx === 'prest-phone') {
-        const sel = document.getElementById('cad-prest-regiao').value;
-        if (!sel) { toast('Selecione a sua região primeiro para a unidade enviar o código.'); return; }
-        document.getElementById('prest-phone-codemsg').innerHTML = 'A unidade de <b>' + cidades[sel].nome + '</b> enviou um código de <b>6 dígitos</b> para o seu WhatsApp.';
+    // Cadastro de admin, prestadora e cliente segue o mesmo padrão de duas
+    // etapas: nada é criado até o código do e-mail ser confirmado. Não existe
+    // API de WhatsApp de verdade, então toda verificação de identidade — pros
+    // 4 tipos de usuário — é sempre por e-mail (nunca por telefone/WhatsApp).
+    // Cada ctx guarda os dados preenchidos enquanto aguarda a confirmação.
+    let dadosCadastroPendente = {};
+    async function enviarCodigo(ctx) {
+      let dados, rota;
+      if (ctx === 'admin-email') {
+        const nome = document.getElementById('cad-admin-nome').value.trim();
+        const sobrenome = document.getElementById('cad-admin-sobrenome').value.trim();
+        const email = document.getElementById('admin-email').value.trim();
+        const cnpjRaw = document.getElementById('cad-admin-cnpj').value.trim();
+        const senha = document.getElementById('cad-administrador-senha')?.value || '';
+        if (!nome || !sobrenome) { toast('Preencha nome e sobrenome antes de verificar o e-mail.'); return; }
+        if (!email) { toast('Preencha o e-mail.'); return; }
+        if (!cnpjRaw) { toast('Informe o CNPJ de ao menos uma franquia.'); return; }
+        if (!senha) { toast('Defina sua senha (abaixo) antes de verificar o e-mail.'); return; }
+        dados = { nome, sobrenome, email, senha, cnpjs: cnpjRaw.split(',').map(c => c.trim()).filter(Boolean) };
+        rota = '/auth/cadastro/admin';
+      } else if (ctx === 'prestadora-email') {
+        const nome = document.getElementById('cad-prestadora-nome').value.trim();
+        const telefone = document.getElementById('prest-phone').value.trim();
+        const email = document.getElementById('prestadora-email').value.trim();
+        const slug = document.getElementById('cad-prest-regiao').value;
+        const senha = document.getElementById('cad-prestadora-senha')?.value || '';
+        if (!nome) { toast('Preencha seu nome.'); return; }
+        if (!slug) { toast('Selecione a sua região.'); return; }
+        if (!telefone) { toast('Preencha seu telefone.'); return; }
+        if (!email) { toast('Preencha o e-mail.'); return; }
+        if (!senha) { toast('Defina sua senha (abaixo) antes de verificar o e-mail.'); return; }
+        dados = { nome, telefone, email, senha, unidade_slug: slug };
+        rota = '/auth/cadastro/prestadora';
+      } else if (ctx === 'cliente-email') {
+        const nome = document.getElementById('cad-cliente-nome').value.trim();
+        const email = document.getElementById('cliente-email').value.trim();
+        const telefone = document.getElementById('cad-cliente-telefone').value.trim();
+        const slug = document.getElementById('cad-cliente-regiao').value;
+        const senha = document.getElementById('cad-cliente-senha')?.value || '';
+        if (!nome) { toast('Preencha seu nome.'); return; }
+        if (!email) { toast('Preencha o e-mail.'); return; }
+        if (!slug) { toast('Selecione sua cidade.'); return; }
+        if (!senha) { toast('Defina sua senha (abaixo) antes de verificar o e-mail.'); return; }
+        dados = { nome, email, telefone, unidade_slug: slug, senha };
+        rota = '/auth/cadastro/cliente';
+      } else {
+        return;
       }
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      codes[ctx] = code;
-      document.getElementById(ctx + '-codebox').style.display = 'block';
-      document.getElementById(ctx + '-verifybtn').textContent = 'Reenviar';
-      toast('(demonstração) Código gerado: ' + code);
+      try {
+        const resp = await api(rota, { method: 'POST', body: JSON.stringify(dados) });
+        dadosCadastroPendente[ctx] = dados;
+        document.getElementById(ctx + '-codebox').style.display = 'block';
+        document.getElementById(ctx + '-verifybtn').textContent = 'Reenviar';
+        toast(mensagemEnvioEmail(resp.emailEnviado, dados.email, resp.motivoEmail));
+      } catch (err) { toast('Erro ao verificar e-mail: ' + err.message); }
     }
-    function confirmarCodigo(ctx) {
-      const val = (document.getElementById(ctx + '-codeinput').value || '').trim();
-      if (val === codes[ctx]) {
-        document.getElementById(ctx + '-codebox').style.display = 'none';
-        document.getElementById(ctx + '-ok').style.display = 'flex';
-        document.getElementById(ctx + '-verifybtn').textContent = 'Verificado';
-        toast('Verificado com sucesso ✓');
-      } else { toast('Código incorreto, tente novamente.'); }
+    async function confirmarCodigo(ctx) {
+      const rotas = {
+        'admin-email': '/auth/cadastro/admin/confirmar',
+        'prestadora-email': '/auth/cadastro/prestadora/confirmar',
+        'cliente-email': '/auth/cadastro/cliente/confirmar',
+      };
+      const rota = rotas[ctx];
+      if (!rota) return;
+      const codigo = (document.getElementById(ctx + '-codeinput').value || '').trim();
+      const dados = dadosCadastroPendente[ctx];
+      if (!codigo || !dados) { toast('Peça um código (botão "Verificar") antes de confirmar.'); return; }
+      try {
+        await api(rota, { method: 'POST', body: JSON.stringify({ ...dados, codigo }) });
+      } catch (err) { toast('Erro ao confirmar código: ' + err.message); return; }
+
+      // Conta criada: limpa o formulário (a senha não fica na tela) e já ENTRA nela —
+      // sem mandar a pessoa digitar login e senha de novo.
+      const entrada = { 'admin-email': ['franqueado', dados.email], 'prestadora-email': ['prestadora', dados.telefone], 'cliente-email': ['cliente', dados.email] }[ctx];
+      document.querySelectorAll('#cad-fields-' + cadPerfil + ' input, #cad-fields-' + cadPerfil + ' select').forEach(el => { el.value = ''; });
+      document.getElementById(ctx + '-codebox').style.display = 'none';
+      document.getElementById(ctx + '-ok').style.display = 'none';
+      document.getElementById(ctx + '-verifybtn').textContent = 'Verificar';
+      delete dadosCadastroPendente[ctx];
+
+      toast('Conta criada! Entrando…');
+      setProfile(entrada[0]);
+      document.getElementById('login-user').value = entrada[1]; // se a entrada automática falhar, o login já vem preenchido
+      document.getElementById('login-pass').value = '';
+      show('screen-login');
+      await doLogin(entrada[1], dados.senha);
     }
     async function doCadastro() {
-      const s = document.getElementById('cad-' + cadPerfil + '-senha');
-      const s2 = document.getElementById('cad-' + cadPerfil + '-senha2');
-      if (s && s2 && (s.value || s2.value) && s.value !== s2.value) { toast('As senhas não coincidem.'); return; }
-      const senha = s ? s.value : '';
-
-      try {
-        if (cadPerfil === 'administrador') {
-          const nome = document.getElementById('cad-admin-nome').value.trim();
-          const sobrenome = document.getElementById('cad-admin-sobrenome').value.trim();
-          const email = document.getElementById('admin-email').value.trim();
-          const cnpjRaw = document.getElementById('cad-admin-cnpj').value.trim();
-          if (!nome || !sobrenome) { toast('Preencha nome e sobrenome.'); return; }
-          if (!email) { toast('Preencha o e-mail.'); return; }
-          if (!cnpjRaw) { toast('Informe o CNPJ de ao menos uma franquia.'); return; }
-          const cnpjs = cnpjRaw.split(',').map(c => c.trim()).filter(Boolean);
-
-          await api('/auth/cadastro/admin', { method: 'POST', body: JSON.stringify({ nome, sobrenome, email, senha, cnpjs }) });
-
-        } else if (cadPerfil === 'prestadora') {
-          const nome = document.querySelector('#cad-fields-prestadora .field input[type="text"]').value.trim();
-          const telefone = document.getElementById('prest-phone').value.trim();
-          const slug = document.getElementById('cad-prest-regiao').value;
-          if (!nome || !telefone || !slug) { toast('Preencha nome, telefone e região.'); return; }
-
-          await api('/auth/cadastro/prestadora', { method: 'POST', body: JSON.stringify({ nome, telefone, senha, unidade_slug: slug }) });
-
-        } else {
-          const nome = document.querySelector('#cad-fields-cliente .field input[type="text"]').value.trim();
-          const email = document.querySelector('#cad-fields-cliente input[type="email"]').value.trim();
-          const telefone = document.querySelector('#cad-fields-cliente input[type="tel"]').value.trim();
-          const slug = document.querySelector('#cad-fields-cliente select').value;
-          if (!nome || !email || !slug) { toast('Preencha nome, e-mail e cidade.'); return; }
-
-          await api('/auth/cadastro/cliente', { method: 'POST', body: JSON.stringify({ nome, email, telefone, senha, unidade_slug: slug }) });
-        }
-
-        show('screen-login');
-        toast('Conta criada! Faça login para continuar.');
-      } catch (err) {
-        toast('Erro ao criar conta: ' + err.message);
-      }
+      // A conta só é criada de fato no fluxo de verificação de e-mail acima
+      // (botões "Verificar"/"Confirmar") — sem API de WhatsApp de verdade,
+      // e-mail é o único jeito de confirmar que a pessoa é dona daquele
+      // contato antes de existir conta, pros 4 tipos de usuário.
+      const ctx = { administrador: 'admin-email', prestadora: 'prestadora-email', cliente: 'cliente-email' }[cadPerfil];
+      const jaVerificado = document.getElementById(ctx + '-ok').style.display === 'flex';
+      if (jaVerificado) { show('screen-login'); toast('Conta já criada — faça login para continuar.'); return; }
+      toast('Confirme seu e-mail (botão "Verificar" acima) antes de criar a conta.');
     }
 
     /* administrador */
@@ -3707,13 +4165,13 @@
       const u = unidades[key];
       document.getElementById('btn-carazinho').classList.toggle('active', key === 'carazinho');
       document.getElementById('btn-panambi').classList.toggle('active', key === 'panambi');
-      document.getElementById('hero-sub').innerHTML = 'Resumo da unidade <strong>' + u.nome + '</strong> · segunda-feira, 22 de junho';
+      document.getElementById('hero-sub').innerHTML = 'Resumo da unidade <strong>' + escapeHtml(u.nome) + '</strong> · ' + dataPorExtensoHoje();
       document.getElementById('panel-unit').textContent = u.nome;
       document.getElementById('foot-unit').textContent = 'perfil: administrador · unidade: ' + key;
       ['atend', 'prof', 'fat', 'nps', 'mAgenda', 'mEquipe', 'mClientes', 'mFin'].forEach(k => { document.querySelectorAll('[data-k="' + k + '"]').forEach(el => el.textContent = u[k]); });
       setTrend('atendT', u.atendT, u.atendCls); document.querySelector('[data-k="profT"]').textContent = u.profT; setTrend('fatT', u.fatT, u.fatCls); setTrend('npsT', u.npsT, u.npsCls);
       document.querySelector('[data-k="jCount"]').textContent = u.jobs.length;
-      document.getElementById('joblist').innerHTML = u.jobs.map(j => `<div class="job"><div class="job-time">${j.t}</div><div class="job-body"><strong>${j.c}</strong><span>${j.p}</span></div><div class="job-status ${j.s}">${j.st}</div></div>`).join('');
+      document.getElementById('joblist').innerHTML = u.jobs.map(j => `<div class="job"><div class="job-time">${j.t}</div><div class="job-body"><strong>${escapeHtml(j.c)}</strong><span>${escapeHtml(j.p)}</span></div><div class="job-status ${j.s}">${j.st}</div></div>`).join('');
     }
     async function setUnit(key) {
       try {
@@ -3721,6 +4179,8 @@
         await carregarEquipeClientesAvaliacoes(key);
       } catch (err) { toast('Erro ao trocar de unidade: ' + err.message); return; }
       setUnitUI(key);
+      syncVersao = null; // outra unidade = outra impressão digital; a próxima checagem vira o novo ponto de partida
+      verificarAtualizacoes();
       if (document.getElementById('av-agenda')?.style.display === 'block') renderAgendaAdmin();
       if (document.getElementById('av-equipe')?.style.display === 'block') renderEquipe();
       if (document.getElementById('av-clientes')?.style.display === 'block') renderClientes();
@@ -3778,7 +4238,7 @@
       const grid = document.getElementById('agv-cal-grid');
       const inicioSemana = new Date(ano, mes, 1).getDay();
       const diasNoMes = new Date(ano, mes + 1, 0).getDate();
-      const hojeISO = new Date().toISOString().slice(0, 10);
+      const hojeISO = hojeISOBrasil();
 
       let html = '';
       for (let i = 0; i < inicioSemana; i++) html += '<div class="cal-day outro-mes"></div>';
@@ -3800,6 +4260,7 @@
     }
     async function selecionarDiaAgenda(dataISO) {
       if (new Date(dataISO + 'T00:00:00').getDay() === 0) { toast('Domingo não está disponível pra agenda.'); return; }
+      fecharReatribuirPop(); // balão do dia anterior não vale pro dia novo
       diaSelecionadoAgenda = dataISO;
       construirGridMes(mesAtualCalendario.getFullYear(), mesAtualCalendario.getMonth());
       const d = new Date(dataISO + 'T00:00:00');
@@ -3812,8 +4273,9 @@
     }
     // Posiciona os atendimentos do dia por horário; quando dois se sobrepõem,
     // divide em colunas dentro do grupo que se sobrepõe (mesma lógica clássica
-    // de calendário de agenda). Cada bloco usa duração fixa de 60min (o schema
-    // não tem coluna de duração — corte de escopo deliberado).
+    // de calendário de agenda). A altura do bloco vem de duracao_horas (planilha
+    // importada ou cadastro único); sem duração, assume 1h.
+    function hhmm(minutos) { return String(Math.floor(minutos / 60)).padStart(2, '0') + ':' + String(minutos % 60).padStart(2, '0'); }
     function renderTimelineDia(atendimentos) {
       const track = document.getElementById('agv-tl-track');
       const vazio = document.getElementById('agv-tl-vazio');
@@ -3825,7 +4287,8 @@
         .map(a => {
           const [h, m] = a.hora_atendimento.slice(0, 5).split(':').map(Number);
           const inicioMin = h * 60 + m;
-          return Object.assign({}, a, { inicioMin, fimMin: inicioMin + 60 });
+          const duracaoMin = Math.round((Number(a.duracao_horas) || 1) * 60);
+          return Object.assign({}, a, { inicioMin, duracaoMin, fimMin: inicioMin + duracaoMin });
         })
         .sort((a, b) => a.inicioMin - b.inicioMin);
 
@@ -3853,16 +4316,23 @@
         }
         const totalColunas = colunas.length;
         for (const item of cluster) {
-          const top = item.inicioMin - AGENDA_HORA_INICIO * 60;
+          const limite = (AGENDA_HORA_FIM - AGENDA_HORA_INICIO) * 60;
+          const top = Math.max(0, item.inicioMin - AGENDA_HORA_INICIO * 60);
+          const altura = Math.max(30, Math.min(item.duracaoMin, limite - top) - 6); // 6px de respiro entre blocos
           const largura = 100 / totalColunas;
           const { cls, rotulo } = classificarBlocoAgenda(item);
           const div = document.createElement('div');
           div.className = 'tl-block' + cls;
           div.style.top = top + 'px';
-          div.style.height = '54px';
+          div.style.height = altura + 'px';
           div.style.left = (largura * item.coluna) + '%';
           div.style.width = `calc(${largura}% - 6px)`;
-          div.innerHTML = `<strong>${item.hora_atendimento.slice(0, 5)} · ${item.tipo_servico}</strong>${rotulo}`;
+          // cliente só aparece quando o bloco é alto o bastante pra uma terceira linha
+          const linhaCliente = altura >= 90 && item.cliente_nome ? `<span class="tl-linha">${escapeHtml(item.cliente_nome)}</span>` : '';
+          div.innerHTML = `<strong class="tl-linha">${item.hora_atendimento.slice(0, 5)} · ${escapeHtml(item.tipo_servico)}</strong><span class="tl-linha">${rotulo}</span>${linhaCliente}`;
+          div.title = `${hhmm(item.inicioMin)}–${hhmm(item.fimMin)} · ${item.tipo_servico}`
+            + (item.cliente_nome ? ` · Cliente: ${item.cliente_nome}` : '')
+            + (item.prestadora_nome || item.profissional_externo ? ` · ${item.prestadora_nome || item.profissional_externo}` : '');
           div.onclick = ev => abrirReatribuir(ev, item);
           track.appendChild(div);
         }
@@ -3873,21 +4343,30 @@
     // de confirmação (>2 dias) = azul · proposto dentro da janela (<=2 dias,
     // já pode ser confirmado pela prestadora) = laranja, pra chamar atenção.
     function classificarBlocoAgenda(item) {
-      if (!item.prestadora_id) return { cls: ' sem-prestadora', rotulo: 'sem prestadora' };
-      if (item.status !== 'proposto') return { cls: '', rotulo: item.prestadora_nome || '' };
+      if (item.status === 'concluido') {
+        const quem = item.prestadora_nome || item.profissional_externo || '';
+        return { cls: ' concluido', rotulo: (quem ? escapeHtml(quem) + ' · ' : '') + 'concluído' };
+      }
+      if (!item.prestadora_id) {
+        // profissional_externo = nome que veio da planilha importada e ainda não casou com uma prestadora cadastrada
+        return { cls: ' sem-prestadora', rotulo: item.profissional_externo ? escapeHtml(item.profissional_externo) + ' · sem cadastro' : 'sem prestadora' };
+      }
+      const nomePrestadora = escapeHtml(item.prestadora_nome || '');
+      if (item.status !== 'proposto') return { cls: '', rotulo: nomePrestadora };
 
-      const hojeISO = new Date().toISOString().slice(0, 10);
+      const hojeISO = hojeISOBrasil();
       const dataISO = String(item.data_atendimento).slice(0, 10);
       const diffDias = Math.round((new Date(dataISO + 'T00:00:00Z') - new Date(hojeISO + 'T00:00:00Z')) / 86400000);
       return diffDias <= 2
-        ? { cls: ' pendente-confirmacao', rotulo: (item.prestadora_nome || '') + ' · aguardando confirmação' }
-        : { cls: ' aguardando-janela', rotulo: (item.prestadora_nome || '') + ' · confirma em breve' };
+        ? { cls: ' pendente-confirmacao', rotulo: nomePrestadora + ' · aguardando confirmação' }
+        : { cls: ' aguardando-janela', rotulo: nomePrestadora + ' · confirma em breve' };
     }
     function abrirReatribuir(ev, item) {
       fecharReatribuirPop();
+      if (item.status === 'concluido') { toast('Atendimento já concluído — não dá pra trocar a prestadora.'); return; }
       const rect = ev.currentTarget.getBoundingClientRect();
       const opcoes = (prestadorasAgenda[currentUnit] || [])
-        .map(p => `<option value="${p.id}" ${p.id === item.prestadora_id ? 'selected' : ''}>${p.nome}</option>`).join('');
+        .map(p => `<option value="${p.id}" ${p.id === item.prestadora_id ? 'selected' : ''}>${escapeHtml(p.nome)}</option>`).join('');
       const pop = document.createElement('div');
       pop.className = 'reatribuir-pop';
       pop.id = 'reatribuir-pop';
@@ -3903,14 +4382,182 @@
       pop.style.top = (rect.top + window.scrollY) + 'px';
     }
     function fecharReatribuirPop() { document.getElementById('reatribuir-pop')?.remove(); }
+
+    // Preenche a aba de WhatsApp (já aberta no clique, ver salvarReatribuicao) com o
+    // aviso de novo atendimento pra prestadora. A confirmação só acontece no portal
+    // (o sistema não lê respostas do WhatsApp), então a mensagem leva o link de
+    // acesso à conta dela; e a confirmação só abre 2 dias antes — avisa quando ainda não abriu.
+    function avisarPrestadoraPorWhatsApp(aba, prest, atendimento) {
+      if (!aba) return;
+      if (!prest || !prest.telefone) { aba.close(); return; }
+      const dataFmt = String(atendimento.data_atendimento).slice(0, 10);
+      const diasAteLa = Math.round((new Date(dataFmt + 'T00:00:00Z') - new Date(hojeISOBrasil() + 'T00:00:00Z')) / 86400000);
+      const mensagem = `Olá, ${prest.nome}! Você tem um novo atendimento pela Maria Brasileira:\n`
+        + `Serviço: ${atendimento.tipo_servico}${atendimento.area ? ' — ' + atendimento.area : ''}\n`
+        + `Data: ${dataFmt}${atendimento.hora_atendimento ? ' às ' + atendimento.hora_atendimento.slice(0, 5) : ''}\n`
+        + (atendimento.valor ? `Valor: R$ ${atendimento.valor}\n` : '')
+        + `\nPara confirmar ou recusar, acesse a sua conta no Portal da Maria:\n${linkAcessoPrestadora()}\n`
+        + (diasAteLa > 2 ? `\nA confirmação fica disponível a partir de 2 dias antes do atendimento.\n` : '')
+        + `\nQualquer dúvida, é só responder aqui.`;
+      aba.location.href = linkWhatsApp(prest.telefone, mensagem);
+    }
     async function salvarReatribuicao(atendimentoId) {
       const prestadoraId = document.getElementById('reatribuir-select').value || null;
+      // Abre a aba em branco ANTES do await: depois que a resposta da API chega
+      // o navegador já não considera mais isso "gesto do usuário" e bloqueia o
+      // popup — abrir agora e só trocar a URL depois contorna isso.
+      const aba = prestadoraId ? window.open('', '_blank') : null;
       try {
-        await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/reatribuir`, { method: 'POST', body: JSON.stringify({ prestadora_id: prestadoraId }) });
+        const atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/reatribuir`, { method: 'POST', body: JSON.stringify({ prestadora_id: prestadoraId }) });
         fecharReatribuirPop();
         toast('Prestadora atualizada.');
+        avisarPrestadoraPorWhatsApp(aba, (prestadorasAgenda[currentUnit] || []).find(p => p.id === prestadoraId), atendimento);
         selecionarDiaAgenda(diaSelecionadoAgenda);
-      } catch (err) { toast('Erro ao reatribuir: ' + err.message); }
+      } catch (err) {
+        if (aba) aba.close();
+        toast('Erro ao reatribuir: ' + err.message);
+      }
+    }
+
+    /* Cadastrar atendimento: um só (formulário) ou vários (planilha .xlsx). */
+    let atdOcupado = false;
+    let atdArquivoBase64 = null;
+    const atdVal = id => document.getElementById(id).value;
+
+    function abrirModalAtendimento() {
+      const clientes = (clientesData[currentUnit] || []).filter(c => c.id);
+      document.getElementById('atd-cliente').innerHTML =
+        '<option value="">Sem cliente cadastrado (avulso)</option><option value="__novo__">+ Novo cliente…</option>'
+        + clientes.map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+      document.getElementById('atd-prestadora').innerHTML =
+        '<option value="">Sem prestadora ainda</option>'
+        + (prestadorasAgenda[currentUnit] || []).map(p => `<option value="${p.id}">${escapeHtml(p.nome)}</option>`).join('');
+      let dia = diaSelecionadoAgenda || hojeISOBrasil();
+      if (new Date(dia + 'T00:00:00').getDay() === 0) dia = '';
+      document.getElementById('atd-data').value = dia;
+      ['atd-hora', 'atd-servico', 'atd-area', 'atd-valor', 'atd-cliente-nome', 'atd-cliente-tel'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('atd-duracao').value = 4;
+      document.getElementById('atd-cliente-novo').style.display = 'none';
+      document.getElementById('atd-arquivo').value = '';
+      document.getElementById('atd-resumo').innerHTML = '';
+      document.getElementById('atd-importar').disabled = true;
+      document.getElementById('atd-importar').textContent = 'Importar';
+      atdArquivoBase64 = null;
+      atdAba('unico');
+      document.getElementById('modal-atendimento').classList.add('show');
+    }
+    function fecharModalAtendimento() { document.getElementById('modal-atendimento').classList.remove('show'); }
+    function atdAba(qual) {
+      document.getElementById('atd-painel-unico').style.display = qual === 'unico' ? 'block' : 'none';
+      document.getElementById('atd-painel-importar').style.display = qual === 'importar' ? 'block' : 'none';
+      document.getElementById('atd-tab-unico').classList.toggle('active', qual === 'unico');
+      document.getElementById('atd-tab-importar').classList.toggle('active', qual === 'importar');
+    }
+    function atdClienteMudou() {
+      document.getElementById('atd-cliente-novo').style.display = atdVal('atd-cliente') === '__novo__' ? 'flex' : 'none';
+    }
+    function atdDataMudou(input) {
+      if (input.value && new Date(input.value + 'T00:00:00').getDay() === 0) {
+        toast('Domingo não está disponível pra agenda.');
+        input.value = '';
+      }
+    }
+
+    async function salvarAtendimentoUnico() {
+      if (atdOcupado) return;
+      const data = atdVal('atd-data'), hora = atdVal('atd-hora'), servico = atdVal('atd-servico').trim();
+      if (!data || !hora || !servico) { toast('Preencha data, horário e serviço.'); return; }
+
+      const corpo = { tipo_servico: servico, data_atendimento: data, hora_atendimento: hora };
+      if (atdVal('atd-area').trim()) corpo.area = atdVal('atd-area').trim();
+      if (atdVal('atd-duracao')) corpo.duracao_horas = Number(atdVal('atd-duracao'));
+      if (atdVal('atd-valor')) corpo.valor = Number(atdVal('atd-valor'));
+      if (atdVal('atd-prestadora')) corpo.prestadora_id = atdVal('atd-prestadora');
+      const cliente = atdVal('atd-cliente');
+      if (cliente === '__novo__') {
+        const nome = atdVal('atd-cliente-nome').trim();
+        if (!nome) { toast('Informe o nome do novo cliente.'); return; }
+        corpo.cliente_novo = { nome, telefone: atdVal('atd-cliente-tel').trim() };
+      } else if (cliente) {
+        corpo.cliente_id = cliente;
+      }
+
+      // Aba do WhatsApp aberta ANTES do await (mesma razão do salvarReatribuicao).
+      const aba = corpo.prestadora_id ? window.open('', '_blank') : null;
+      atdOcupado = true;
+      try {
+        const atendimento = await api(`/atendimentos/admin/${currentUnit}`, { method: 'POST', body: JSON.stringify(corpo) });
+        fecharModalAtendimento();
+        toast('Atendimento cadastrado.');
+        avisarPrestadoraPorWhatsApp(aba, (prestadorasAgenda[currentUnit] || []).find(p => p.id === corpo.prestadora_id), atendimento);
+        if (corpo.cliente_novo) await carregarEquipeClientesAvaliacoes(currentUnit); // novo cliente entra nas listas
+        const [ano, mes] = data.split('-').map(Number);
+        diaSelecionadoAgenda = data;
+        mesAtualCalendario = new Date(ano, mes - 1, 1);
+        await renderCalendarioMes();
+      } catch (err) {
+        if (aba) aba.close();
+        toast('Erro ao cadastrar: ' + err.message);
+      } finally { atdOcupado = false; }
+    }
+
+    const dataBR = iso => iso.split('-').reverse().join('/');
+    // Lê o arquivo, manda pra API só pra pré-visualizar (nada é gravado ainda) e
+    // mostra o que entraria — o botão "Importar N" é que confirma de verdade.
+    async function atdArquivoEscolhido(input) {
+      const arquivo = input.files[0];
+      const resumo = document.getElementById('atd-resumo');
+      const botao = document.getElementById('atd-importar');
+      atdArquivoBase64 = null;
+      botao.disabled = true; botao.textContent = 'Importar';
+      resumo.innerHTML = '';
+      if (!arquivo) return;
+      if (!/\.xlsx$/i.test(arquivo.name)) { toast('Escolha um arquivo .xlsx.'); input.value = ''; return; }
+      if (arquivo.size > 6 * 1024 * 1024) { toast('Arquivo muito grande (máx. 6MB).'); input.value = ''; return; }
+
+      resumo.innerHTML = '<div class="atd-aviso">Lendo a planilha…</div>';
+      try {
+        const bytes = new Uint8Array(await arquivo.arrayBuffer());
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        atdArquivoBase64 = btoa(bin);
+        const r = (await api(`/atendimentos/admin/${currentUnit}/importar`, { method: 'POST', body: JSON.stringify({ arquivo_base64: atdArquivoBase64 }) })).resumo;
+
+        const semCadastro = r.profissionais_sem_cadastro;
+        resumo.innerHTML =
+          `<div class="atd-stats">
+             <div class="atd-stat"><b>${r.novas}</b><span>novos</span></div>
+             <div class="atd-stat"><b>${r.ja_existentes}</b><span>já importados</span></div>
+             <div class="atd-stat"><b>${r.clientes_novos}</b><span>clientes novos</span></div>
+           </div>`
+          + (r.periodo ? `<div class="atd-aviso">Período dos novos: ${dataBR(r.periodo.de)} a ${dataBR(r.periodo.ate)}.</div>` : '')
+          + (r.novas === 0 ? '<div class="atd-aviso">Nada de novo neste arquivo — tudo nele já está no sistema.</div>' : '')
+          + (semCadastro.length ? `<div class="atd-aviso"><b>${semCadastro.length}</b> profissional(is) da planilha ainda não têm cadastro como prestadora e
+               aparecem na agenda como “sem cadastro”: ${semCadastro.slice(0, 5).map(p => escapeHtml(p.nome) + ' (' + p.qtd + ')').join(', ')}${semCadastro.length > 5 ? ' e mais ' + (semCadastro.length - 5) + '…' : ''}.</div>` : '')
+          + (r.invalidas ? `<div class="atd-aviso"><b>${r.invalidas}</b> linha(s) ignorada(s): ${r.invalidas_detalhe.slice(0, 5).map(i => 'linha ' + i.linha + ' (' + escapeHtml(i.motivo) + ')').join('; ')}${r.invalidas > 5 ? '…' : ''}.</div>` : '')
+          + (r.repetidas_no_arquivo ? `<div class="atd-aviso">${r.repetidas_no_arquivo} linha(s) repetida(s) no próprio arquivo (mesmo Número) — vale a primeira.</div>` : '');
+        if (r.novas > 0) { botao.disabled = false; botao.textContent = `Importar ${r.novas} novo${r.novas === 1 ? '' : 's'}`; }
+      } catch (err) {
+        atdArquivoBase64 = null;
+        resumo.innerHTML = `<div class="atd-aviso">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function confirmarImportacao() {
+      if (atdOcupado || !atdArquivoBase64) return;
+      atdOcupado = true;
+      const botao = document.getElementById('atd-importar');
+      botao.disabled = true; botao.textContent = 'Importando…';
+      try {
+        const r = await api(`/atendimentos/admin/${currentUnit}/importar`, { method: 'POST', body: JSON.stringify({ arquivo_base64: atdArquivoBase64, confirmar: true }) });
+        fecharModalAtendimento();
+        toast(`${r.importados} atendimento(s) importado(s)` + (r.ja_existentes ? ` · ${r.ja_existentes} já existiam` : '') + '.');
+        await carregarEquipeClientesAvaliacoes(currentUnit); // clientes novos entram nas listas
+        await renderCalendarioMes();
+      } catch (err) {
+        toast('Erro ao importar: ' + err.message);
+        botao.disabled = false; botao.textContent = 'Tentar de novo';
+      } finally { atdOcupado = false; }
     }
 
     /* Atendimento recorrente por semana-modelo: gera N ocorrências concretas de
@@ -3920,7 +4567,7 @@
 
     function abrirModalRecorrente() {
       itensRecorrencia = [{ dia: 1, hora: '', servico: '', area: '', prestadora: '', cliente: '' }];
-      document.getElementById('rec-data').value = diaSelecionadoAgenda || new Date().toISOString().slice(0, 10);
+      document.getElementById('rec-data').value = diaSelecionadoAgenda || hojeISOBrasil();
       document.getElementById('rec-horizonte').value = 3;
       document.getElementById('rec-alternada').checked = false;
       renderItensRecorrente();
@@ -3955,13 +4602,13 @@
             <div class="field"><label>Prestadora (opcional)</label>
               <select onchange="atualizarItemRecorrente(${idx},'prestadora',this.value)">
                 <option value="">Sem prestadora ainda</option>
-                ${opcoesPrestadora.map(p => `<option value="${p.id}" ${item.prestadora === p.id ? 'selected' : ''}>${p.nome}</option>`).join('')}
+                ${opcoesPrestadora.map(p => `<option value="${p.id}" ${item.prestadora === p.id ? 'selected' : ''}>${escapeHtml(p.nome)}</option>`).join('')}
               </select>
             </div>
             <div class="field"><label>Cliente (opcional)</label>
               <select onchange="atualizarItemRecorrente(${idx},'cliente',this.value)">
                 <option value="">Avulso</option>
-                ${opcoesCliente.map(c => `<option value="${c.id}" ${item.cliente === c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}
+                ${opcoesCliente.map(c => `<option value="${c.id}" ${item.cliente === c.id ? 'selected' : ''}>${escapeHtml(c.nome)}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -3997,7 +4644,7 @@
     // Prestadora só pode confirmar (aceitar) a partir de 2 dias antes do
     // atendimento — antes disso o convite fica visível mas o botão desabilitado.
     function statusConfirmacaoConvite(c) {
-      const hojeISO = new Date().toISOString().slice(0, 10);
+      const hojeISO = hojeISOBrasil();
       const dataISO = String(c.data).slice(0, 10);
       const diasRestantes = Math.round((new Date(dataISO + 'T00:00:00Z') - new Date(hojeISO + 'T00:00:00Z')) / 86400000);
       return diasRestantes <= 2
@@ -4005,6 +4652,9 @@
         : { podeConfirmar: false, aviso: `Você poderá confirmar a partir de 2 dias antes do atendimento (faltam ${diasRestantes} dias).` };
     }
     function renderPrestadora() {
+      document.getElementById('ps-saudacao').textContent = 'Olá, ' + primeiroNome(prestadora.nome) + '.';
+      document.getElementById('ps-unidade').textContent = (cidades[prestadora.unidade] || {}).nome || '—';
+      document.querySelector('#screen-prestadora .data-hoje').textContent = dataPorExtensoHoje();
       const il = document.getElementById('invitelist');
       il.innerHTML = convites.length === 0 ? '<div class="empty">Nenhum convite no momento. Você está em dia! 🎉</div>'
         : convites.map(c => {
@@ -4012,13 +4662,13 @@
           const botaoAceitar = podeConfirmar
             ? `<button class="btn-accept" onclick="aceitar('${c.id}')">Aceitar</button>`
             : `<button class="btn-accept" disabled style="opacity:.5;cursor:not-allowed">Aceitar</button>`;
-          return `<div class="invite"><div class="invite-top"><strong>${c.serv}</strong></div><div class="invite-meta"><b>${String(c.data).slice(0, 10)} · ${c.hora}</b> &nbsp;·&nbsp; ${c.area || ''} &nbsp;·&nbsp; ${c.valor}</div>${aviso ? `<div class="warn"><span>${aviso}</span></div>` : ''}<div class="invite-actions">${botaoAceitar}<button class="btn-decline" onclick="recusar('${c.id}')">Recusar</button></div></div>`;
+          return `<div class="invite"><div class="invite-top"><strong>${escapeHtml(c.serv)}</strong></div><div class="invite-meta"><b>${String(c.data).slice(0, 10)} · ${c.hora}</b> &nbsp;·&nbsp; ${escapeHtml(c.area || '')} &nbsp;·&nbsp; ${c.valor}</div>${aviso ? `<div class="warn"><span>${aviso}</span></div>` : ''}<div class="invite-actions">${botaoAceitar}<button class="btn-decline" onclick="recusar('${c.id}')">Recusar</button></div></div>`;
         }).join('');
       const ag = document.getElementById('prest-agenda');
       ag.innerHTML = agendaPrestadora.length === 0 ? '<div class="empty">Você ainda não aceitou atendimentos para hoje.</div>'
-        : agendaPrestadora.slice().sort((a, b) => (a.hora || '').localeCompare(b.hora || '')).map(j => `<div class="job"><div class="job-time">${j.hora}</div><div class="job-body"><strong>${j.serv}</strong><span>${j.valor}</span></div><div class="job-status st-ok">aceito</div></div>`).join('');
+        : agendaPrestadora.slice().sort((a, b) => (a.hora || '').localeCompare(b.hora || '')).map(j => `<div class="job"><div class="job-time">${j.hora}</div><div class="job-body"><strong>${escapeHtml(j.serv)}</strong><span>${j.valor}</span></div><div class="job-status st-ok">aceito</div></div>`).join('');
       document.getElementById('ag-count').textContent = agendaPrestadora.length;
-      const hojeISO = new Date().toISOString().slice(0, 10);
+      const hojeISO = hojeISOBrasil();
       const domingoSemana = new Date(); domingoSemana.setDate(domingoSemana.getDate() - domingoSemana.getDay());
       const sabadoSemana = new Date(domingoSemana); sabadoSemana.setDate(sabadoSemana.getDate() + 6);
       const domingoISO = domingoSemana.toISOString().slice(0, 10), sabadoISO = sabadoSemana.toISOString().slice(0, 10);
@@ -4037,7 +4687,7 @@
     function listaAtendimentosPrestadora() { return [...convites, ...agendaPrestadora]; }
     function renderCalendarioPrestadora() {
       mesAtualCalendarioPrestadora = new Date();
-      selecionarDiaCalendarioPrestadora(new Date().toISOString().slice(0, 10));
+      selecionarDiaCalendarioPrestadora(hojeISOBrasil());
     }
     function mudarMesCalendarioPrestadora(delta) {
       mesAtualCalendarioPrestadora = new Date(mesAtualCalendarioPrestadora.getFullYear(), mesAtualCalendarioPrestadora.getMonth() + delta, 1);
@@ -4050,7 +4700,7 @@
       const diasComAtendimento = new Set(listaAtendimentosPrestadora().map(a => String(a.data).slice(0, 10)));
       const inicioSemana = new Date(ano, mes, 1).getDay();
       const diasNoMes = new Date(ano, mes + 1, 0).getDate();
-      const hojeISO = new Date().toISOString().slice(0, 10);
+      const hojeISO = hojeISOBrasil();
 
       let html = '';
       for (let i = 0; i < inicioSemana; i++) html += '<div class="cal-day outro-mes"></div>';
@@ -4075,19 +4725,30 @@
         .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
       document.getElementById('ps-cal-lista').innerHTML = doDia.length === 0 ? '<div class="empty">Nada agendado neste dia.</div>'
         : doDia.map(a => {
-          if (a.status === 'aceito') return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${a.serv}</strong><span>${a.valor || ''}</span></div><div class="job-status st-ok">confirmado</div></div>`;
+          if (a.status === 'aceito') return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(a.serv)}</strong><span>${a.valor || ''}</span></div><div class="job-status st-ok">confirmado</div></div>`;
           const { podeConfirmar } = statusConfirmacaoConvite(a);
           const cls = podeConfirmar ? 'st-new' : 'st-route';
           const rotulo = podeConfirmar ? 'pode confirmar' : 'aguardando janela';
-          return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${a.serv}</strong><span>${a.valor || ''}</span></div><div class="job-status ${cls}">${rotulo}</div></div>`;
+          return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(a.serv)}</strong><span>${a.valor || ''}</span></div><div class="job-status ${cls}">${rotulo}</div></div>`;
         }).join('');
     }
     async function aceitar(id) {
+      const convite = convites.find(c => c.id === id);
+      const aba = window.open('', '_blank');
       try {
         await api(`/atendimentos/prestadora/me/${id}/aceitar`, { method: 'POST' });
         await carregarDadosPrestadora(); renderPrestadora(); renderCalendarioPrestadora();
         toast('Atendimento aceito — já foi para a agenda da unidade.');
-      } catch (err) { toast('Erro ao aceitar no banco: ' + err.message); }
+        const telUnidade = (cidades[prestadora.unidade] || {}).tel;
+        if (aba && telUnidade && convite) {
+          const mensagem = `${prestadora.nome} confirmou o atendimento: ${convite.serv}${convite.area ? ' — ' + convite.area : ''}, `
+            + `${String(convite.data).slice(0, 10)}${convite.hora ? ' às ' + convite.hora : ''}.`;
+          aba.location.href = linkWhatsApp(telUnidade, mensagem);
+        } else if (aba) { aba.close(); }
+      } catch (err) {
+        if (aba) aba.close();
+        toast('Erro ao aceitar no banco: ' + err.message);
+      }
     }
     async function recusar(id) {
       try {
@@ -4105,6 +4766,7 @@
 
     /* navegação interna do admin */
     function adminView(name) {
+      fecharReatribuirPop(); // o balão não fecha mais ao clicar fora; não pode ficar órfão em outra tela
       const mapaModulo = { visaogeral: 'dashboard', agenda: 'agenda', equipe: 'equipe', clientes: 'clientes', avaliacoes: 'avaliacoes', subadmins: 'subadmins' };
       const p = permissoesAtuais();
       const modulo = mapaModulo[name];
@@ -4124,12 +4786,12 @@
     function renderEquipe() {
       const arr = equipeData[currentUnit];
       document.getElementById('eqv-unit').textContent = unidades[currentUnit].nome;
-      document.getElementById('eqv-list').innerHTML = arr.map(p => `<div class="tablerow"><div class="tr-av">${p.ini}</div><div class="tr-body"><strong>${p.nome}</strong><span>${p.serv} atendimentos · nota ${p.nota.toFixed(1)} ★</span></div><span class="chip ${p.ativa ? 'chip-on' : 'chip-off'}">${p.ativa ? 'ativa' : 'inativa'}</span></div>`).join('');
+      document.getElementById('eqv-list').innerHTML = arr.map(p => `<div class="tablerow"><div class="tr-av">${escapeHtml(p.ini)}</div><div class="tr-body"><strong>${escapeHtml(p.nome)}</strong><span>${p.serv} atendimentos · nota ${p.nota.toFixed(1)} ★</span></div><span class="chip ${p.ativa ? 'chip-on' : 'chip-off'}">${p.ativa ? 'ativa' : 'inativa'}</span></div>`).join('');
     }
     function renderClientes() {
       const arr = clientesData[currentUnit];
       document.getElementById('clv-unit').textContent = unidades[currentUnit].nome;
-      document.getElementById('clv-list').innerHTML = arr.map(c => `<div class="tablerow"><div class="tr-av">${c.ini}</div><div class="tr-body"><strong>${c.nome}</strong><span>${c.ultimo}</span></div><span class="tr-meta">${c.total} serviços</span></div>`).join('');
+      document.getElementById('clv-list').innerHTML = arr.map(c => `<div class="tablerow"><div class="tr-av">${escapeHtml(c.ini)}</div><div class="tr-body"><strong>${escapeHtml(c.nome)}</strong><span>${escapeHtml(c.ultimo)}</span></div><span class="tr-meta">${c.total} serviços</span></div>`).join('');
     }
     function updateAvalBadge() {
       const n = avaliacoes.filter(a => a.status === 'pendente').length;
@@ -4140,9 +4802,9 @@
       const hist = avaliacoes.filter(a => a.status !== 'pendente');
       document.getElementById('adm-aval-count').textContent = pend.length;
       document.getElementById('adm-aval-pend').innerHTML = pend.length === 0 ? '<div class="empty">Nenhuma avaliação aguardando aprovação.</div>'
-        : pend.map(a => `<div class="invite"><div class="invite-top"><strong>${a.servico} · ${a.prestadora}</strong>${starsHTML(a.nota)}</div><div class="invite-meta">De <b>${a.cliente}</b> · ${a.data}${a.comentario ? ' — “' + a.comentario + '”' : ''}</div><div class="mod-actions"><button class="btn-sm" onclick="aprovarAval('${a.id}')">Aprovar e enviar à prestadora</button><button class="btn-sm ghost" onclick="recusarAval('${a.id}')">Recusar</button></div></div>`).join('');
+        : pend.map(a => `<div class="invite"><div class="invite-top"><strong>${escapeHtml(a.servico)} · ${escapeHtml(a.prestadora)}</strong>${starsHTML(a.nota)}</div><div class="invite-meta">De <b>${escapeHtml(a.cliente)}</b> · ${a.data}${a.comentario ? ' — “' + escapeHtml(a.comentario) + '”' : ''}</div><div class="mod-actions"><button class="btn-sm" onclick="aprovarAval('${a.id}')">Aprovar e enviar à prestadora</button><button class="btn-sm ghost" onclick="recusarAval('${a.id}')">Recusar</button></div></div>`).join('');
       document.getElementById('adm-aval-hist').innerHTML = hist.length === 0 ? '<div class="empty">Nada moderado ainda.</div>'
-        : hist.map(a => `<div class="tablerow"><div class="tr-body"><strong>${a.servico} · ${a.prestadora}</strong><span>${a.cliente} · ${a.data}</span></div>${starsHTML(a.nota)}<span class="chip ${a.status === 'aprovada' ? 'chip-on' : 'chip-off'}">${a.status}</span></div>`).join('');
+        : hist.map(a => `<div class="tablerow"><div class="tr-body"><strong>${escapeHtml(a.servico)} · ${escapeHtml(a.prestadora)}</strong><span>${escapeHtml(a.cliente)} · ${a.data}</span></div>${starsHTML(a.nota)}<span class="chip ${a.status === 'aprovada' ? 'chip-on' : 'chip-off'}">${a.status}</span></div>`).join('');
       updateAvalBadge();
     }
     async function aprovarAval(id) {
@@ -4166,8 +4828,18 @@
     const SA_MODULOS = ['agenda', 'avaliacoes', 'equipe', 'clientes', 'dashboard'];
     const SA_ROTULOS = { agenda: 'Agenda', avaliacoes: 'Avaliações', equipe: 'Equipe', clientes: 'Clientes', dashboard: 'Visão geral' };
 
+    async function salvarTelefoneUnidade() {
+      const telefone = document.getElementById('sa-tel-unidade').value.trim();
+      if (!telefone) { toast('Informe um telefone.'); return; }
+      try {
+        const unidade = await api(`/unidades/${currentUnit}/telefone`, { method: 'PATCH', body: JSON.stringify({ telefone }) });
+        cidades[currentUnit].tel = unidade.telefone;
+        toast('Telefone da unidade atualizado.');
+      } catch (err) { toast('Erro ao salvar telefone: ' + err.message); }
+    }
     async function renderSubadmins() {
       document.getElementById('sa-unit').textContent = unidades[currentUnit].nome;
+      document.getElementById('sa-tel-unidade').value = (cidades[currentUnit] || {}).tel || '';
       try {
         subadminsCache = await api(`/sub-administradores/${currentUnit}`);
       } catch (err) { toast('Erro ao carregar acessos: ' + err.message); subadminsCache = []; }
@@ -4175,7 +4847,7 @@
         : subadminsCache.map(s => {
           const modulos = SA_MODULOS.filter(m => s['pode_' + m]).map(m => SA_ROTULOS[m]).join(', ') || 'sem módulos';
           return `<div class="tablerow">
-            <div class="tr-body"><strong>${s.nome} ${s.sobrenome}</strong><span>${s.email} · ${modulos}</span></div>
+            <div class="tr-body"><strong>${escapeHtml(s.nome)} ${escapeHtml(s.sobrenome)}</strong><span>${escapeHtml(s.email)} · ${modulos}</span></div>
             <span class="chip ${s.ativo ? 'chip-on' : 'chip-off'}">${s.ativo ? 'ativo' : 'inativo'}</span>
             <button class="btn-sm ghost" onclick="editarSubadmin('${s.id}')">Editar</button>
             <button class="btn-sm ghost" onclick="toggleSubadmin('${s.id}', ${!s.ativo})">${s.ativo ? 'Desativar' : 'Reativar'}</button>
@@ -4252,9 +4924,9 @@
       document.getElementById('prest-aval-total').textContent = mine.length;
       const top = mine.slice(0, 3), rest = mine.slice(3);
       document.getElementById('prest-aval-top').innerHTML = top.length === 0 ? '<div class="empty" style="grid-column:1/-1">Ainda sem avaliações aprovadas.</div>'
-        : top.map(a => `<div class="rev-card"><div class="rc-top"><strong>${a.cliente}</strong>${starsHTML(a.nota)}</div><span style="font-size:11.5px;color:var(--muted)">${a.servico} · ${a.data}</span>${a.comentario ? '<p>“' + a.comentario + '”</p>' : ''}</div>`).join('');
+        : top.map(a => `<div class="rev-card"><div class="rc-top"><strong>${escapeHtml(a.cliente)}</strong>${starsHTML(a.nota)}</div><span style="font-size:11.5px;color:var(--muted)">${escapeHtml(a.servico)} · ${a.data}</span>${a.comentario ? '<p>“' + escapeHtml(a.comentario) + '”</p>' : ''}</div>`).join('');
       document.getElementById('prest-aval-hist').innerHTML = rest.length === 0 ? '<div class="empty">Sem avaliações anteriores além das recentes.</div>'
-        : rest.map(a => `<div class="tablerow"><div class="tr-body"><strong>${a.cliente} · ${a.servico}</strong><span>${a.data}${a.comentario ? ' — “' + a.comentario + '”' : ''}</span></div>${starsHTML(a.nota)}</div>`).join('');
+        : rest.map(a => `<div class="tablerow"><div class="tr-body"><strong>${escapeHtml(a.cliente)} · ${escapeHtml(a.servico)}</strong><span>${a.data}${a.comentario ? ' — “' + escapeHtml(a.comentario) + '”' : ''}</span></div>${starsHTML(a.nota)}</div>`).join('');
     }
 
     /* cliente avalia (vai para moderação) */
@@ -4262,7 +4934,7 @@
     function renderClienteAval() {
       const box = document.getElementById('cli-aval');
       box.innerHTML = concluidos.length === 0 ? '<div class="empty">Nenhum atendimento pendente de avaliação. Obrigado! 🙂</div>'
-        : concluidos.map(c => `<div class="rate-item"><div class="rate-top"><strong>${c.servico}</strong><span>${c.data} · ${c.prestadora}</span></div><div class="rate-stars" id="rs-${c.id}">${[1, 2, 3, 4, 5].map(n => '<span class="st" onclick="setStar(\'' + c.id + '\',' + n + ')">★</span>').join('')}</div><textarea id="rc-${c.id}" placeholder="Conte como foi o atendimento (opcional)"></textarea><div><button class="btn-sm" onclick="enviarAvaliacao('${c.id}')">Enviar avaliação</button></div></div>`).join('');
+        : concluidos.map(c => `<div class="rate-item"><div class="rate-top"><strong>${escapeHtml(c.servico)}</strong><span>${c.data} · ${escapeHtml(c.prestadora)}</span></div><div class="rate-stars" id="rs-${c.id}">${[1, 2, 3, 4, 5].map(n => '<span class="st" onclick="setStar(\'' + c.id + '\',' + n + ')">★</span>').join('')}</div><textarea id="rc-${c.id}" placeholder="Conte como foi o atendimento (opcional)"></textarea><div><button class="btn-sm" onclick="enviarAvaliacao('${c.id}')">Enviar avaliação</button></div></div>`).join('');
     }
     function setStar(id, n) { selRating[id] = n; const c = document.getElementById('rs-' + id); if (!c) return;[...c.children].forEach((s, i) => s.classList.toggle('on', i < n)); }
     async function enviarAvaliacao(id) {
@@ -4286,17 +4958,202 @@
       const serv = document.getElementById('c-serv').value;
       const msg = (document.getElementById('c-msg').value || '').trim();
       if (!nome || !tel) { toast('Preencha seu nome e telefone para a gente te retornar.'); return; }
+      const aba = viaWhats ? window.open('', '_blank') : null;
       try {
         await api('/atendimentos', {
           method: 'POST', body: JSON.stringify({
             unidade_slug: regiao, tipo_servico: serv, area: msg || null,
-            data_atendimento: new Date().toISOString().slice(0, 10),
+            data_atendimento: hojeISOBrasil(),
             origem: viaWhats ? 'whatsapp' : 'site'
           })
         });
         document.getElementById('c-nome').value = ''; document.getElementById('c-tel').value = ''; document.getElementById('c-msg').value = '';
-        toast(viaWhats ? 'Pedido enviado! Abriria o WhatsApp da unidade de ' + cidades[regiao].nome + '.' : 'Pedido enviado para a unidade de ' + cidades[regiao].nome + '. Em breve entram em contato.');
-      } catch (err) { toast('Erro ao enviar pedido: ' + err.message); }
+        if (viaWhats && aba) {
+          const telUnidade = (cidades[regiao] || {}).tel;
+          const mensagem = `Olá! Meu nome é ${nome} (telefone ${tel}) e gostaria de um orçamento de ${serv} com a unidade de ${cidades[regiao].nome}.`
+            + (msg ? `\nDetalhe do pedido: ${msg}` : '');
+          if (telUnidade) { aba.location.href = linkWhatsApp(telUnidade, mensagem); } else { aba.close(); }
+          toast('Pedido enviado! Abrindo o WhatsApp da unidade de ' + cidades[regiao].nome + '.');
+        } else {
+          toast('Pedido enviado para a unidade de ' + cidades[regiao].nome + '. Em breve entram em contato.');
+        }
+      } catch (err) {
+        if (aba) aba.close();
+        toast('Erro ao enviar pedido: ' + err.message);
+      }
+    }
+
+    /* ===== Meu perfil — configurações de conta, mesma tela pros 4 tipos de
+       usuário (administrador/sub-administrador/prestadora/cliente); o back-end
+       decide o que cada um pode editar via GET /perfil. */
+    let perfilAtual = null;
+    let perfilEmailPendente = null;
+
+    function iniciaisNome(nome) {
+      return (nome || '').trim().split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase() || '?';
+    }
+    function aplicarFotoNoCirculo(el, foto, nome) {
+      if (!el) return;
+      if (foto) {
+        // size/position inline porque os avatares do topo têm `background:` em
+        // shorthand inline (cor de fundo), que zera o background-size da classe —
+        // sem isso a foto aparecia ampliada, só um pedaço do canto.
+        el.style.backgroundImage = `url(${foto})`;
+        el.style.backgroundSize = 'cover';
+        el.style.backgroundPosition = 'center';
+        el.textContent = '';
+      } else {
+        el.style.backgroundImage = '';
+        el.textContent = iniciaisNome(nome);
+      }
+    }
+    function avatarTopoAtual() {
+      const id = { administrador: 'topbar-avatar-admin', sub_administrador: 'topbar-avatar-admin', prestadora: 'topbar-avatar-prestadora', cliente: 'topbar-avatar-cliente' }[usuarioLogado?.tipo];
+      return id ? document.getElementById(id) : null;
+    }
+
+    async function abrirPerfil() {
+      if (!usuarioLogado) return;
+      try {
+        perfilAtual = await api('/perfil');
+      } catch (err) { toast('Erro ao carregar perfil: ' + err.message); return; }
+      perfilEmailPendente = null;
+
+      document.getElementById('perfil-nome').value = perfilAtual.nome || '';
+      document.getElementById('perfil-sobrenome-wrap').style.display = perfilAtual.temSobrenome ? 'block' : 'none';
+      document.getElementById('perfil-sobrenome').value = perfilAtual.sobrenome || '';
+      document.getElementById('perfil-telefone').value = perfilAtual.telefone || '';
+      document.getElementById('perfil-email').value = perfilAtual.email || '';
+      document.getElementById('perfil-email-codigo').value = '';
+      document.getElementById('perfil-email-codebox').style.display = 'none';
+      aplicarFotoNoCirculo(document.getElementById('perfil-foto-preview'), perfilAtual.foto, perfilAtual.nome);
+
+      const hint = document.getElementById('perfil-email-hint');
+      if (perfilAtual.exigeDominioInstitucional) {
+        hint.style.display = 'block';
+        hint.textContent = `Precisa terminar em @${perfilAtual.dominioInstitucional} e começar com o nome da sua unidade` +
+          (perfilAtual.unidadesSlugs?.length ? ` (${perfilAtual.unidadesSlugs.join(' ou ')}).` : '.');
+      } else {
+        hint.style.display = 'none';
+      }
+
+      document.getElementById('perfil-senha-atual').value = '';
+      document.getElementById('perfil-senha-nova').value = '';
+      document.getElementById('perfil-senha-nova2').value = '';
+
+      document.getElementById('modal-perfil').classList.add('show');
+    }
+    function fecharPerfil() { document.getElementById('modal-perfil').classList.remove('show'); }
+
+    // Corta no centro (quadrado) e reduz pra 256×256 JPEG antes de enviar: a
+    // foto aparece num círculo de poucas dezenas de pixels, então mandar o
+    // arquivo original do celular (vários MB) só estourava o limite do servidor.
+    function reduzirFoto(file, lado = 256) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const menor = Math.min(img.width, img.height);
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = lado;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff'; // PNG com transparência viraria preto em JPEG
+          ctx.fillRect(0, 0, lado, lado);
+          ctx.drawImage(img, (img.width - menor) / 2, (img.height - menor) / 2, menor, menor, 0, 0, lado, lado);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Não foi possível ler essa imagem.')); };
+        img.src = url;
+      });
+    }
+    async function perfilFotoSelecionada(input) {
+      const file = input.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) { toast('Escolha um arquivo de imagem.'); input.value = ''; return; }
+      if (file.size > 15 * 1024 * 1024) { toast('Imagem muito grande (máx. 15MB).'); input.value = ''; return; }
+      try {
+        await salvarFotoPerfil(await reduzirFoto(file));
+      } catch (err) { toast(err.message); }
+      input.value = ''; // permite escolher o mesmo arquivo de novo depois
+    }
+    function removerFotoPerfil() { salvarFotoPerfil(''); }
+
+    // A foto é salva na hora (ao escolher/remover), sem depender de um segundo
+    // clique em "Salvar" — esse passo escondido fazia parecer que a troca "não pegou".
+    async function salvarFotoPerfil(foto) {
+      try {
+        perfilAtual = await api('/perfil', { method: 'PATCH', body: JSON.stringify({ foto: foto || null }) });
+        sincronizarPerfilNaTela();
+        toast(foto ? 'Foto atualizada.' : 'Foto removida.');
+      } catch (err) {
+        aplicarFotoNoCirculo(document.getElementById('perfil-foto-preview'), perfilAtual.foto, perfilAtual.nome);
+        toast('Erro ao salvar a foto: ' + err.message);
+      }
+    }
+    // Reflete o perfil recém-salvo no modal e no avatar do topo.
+    function sincronizarPerfilNaTela() {
+      if (usuarioLogado) usuarioLogado.dados = { ...usuarioLogado.dados, ...perfilAtual };
+      if (usuarioLogado?.tipo === 'prestadora') {
+        prestadora.nome = perfilAtual.nome;
+        document.getElementById('ps-saudacao').textContent = 'Olá, ' + primeiroNome(perfilAtual.nome) + '.';
+      }
+      if (usuarioLogado?.tipo === 'cliente') document.getElementById('cli-saudacao').textContent = 'Olá, ' + primeiroNome(perfilAtual.nome) + '.';
+      aplicarFotoNoCirculo(document.getElementById('perfil-foto-preview'), perfilAtual.foto, perfilAtual.nome);
+      aplicarFotoNoCirculo(avatarTopoAtual(), perfilAtual.foto, perfilAtual.nome);
+    }
+
+    async function salvarPerfilBasico() {
+      const nome = document.getElementById('perfil-nome').value.trim();
+      if (!nome) { toast('Informe seu nome.'); return; }
+      const body = { nome, telefone: document.getElementById('perfil-telefone').value.trim() };
+      if (perfilAtual.temSobrenome) {
+        const sobrenome = document.getElementById('perfil-sobrenome').value.trim();
+        if (!sobrenome) { toast('Informe seu sobrenome.'); return; }
+        body.sobrenome = sobrenome;
+      }
+      try {
+        perfilAtual = await api('/perfil', { method: 'PATCH', body: JSON.stringify(body) });
+        sincronizarPerfilNaTela();
+        toast('Perfil atualizado.');
+      } catch (err) { toast('Erro ao salvar perfil: ' + err.message); }
+    }
+
+    async function solicitarVerificacaoEmail() {
+      const email = document.getElementById('perfil-email').value.trim();
+      if (!email) { toast('Informe um e-mail.'); return; }
+      try {
+        const resp = await api('/perfil/email/solicitar', { method: 'POST', body: JSON.stringify({ email }) });
+        perfilEmailPendente = email;
+        document.getElementById('perfil-email-codebox').style.display = 'block';
+        toast(mensagemEnvioEmail(resp.emailEnviado, email, resp.motivoEmail));
+      } catch (err) { toast('Erro: ' + err.message); }
+    }
+    async function confirmarEmailPerfil() {
+      const codigo = document.getElementById('perfil-email-codigo').value.trim();
+      if (!codigo || !perfilEmailPendente) { toast('Peça a verificação (botão "Verificar e salvar") antes de confirmar.'); return; }
+      try {
+        perfilAtual = await api('/perfil/email/confirmar', { method: 'POST', body: JSON.stringify({ email: perfilEmailPendente, codigo }) });
+        document.getElementById('perfil-email-codebox').style.display = 'none';
+        perfilEmailPendente = null;
+        if (usuarioLogado) usuarioLogado.dados = { ...usuarioLogado.dados, ...perfilAtual };
+        toast('E-mail confirmado e atualizado!');
+      } catch (err) { toast('Erro ao confirmar: ' + err.message); }
+    }
+
+    async function alterarSenhaPerfil() {
+      const atual = document.getElementById('perfil-senha-atual').value;
+      const nova = document.getElementById('perfil-senha-nova').value;
+      const nova2 = document.getElementById('perfil-senha-nova2').value;
+      if (!atual || !nova) { toast('Preencha a senha atual e a nova senha.'); return; }
+      if (nova !== nova2) { toast('As senhas novas não coincidem.'); return; }
+      try {
+        await api('/perfil/senha', { method: 'PATCH', body: JSON.stringify({ senha_atual: atual, senha_nova: nova }) });
+        document.getElementById('perfil-senha-atual').value = '';
+        document.getElementById('perfil-senha-nova').value = '';
+        document.getElementById('perfil-senha-nova2').value = '';
+        toast('Senha alterada.');
+      } catch (err) { toast('Erro ao alterar senha: ' + err.message); }
     }
 
     let toastTimer;
@@ -4307,11 +5164,33 @@
     function toggleTheme() { const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; applyTheme(cur); }
     (function () { let t = 'light'; try { t = localStorage.getItem('pm-theme') || 'light'; } catch (e) { } applyTheme(t); })();
     document.getElementById('region-modal').addEventListener('click', e => { if (e.target.id === 'region-modal') e.currentTarget.classList.remove('show'); });
-    document.getElementById('modal-recorrente').addEventListener('click', e => { if (e.target.id === 'modal-recorrente') e.currentTarget.classList.remove('show'); });
-    document.addEventListener('click', e => {
-      const pop = document.getElementById('reatribuir-pop');
-      if (pop && !pop.contains(e.target) && !e.target.closest('.tl-block')) fecharReatribuirPop();
+    // Perfil, atendimento recorrente e o balão de reatribuir da agenda NÃO fecham
+    // mais ao clicar fora (perdia o que estava preenchido): fecham pelo botão
+    // (× / Fechar / Cancelar) ou pelo ESC. O seletor de cidade, que é só uma
+    // escolha rápida, continua fechando ao clicar fora.
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      // fecha um de cada vez, o que estiver "por cima" primeiro
+      if (document.getElementById('modal-perfil').classList.contains('show')) fecharPerfil();
+      else if (document.getElementById('modal-atendimento').classList.contains('show')) fecharModalAtendimento();
+      else if (document.getElementById('modal-recorrente').classList.contains('show')) fecharModalRecorrente();
+      else if (document.getElementById('reatribuir-pop')) fecharReatribuirPop();
+      else document.getElementById('region-modal').classList.remove('show');
     });
+
+    // Enter no login entra, igual a clicar em "Entrar".
+    ['login-user', 'login-pass'].forEach(id => {
+      document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); doLogin(); }
+      });
+    });
+
+    // Link enviado à prestadora (WhatsApp): ?perfil=prestadora abre direto o login dela.
+    if (new URLSearchParams(location.search).get('perfil') === 'prestadora') {
+      setProfile('prestadora');
+      show('screen-login');
+    }
+
     carregarDadosPublicos(); // carrega unidades (dado público) já na home; dados de admin/prestadora/cliente ficam vazios até o login
   </script>
 </body>

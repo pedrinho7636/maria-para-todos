@@ -1,15 +1,26 @@
-# Documentação técnica — Portal da Maria (v0.0.3)
+# Documentação técnica — Portal da Maria (v1.1.0)
 
-> Documentação gerada a partir da engenharia reversa do arquivo `Portal Da Maria V 0.0.3.html`, um protótipo estático (HTML + CSS + JS vanilla, sem backend) que simula o funcionamento completo do portal usando dados mockados em memória.
+> Este documento nasceu da engenharia reversa de um protótipo estático sem backend (v0.0.3). O sistema real hoje
+> (v1.1.0) tem persistência de verdade: frontend em arquivo único (`Portal Da Maria - V1.1.0.html`) conversando com
+> uma API própria em Node/Express (`api/`), que fala com um PostgreSQL local — nada aqui é mockado ou simulado,
+> exceto onde explicitamente marcado (envio de e-mail no cadastro de admin, e a API oficial de WhatsApp Business,
+> ambos pausados/fora de escopo — ver seção 7 e `LEIA-ME.md`). As seções abaixo foram atualizadas pra refletir esse
+> estado real; a tabela de rastreabilidade tela → tabela (seção 6) continua sendo a referência mais útil pra quem
+> for mexer no código.
 
 ---
 
 ## 1. Visão geral
 
-O arquivo é um **SPA de arquivo único**: todas as "telas" são `<section class="screen">` dentro do mesmo HTML, alternadas via JavaScript (função `show(id)`), sem roteamento real de URL nem requisições de rede. Todo o estado (agenda, convites, avaliações, clientes) vive em variáveis JS (`let`/`const`) que resetam ao recarregar a página — não há persistência real, exceto o tema (dark/light) salvo em `localStorage`.
+O frontend é um **SPA de arquivo único**: todas as "telas" são `<section class="screen">` dentro do mesmo HTML,
+alternadas via JavaScript (função `show(id)`). Diferente do protótipo original, todo o estado (agenda, convites,
+avaliações, clientes) vem de requisições reais (`fetch`) pra API em `api/`, que por sua vez lê/grava num PostgreSQL
+local — recarregar a página perde só o estado de navegação (tela atual), não os dados, que continuam no banco.
+Sessão via JWT (7 dias) guardado em `localStorage`; tema (dark/light) também em `localStorage`.
 
-**Tipos de usuário simulados:** administrador (franqueado), prestadora, cliente.
-**Unidades:** Carazinho/RS e Panambi/RS, com dados independentes por unidade.
+**Tipos de usuário reais:** administrador (franqueado), sub-administrador (funcionário com permissão por módulo),
+prestadora, cliente.
+**Unidades:** Carazinho/RS e Panambi/RS, com dados segmentados por unidade no banco (`unidade_id`).
 
 ---
 
@@ -19,87 +30,102 @@ O arquivo é um **SPA de arquivo único**: todas as "telas" são `<section class
 |---|---|---|
 | `#screen-home` | Página pública (institucional) | Todos |
 | `#screen-login` | Login unificado (3 perfis) | Todos |
-| `#screen-cadastro` | Cadastro (admin por e-mail, prestadora por WhatsApp) | Todos |
+| `#screen-cadastro` | Cadastro (admin/prestadora/cliente, todos verificados por e-mail) | Todos |
 | `#screen-franqueado` | Painel do administrador | Administrador |
 | `#screen-prestadora` | Painel da prestadora | Prestadora |
 | `#screen-cliente` | Área do cliente | Cliente |
 
 ### 2.1 `#screen-home` — Página pública
-- Seletor de região (modal `#region-modal`) que troca todo o conteúdo dinâmico entre Carazinho e Panambi via `setRegiao(key)`.
+- Seletor de região (modal `#region-modal`) que troca todo o conteúdo dinâmico entre Carazinho e Panambi via `setRegiao(key)`, com os dados vindos de `GET /api/unidades` (público, sem login).
 - Seções: hero, `#funcionalidades`, `#servicos` (links para páginas oficiais da Maria Brasileira), `#contato` (formulário de pedido de orçamento).
-- Formulário de contato chama `enviarPedido(viaWhats)` — cria um novo item em `unidades[regiao].jobs` com status `"novo"`, simulando a entrada de um pedido na agenda da unidade (com ou sem redirecionamento simulado ao WhatsApp).
+- Formulário de contato chama `enviarPedido(viaWhats)` — grava de verdade via `POST /api/atendimentos` (status inicial `'pedido'`); se `viaWhats`, também abre um link `wa.me` pro telefone da unidade com os dados do pedido já escritos (ver seção 7, item 6).
 
 ### 2.2 `#screen-login`
 - Seleção de perfil (`setProfile`) entre `franqueado`, `prestadora`, `cliente`.
-- `doLogin()` decide qual tela abrir e qual função de renderização inicial disparar, conforme o perfil escolhido. Não há validação de credenciais — é um mock.
+- `doLogin()` chama `POST /api/auth/login` de verdade — a API confere a senha com bcrypt contra o hash salvo no Postgres e devolve um JWT (7 dias). Login de administrador tenta `administradores` e, se não achar, `sub_administradores` (mesma tela serve pros dois perfis).
 
 ### 2.3 `#screen-cadastro`
-Dois fluxos distintos por perfil (`setCadProfile`):
-- **Administrador:** cadastro por e-mail + verificação por código de 6 dígitos (`enviarCodigo('admin-email')` / `confirmarCodigo`).
-- **Prestadora:** cadastro vinculado a uma unidade regional (`cad-prest-regiao`) + verificação por WhatsApp, também com código de 6 dígitos simulado (`enviarCodigo('prest-phone')`).
-- `doCadastro()` valida apenas se as senhas coincidem e volta para a tela de login (não persiste conta nova).
+Os 3 perfis (`setCadProfile`) seguem o mesmo padrão de duas etapas — nada é criado até o e-mail ser confirmado, já
+que não existe API de WhatsApp de verdade e a identidade só pode ser verificada por e-mail:
+- **Administrador:** `POST /api/auth/cadastro/admin` valida os CNPJs informados e manda um código de 6 dígitos pro
+  e-mail (hoje enviado de verdade via Resend, se `RESEND_API_KEY` estiver configurada — senão cai no console da
+  API, ver seção 7); a conta só é criada em `POST /api/auth/cadastro/admin/confirmar`. CNPJ sozinho nunca cria a
+  conta.
+- **Prestadora:** `POST /api/auth/cadastro/prestadora` (nome, telefone, e-mail, senha, unidade) manda o código pro
+  e-mail informado; `.../confirmar` cria a conta. Telefone continua sendo o login, mas quem confirma a identidade
+  no cadastro agora é sempre o e-mail.
+- **Cliente:** mesmo padrão em `POST /api/auth/cadastro/cliente` / `.../confirmar` — evita que um e-mail digitado
+  errado trave o próprio login depois (e-mail é o identificador do cliente).
+- `enviarCodigo(ctx)`/`confirmarCodigo(ctx)` no frontend cobrem os 3 fluxos; `doCadastro()` só existe pra redirecionar
+  quem já confirmou de volta ao login (a conta já foi criada no passo de confirmação).
 
 ### 2.4 `#screen-franqueado` — Painel do administrador
-Navegação interna via `adminView(name)`, com 5 sub-telas (`.adminview`):
+Navegação interna via `adminView(name)`, com sub-telas (`.adminview`) — cada uma só aparece se o usuário logado
+(admin completo ou sub-administrador) tiver permissão pro módulo correspondente:
 
 | Sub-tela | Função de render | Fonte de dados |
 |---|---|---|
-| Visão geral | `setUnit(key)` | `unidades[key]` (KPIs: atendimentos, profissionais, faturamento, NPS + agenda do dia) |
-| Agenda | `renderAgendaAdmin()` | `unidades[currentUnit].jobs` |
-| Equipe | `renderEquipe()` | `equipeData[currentUnit]` |
-| Clientes | `renderClientes()` | `clientesData[currentUnit]` |
-| Avaliações | `renderAvaliacoesAdmin()` | `avaliacoes` (moderação) |
+| Visão geral | `carregarUnidadeAdmin()` | `GET /unidades/:slug/admin/dashboard` (view `vw_dashboard_unidade`) |
+| Agenda | `renderAgendaAdmin()` | `GET /atendimentos/admin/:slug/agenda` (calendário + linha do tempo do dia, reatribuição de prestadora, recorrência semanal) |
+| Equipe | `renderEquipe()` | `GET /unidades/:slug/admin/equipe` (view `vw_equipe_unidade`) |
+| Clientes | `renderClientes()` | `GET /unidades/:slug/admin/clientes` (view `vw_clientes_unidade`) |
+| Avaliações | `renderAvaliacoesAdmin()` | `GET /avaliacoes/admin/:slug` (moderação) |
+| Acessos | `renderSubadmins()` | `GET /sub-administradores/:slug` — CRUD de sub-administradores + telefone de WhatsApp da unidade (só admin completo, nunca delegável) |
 
-Alternância de unidade (Carazinho/Panambi) via `setUnit(key)`, que reescreve todos os elementos com atributo `data-k`.
+Alternância de unidade (Carazinho/Panambi) via `setUnit(key)`, que recarrega os dados da unidade escolhida.
 
-**Moderação de avaliações:** `aprovarAval(id)` e `recusarAval(id)` alteram `status` de `pendente` para `aprovada`/`recusada`. Só avaliações aprovadas chegam à prestadora (`renderPrestAval` filtra por `status === 'aprovada'`).
+**Moderação de avaliações:** `aprovarAval(id)`/`recusarAval(id)` chamam `POST /avaliacoes/admin/:slug/:id/aprovar|recusar`, que alteram `status` de `pendente` para `aprovada`/`recusada` no banco. Só avaliações aprovadas chegam à prestadora.
 
 ### 2.5 `#screen-prestadora` — Painel da prestadora
-- `renderPrestadora()` desenha dois blocos:
-  - **Convites pendentes** (`convites[]`): `aceitar(id)` move o convite para `agendaPrestadora[]` e também empurra o item para `unidades[unidade].jobs` (refletindo na agenda da unidade); `recusar(id)` apenas remove o convite.
-  - **Agenda aceita** (`agendaPrestadora[]`): apenas os atendimentos já confirmados aparecem — reflete a regra de negócio "prestadora só vê o que foi aceito".
+- `renderPrestadora()` desenha dois blocos, ambos vindos da API:
+  - **Convites pendentes** (`GET /atendimentos/prestadora/me/convites`): `aceitar(id)` chama `POST .../:id/aceitar` (só permitido a partir de 2 dias antes do atendimento) e dispara um aviso por WhatsApp pra unidade; `recusar(id)` chama `POST .../:id/recusar`.
+  - **Agenda aceita** (`GET /atendimentos/prestadora/me/agenda`): só os atendimentos já confirmados — reflete a regra "prestadora só vê o que foi aceito".
+- Calendário próprio (`renderCalendarioPrestadora`) com os próximos atendimentos por dia.
 - `renderPrestAval()`: nota média, total de avaliações, destaque das 3 mais recentes aprovadas + histórico das demais.
 
 ### 2.6 `#screen-cliente` — Área do cliente
-- `renderClienteAval()`: lista atendimentos concluídos (`concluidos[]`) aguardando avaliação, com seleção de estrelas (`setStar`) e comentário livre.
-- `enviarAvaliacao(id)`: cria um registro em `avaliacoes[]` com `status: 'pendente'` (vai para moderação do admin) e remove o item de `concluidos[]`.
+- `renderClienteAval()`: lista atendimentos concluídos (`GET /atendimentos/cliente/me/pendentes-avaliacao`) aguardando avaliação, com seleção de estrelas (`setStar`) e comentário livre.
+- `enviarAvaliacao(id)`: grava via `POST /api/avaliacoes` com `status: 'pendente'` (vai para moderação do admin).
 
 ---
 
-## 3. Estruturas de dados mockadas (JS) e principais funções
+## 3. Variáveis JS no frontend e de onde vêm os dados
 
-| Variável JS | Descrição | Funções que a manipulam |
+As variáveis abaixo continuam existindo no frontend (é nelas que a página guarda o que já buscou da API pra
+renderizar sem refazer a requisição a cada clique), mas hoje são **cache local de dados reais**, não mocks —
+recarregadas via `fetch` sempre que a tela relevante é aberta ou uma ação muda algo no banco.
+
+| Variável JS | Descrição | Populada por |
 |---|---|---|
-| `cidades` | Metadados institucionais das 2 unidades (nome, UF, tel, endereço) | `setRegiao` |
-| `unidades` | KPIs + agenda (`jobs[]`) por unidade | `setUnit`, `renderAgendaAdmin`, `enviarPedido`, `aceitar` |
-| `prestadora` | Prestadora logada (mock único: "Fabiana S.") | `renderPrestadora`, `renderPrestAval` |
-| `convites` | Propostas de atendimento pendentes de aceite pela prestadora | `renderPrestadora`, `aceitar`, `recusar` |
-| `agendaPrestadora` | Atendimentos já aceitos pela prestadora logada | `renderPrestadora`, `aceitar` |
-| `equipeData` | Lista de prestadoras por unidade, com desempenho | `renderEquipe` |
-| `clientesData` | Lista de clientes por unidade, com histórico resumido | `renderClientes` |
-| `avaliacoes` | Avaliações enviadas por clientes, com ciclo de moderação | `renderAvaliacoesAdmin`, `aprovarAval`, `recusarAval`, `renderPrestAval`, `enviarAvaliacao` |
-| `concluidos` | Atendimentos concluídos aguardando avaliação do cliente | `renderClienteAval`, `enviarAvaliacao` |
-| `codes` | Códigos de verificação de 6 dígitos (cadastro) | `enviarCodigo`, `confirmarCodigo` |
+| `cidades` | Metadados institucionais das 2 unidades (nome, UF, telefone, endereço) | `carregarDadosPublicos()` ← `GET /unidades` |
+| `unidades` | Dados do painel admin por unidade (dashboard, agenda) | `carregarUnidadeAdmin()` |
+| `prestadora` | Prestadora logada (id, nome, unidade) | `doLogin()` |
+| `convites` | Propostas de atendimento pendentes de aceite pela prestadora logada | `carregarDadosPrestadora()` ← `GET /atendimentos/prestadora/me/convites` |
+| `agendaPrestadora` | Atendimentos já aceitos pela prestadora logada | `carregarDadosPrestadora()` ← `GET /atendimentos/prestadora/me/agenda` |
+| `equipeData` | Lista de prestadoras por unidade, com desempenho | `carregarEquipeClientesAvaliacoes()` ← `GET /unidades/:slug/admin/equipe` |
+| `clientesData` | Lista de clientes por unidade, com histórico resumido | `carregarEquipeClientesAvaliacoes()` ← `GET /unidades/:slug/admin/clientes` |
+| `avaliacoes` | Avaliações enviadas por clientes, com ciclo de moderação | `carregarEquipeClientesAvaliacoes()` ← `GET /avaliacoes/admin/:slug` |
+| `concluidos` | Atendimentos concluídos aguardando avaliação do cliente | `carregarDadosCliente()` |
+| `subadminsCache` | Sub-administradores da unidade (Acessos) | `renderSubadmins()` ← `GET /sub-administradores/:slug` |
 
 ---
 
 ## 4. Máquina de estados — núcleo do domínio
 
-O protótipo já expressa, de forma implícita, a progressão central identificada no projeto:
+O sistema implementa de ponta a ponta a progressão central identificada no projeto, com uma linha por atendimento
+na tabela `atendimentos` (coluna `status`):
 
 ```
 pedido → proposto → aceito → concluído → avaliado (pendente → aprovada/recusada)
+                  ↘ recusado ↗ (prestadora recusa; volta pro admin reatribuir)
+        (cancelado, a qualquer momento não-terminal, inclusive em lote por serie_id)
 ```
 
-Mapeamento explícito para os dados mockados:
-
-1. **pedido** — cliente envia via `enviarPedido()` → entra em `unidades[regiao].jobs` com status `"novo"`.
-2. **proposto** — administrador transforma o pedido em convite para uma prestadora → aparece em `convites[]` (esse passo de "converter pedido em convite" não está implementado no protótipo; é feito manualmente/hardcoded nos dados de exemplo).
-3. **aceito** — prestadora aceita (`aceitar()`) → sai de `convites[]`, entra em `agendaPrestadora[]` e em `unidades[unidade].jobs` com status `"confirmado"`.
-4. **concluído** — atendimento realizado → entra em `concluidos[]` (também definido manualmente nos dados de exemplo; não há botão "concluir atendimento" no protótipo atual).
-5. **avaliado** — cliente avalia (`enviarAvaliacao()`) → `avaliacoes[]` com `status: 'pendente'` → admin modera (`aprovarAval`/`recusarAval`) → se aprovada, passa a contar na média da prestadora.
-
-> **Observação de gap:** os passos "pedido → proposto" e "aceito → concluído" ainda não têm ação de UI no protótipo (são simulados diretamente nos arrays de exemplo). Isso deve virar funcionalidade real no backend (ex.: painel do admin converter pedido em convite; algum gatilho — manual ou por data/hora — marcando o atendimento como concluído).
+1. **pedido** — cliente envia via `enviarPedido()` (`POST /atendimentos`, público) ou o admin cria avulso/recorrente pelo painel (`origem = 'manual'`).
+2. **proposto** — admin atribui uma prestadora (`POST .../:id/propor` ou `.../:id/reatribuir`, este último funciona em qualquer status não-terminal, não só a partir de `'pedido'`).
+3. **aceito** — prestadora confirma (`POST .../:id/aceitar`), só permitido a partir de 2 dias antes do atendimento; ou recusa (`.../:id/recusar`, volta pro admin reatribuir).
+4. **concluído** — admin marca como concluído (`POST .../:id/concluir`).
+5. **avaliado** — cliente avalia (`POST /avaliacoes`) com `status: 'pendente'` → admin modera (`aprovar`/`recusar`) → se aprovada, passa a contar na média da prestadora.
 
 ---
 
@@ -108,8 +134,11 @@ Mapeamento explícito para os dados mockados:
 - **Prestadora só enxerga o que foi aceito.** Convites pendentes ficam numa lista separada da agenda confirmada.
 - **Avaliação passa por moderação obrigatória.** Cliente → status `pendente` → admin aprova/recusa → só então a prestadora vê.
 - **Dados são segmentados por unidade** (Carazinho/Panambi) em quase todas as entidades operacionais (agenda, equipe, clientes). O administrador alterna a unidade ativa via `setUnit()`.
-- **Cadastro de prestadora é vinculado à unidade** já no momento da verificação (o código de WhatsApp é "enviado pela unidade" selecionada).
-- **Autenticação real** (bcrypt + JWT) — descrição válida apenas para o protótipo original; a versão atual (v1.0.0) já valida usuário/senha de verdade contra o Postgres. Ver `LEIA-ME.md`.
+- **Cadastro de prestadora é vinculado à unidade** já no momento do cadastro (região selecionada em `cad-prest-regiao`); a verificação de identidade é sempre por e-mail, nunca por WhatsApp/telefone (não há API de WhatsApp de verdade).
+- **Autenticação real** (bcrypt + JWT, 7 dias), com autorização por unidade e por módulo sempre reconferida no
+  banco a cada request — nunca só confiando no que o token diz. Ver `LEIA-ME.md` pra detalhes de setup.
+- **Administrador só é criado depois de confirmar um código de verificação** enviado ao e-mail informado — CNPJ
+  sozinho (um dado público) nunca é suficiente pra virar admin de uma unidade real.
 
 ---
 
@@ -131,7 +160,7 @@ Esta tabela conecta cada estrutura mockada acima ao schema relacional gerado em 
 
 ---
 
-## 7. Status desses passos na v1.0.0
+## 7. Status desses passos na v1.1.0
 
 Esta seção listava passos sugeridos quando o projeto ainda era só o protótipo estático. Todos foram implementados
 (com Node/Express + PostgreSQL local, não Supabase — ver `LEIA-ME.md` para a arquitetura real):
@@ -140,9 +169,12 @@ Esta seção listava passos sugeridos quando o projeto ainda era só o protótip
 2. ✅ Dados mockados substituídos por chamadas reais à API, que fala com PostgreSQL.
 3. ✅ Autenticação real (bcrypt + JWT), com administrador, sub-administrador, prestadora e cliente.
 4. ✅ Cadastro persistido de verdade em `administradores` / `prestadoras` / `clientes`.
-5. ⏸️ Integração com WhatsApp Business API — pausada por enquanto (a verificação de conta comercial se mostrou
-   mais trabalhosa do que o esperado); o código de verificação no cadastro continua simulado. Fica para uma
-   versão futura.
+5. ⏸️ Integração com a **API oficial de WhatsApp Business (Meta Cloud API)** — pausada por enquanto (a verificação
+   de conta comercial se mostrou mais trabalhosa do que o esperado); o código de verificação no cadastro continua
+   simulado. Fica para uma versão futura.
+6. ✅ Aviso automático por WhatsApp via link "clique pra conversar" (`wa.me`, sem API/token) — abre sozinho ao
+   reatribuir prestadora, ao ela confirmar, e ao pedir orçamento "via WhatsApp", com a mensagem já descrevendo o
+   atendimento/pedido; quem abriu ainda aperta enviar. Telefone de cada unidade editável pelo administrador.
 
 Também foi além do que estava previsto aqui: sub-administradores com permissões por módulo, agenda em calendário
 com linha do tempo, atendimento recorrente por padrão semanal, e janela de confirmação de 2 dias para a

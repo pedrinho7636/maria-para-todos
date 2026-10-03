@@ -1,19 +1,24 @@
 {
   "name": "portal-da-maria-api",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "API local (Node/Express + PostgreSQL) do Portal da Maria",
   "main": "src/server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "email:teste": "node scripts/testar-email.js",
+    "teste:cadastros": "node scripts/testar-cadastros.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.7.0",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.12.0"
+    "nodemailer": "^10.0.13",
+    "pg": "^8.12.0",
+    "read-excel-file": "^9.3.10"
   }
 }

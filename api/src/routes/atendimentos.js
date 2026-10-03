@@ -1,16 +1,53 @@
 const crypto = require('crypto');
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const { pool } = require('../db');
 const { requireAuth, requireRole, requireAcessoUnidade } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
+const { lerAtendimentos, normalizarTexto } = require('../utils/importarPlanilha');
 
 const router = express.Router();
 
+// Acha um cliente da unidade pelo nome (sem diferenciar acento/maiúscula) ou cria
+// um novo, sem login — mesmo tipo de cadastro avulso que o pedido público gera.
+async function acharOuCriarCliente(db, unidadeId, nome, telefone) {
+  const alvo = normalizarTexto(nome);
+  const { rows } = await db.query('select id, nome from clientes where unidade_id = $1', [unidadeId]);
+  const achado = rows.find(c => normalizarTexto(c.nome) === alvo);
+  if (achado) return achado.id;
+  const { rows: [novo] } = await db.query(
+    'insert into clientes (nome, telefone, unidade_id) values ($1, $2, $3) returning id',
+    [nome, telefone || null, unidadeId]
+  );
+  return novo.id;
+}
+
+// Rota pública, sem autenticação — sem limite, qualquer IP podia inundar a
+// agenda de uma unidade com "pedidos" (e é também o vetor do XSS de 1.2).
+const limitePedidoPublico = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
+
+// Confere que um id de prestadora/cliente pertence de fato à unidade que o
+// admin está operando — sem isso, um admin (ou sub-admin) que soubesse/
+// adivinhasse o UUID de uma prestadora de OUTRA unidade conseguiria atribuí-la
+// a um atendimento que não é dela, quebrando silenciosamente as views por unidade.
+async function pertenceAUnidade(tabela, id, unidadeId) {
+  const { rows: [row] } = await pool.query(
+    `select id from ${tabela} where id = $1 and unidade_id = $2`,
+    [id, unidadeId]
+  );
+  return !!row;
+}
+
 // Pedido de orçamento pela home — público, entra como 'pedido' na agenda da unidade
-router.post('/', asyncHandler(async (req, res) => {
+router.post('/', limitePedidoPublico, asyncHandler(async (req, res) => {
   const { unidade_slug, tipo_servico, area, data_atendimento, hora_atendimento, origem } = req.body;
   if (!unidade_slug || !tipo_servico || !data_atendimento) {
     return res.status(400).json({ erro: 'unidade_slug, tipo_servico e data_atendimento são obrigatórios' });
+  }
+  // Rota pública, sem autenticação — limite de tamanho reduz a superfície de
+  // abuso em campos de texto livre (também escapados no frontend antes de exibir).
+  if (tipo_servico.length > 200 || (area && area.length > 500)) {
+    return res.status(400).json({ erro: 'tipo_servico ou area excede o tamanho máximo permitido' });
   }
 
   const { rows: [unidade] } = await pool.query('select id from unidades where slug = $1', [unidade_slug]);
@@ -44,7 +81,7 @@ router.get('/admin/:slug/agenda', requireAuth, requireAcessoUnidade('agenda'), a
 // 'equipe'), já que atribuir/reatribuir prestadora é uma operação de agenda.
 router.get('/admin/:slug/prestadoras', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    'select id, nome from prestadoras where unidade_id = $1 and ativa = true order by nome',
+    'select id, nome, telefone from prestadoras where unidade_id = $1 and ativa = true order by nome',
     [req.unidadeId]
   );
   res.json(rows);
@@ -72,9 +109,12 @@ router.get('/admin/:slug/agenda/resumo-mensal', requireAuth, requireAcessoUnidad
 router.post('/admin/:slug/:id/propor', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
   const { prestadora_id } = req.body;
   if (!prestadora_id) return res.status(400).json({ erro: 'prestadora_id é obrigatório' });
+  if (!await pertenceAUnidade('prestadoras', prestadora_id, req.unidadeId)) {
+    return res.status(400).json({ erro: 'prestadora_id não pertence a esta unidade' });
+  }
 
   const { rows: [atendimento] } = await pool.query(
-    `update atendimentos set prestadora_id = $1, status = 'proposto', atualizado_em = now()
+    `update atendimentos set prestadora_id = $1, status = 'proposto', profissional_externo = null, atualizado_em = now()
      where id = $2 and unidade_id = $3 and status = 'pedido'
      returning *`,
     [prestadora_id, req.params.id, req.unidadeId]
@@ -87,11 +127,15 @@ router.post('/admin/:slug/:id/propor', requireAuth, requireAcessoUnidade('agenda
 // Generaliza /propor, que só funcionava a partir de 'pedido'.
 router.post('/admin/:slug/:id/reatribuir', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
   const prestadoraId = req.body.prestadora_id || null;
+  if (prestadoraId && !await pertenceAUnidade('prestadoras', prestadoraId, req.unidadeId)) {
+    return res.status(400).json({ erro: 'prestadora_id não pertence a esta unidade' });
+  }
 
   const { rows: [atendimento] } = await pool.query(
     `update atendimentos set
        prestadora_id = $1::uuid,
        status = case when status in ('pedido', 'recusado') and $1::uuid is not null then 'proposto' else status end,
+       profissional_externo = case when $1::uuid is not null then null else profissional_externo end,
        atualizado_em = now()
      where id = $2 and unidade_id = $3 and status not in ('concluido', 'cancelado')
      returning *`,
@@ -113,6 +157,178 @@ router.post('/admin/:slug/:id/concluir', requireAuth, requireAcessoUnidade('agen
   res.json(atendimento);
 }));
 
+// Cadastro de UM atendimento pelo painel (avulso). Com prestadora já nasce como
+// 'proposto' (convite); sem ela, 'pedido'. O cliente pode ser um já cadastrado
+// (cliente_id) ou um novo, informado só pelo nome/telefone (cliente_novo).
+router.post('/admin/:slug', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
+  const { tipo_servico, area, data_atendimento, hora_atendimento, duracao_horas, valor, cliente_id, cliente_novo, prestadora_id } = req.body;
+
+  const servico = String(tipo_servico ?? '').trim();
+  if (!servico) return res.status(400).json({ erro: 'Informe o serviço' });
+  if (servico.length > 200 || (area && String(area).length > 500)) {
+    return res.status(400).json({ erro: 'Serviço ou local excede o tamanho máximo permitido' });
+  }
+
+  const dataStr = String(data_atendimento ?? '');
+  const dt = new Date(dataStr + 'T00:00:00Z');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataStr) || Number.isNaN(dt.getTime()) || dt.toISOString().slice(0, 10) !== dataStr) {
+    return res.status(400).json({ erro: 'Data inválida' });
+  }
+  if (dt.getUTCDay() === 0) return res.status(400).json({ erro: 'Domingo não está disponível pra agenda' });
+
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(hora_atendimento ?? ''))) {
+    return res.status(400).json({ erro: 'Informe o horário (HH:MM)' });
+  }
+
+  let duracao = null;
+  if (duracao_horas !== undefined && duracao_horas !== null && duracao_horas !== '') {
+    duracao = Number(duracao_horas);
+    if (!Number.isFinite(duracao) || duracao < 0.5 || duracao > 24) {
+      return res.status(400).json({ erro: 'Duração deve estar entre 0,5 e 24 horas' });
+    }
+  }
+  let valorNum = null;
+  if (valor !== undefined && valor !== null && valor !== '') {
+    valorNum = Number(valor);
+    if (!Number.isFinite(valorNum) || valorNum < 0 || valorNum >= 1e8) return res.status(400).json({ erro: 'Valor inválido' });
+  }
+
+  if (prestadora_id && !await pertenceAUnidade('prestadoras', prestadora_id, req.unidadeId)) {
+    return res.status(400).json({ erro: 'prestadora_id não pertence a esta unidade' });
+  }
+  if (cliente_id && !await pertenceAUnidade('clientes', cliente_id, req.unidadeId)) {
+    return res.status(400).json({ erro: 'cliente_id não pertence a esta unidade' });
+  }
+  const nomeNovo = String(cliente_novo?.nome ?? '').trim().slice(0, 200);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let clienteId = cliente_id || null;
+    if (!clienteId && nomeNovo) {
+      clienteId = await acharOuCriarCliente(client, req.unidadeId, nomeNovo, String(cliente_novo?.telefone ?? '').trim().slice(0, 50));
+    }
+    const { rows: [atendimento] } = await client.query(
+      `insert into atendimentos
+         (unidade_id, cliente_id, prestadora_id, tipo_servico, area, data_atendimento, hora_atendimento,
+          duracao_horas, valor, status, origem)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'manual')
+       returning *`,
+      [req.unidadeId, clienteId, prestadora_id || null, servico, area ? String(area).trim() : null, dataStr,
+       hora_atendimento, duracao, valorNum, prestadora_id ? 'proposto' : 'pedido']
+    );
+    await client.query('COMMIT');
+    res.status(201).json(atendimento);
+  } catch (erro) {
+    await client.query('ROLLBACK');
+    throw erro;
+  } finally {
+    client.release();
+  }
+}));
+
+// Importa a planilha de atendimentos (.xlsx do sistema da franquia, enviada em
+// base64). A coluna "Número" é a chave: o que já foi importado antes é ignorado,
+// então dá pra importar o mesmo arquivo (ou um export mais novo) quantas vezes
+// quiser e só entra o que for novo. Sem `confirmar: true` NADA é gravado — só
+// devolve o resumo do que entraria (pré-visualização).
+router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
+  const { arquivo_base64: base64, confirmar } = req.body;
+  if (typeof base64 !== 'string' || !base64) return res.status(400).json({ erro: 'Envie o arquivo da planilha' });
+
+  const buffer = Buffer.from(base64, 'base64');
+  if (buffer.length > 6 * 1024 * 1024) return res.status(400).json({ erro: 'Arquivo muito grande (máximo 6MB)' });
+  if (buffer.subarray(0, 2).toString('latin1') !== 'PK') { // .xlsx é um zip
+    return res.status(400).json({ erro: 'Esse arquivo não parece ser uma planilha .xlsx' });
+  }
+
+  let lido;
+  try {
+    lido = await lerAtendimentos(buffer);
+  } catch (erro) {
+    return res.status(400).json({ erro: erro.message });
+  }
+
+  const { rows: jaImportados } = await pool.query(
+    'select codigo_externo from atendimentos where unidade_id = $1 and codigo_externo = any($2::text[])',
+    [req.unidadeId, lido.linhas.map(l => l.codigo)]
+  );
+  const jaTem = new Set(jaImportados.map(r => r.codigo_externo));
+  const novas = lido.linhas.filter(l => !jaTem.has(l.codigo));
+
+  const { rows: prestadoras } = await pool.query('select id, nome from prestadoras where unidade_id = $1', [req.unidadeId]);
+  const idPrestadora = new Map(prestadoras.map(p => [normalizarTexto(p.nome), p.id]));
+  const { rows: clientes } = await pool.query('select id, nome from clientes where unidade_id = $1', [req.unidadeId]);
+  const idCliente = new Map(clientes.map(c => [normalizarTexto(c.nome), c.id]));
+
+  const semCadastro = new Map();
+  const clientesNovos = new Set();
+  for (const l of novas) {
+    if (l.profissional && !idPrestadora.has(normalizarTexto(l.profissional))) {
+      semCadastro.set(l.profissional, (semCadastro.get(l.profissional) || 0) + 1);
+    }
+    const chave = normalizarTexto(l.cliente.nome);
+    if (chave && !idCliente.has(chave)) clientesNovos.add(chave);
+  }
+  const datas = novas.map(l => l.data).sort();
+  const resumo = {
+    linhas_lidas: lido.totalLidas,
+    novas: novas.length,
+    ja_existentes: lido.linhas.length - novas.length,
+    repetidas_no_arquivo: lido.repetidasNoArquivo,
+    invalidas: lido.invalidos.length,
+    invalidas_detalhe: lido.invalidos.slice(0, 20),
+    clientes_novos: clientesNovos.size,
+    profissionais_sem_cadastro: [...semCadastro].map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd),
+    periodo: datas.length ? { de: datas[0], ate: datas[datas.length - 1] } : null,
+  };
+
+  if (confirmar !== true) return res.json({ confirmado: false, resumo });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let importados = 0;
+    for (const l of novas) {
+      let clienteId = null;
+      const chaveCliente = normalizarTexto(l.cliente.nome);
+      if (chaveCliente) {
+        clienteId = idCliente.get(chaveCliente);
+        if (!clienteId) {
+          const { rows: [novo] } = await client.query(
+            'insert into clientes (nome, telefone, unidade_id) values ($1, $2, $3) returning id',
+            [l.cliente.nome, l.cliente.telefone, req.unidadeId]
+          );
+          clienteId = novo.id;
+          idCliente.set(chaveCliente, clienteId);
+        }
+      }
+      const prestadoraId = l.profissional ? idPrestadora.get(normalizarTexto(l.profissional)) || null : null;
+      // "Previsto" ainda vai acontecer: com prestadora conhecida vira convite (ela
+      // confirma pelo portal, na janela de 2 dias); sem, fica aguardando atribuição.
+      const status = l.situacao === 'previsto' ? (prestadoraId ? 'proposto' : 'pedido') : l.situacao;
+      // ON CONFLICT cobre duas importações simultâneas do mesmo arquivo: a segunda não duplica.
+      const r = await client.query(
+        `insert into atendimentos
+           (unidade_id, cliente_id, prestadora_id, tipo_servico, data_atendimento, hora_atendimento, duracao_horas,
+            status, origem, codigo_externo, orcamento_externo, profissional_externo)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, 'importacao', $9, $10, $11)
+         on conflict (unidade_id, codigo_externo) where codigo_externo is not null do nothing`,
+        [req.unidadeId, clienteId, prestadoraId, l.tipo_servico, l.data, l.hora, l.duracao_horas, status,
+         l.codigo, l.orcamento, l.profissional && !prestadoraId ? l.profissional : null]
+      );
+      importados += r.rowCount;
+    }
+    await client.query('COMMIT');
+    res.json({ confirmado: true, importados, ja_existentes: lido.linhas.length - importados, resumo });
+  } catch (erro) {
+    await client.query('ROLLBACK');
+    throw erro;
+  } finally {
+    client.release();
+  }
+}));
+
 // Cria uma recorrência por "semana-modelo": o admin monta uma ou mais entradas
 // (dia da semana + horário + serviço, cada uma com prestadora/cliente opcionais)
 // e o sistema repete esse padrão semana a semana (ou intercalado, semana sim/
@@ -129,6 +345,12 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
     const dia = Number(item.dia_semana);
     if (!Number.isInteger(dia) || dia < 0 || dia > 6 || !item.hora_atendimento || !item.tipo_servico) {
       return res.status(400).json({ erro: 'cada item precisa de dia_semana (0-6), hora_atendimento e tipo_servico' });
+    }
+    if (item.prestadora_id && !await pertenceAUnidade('prestadoras', item.prestadora_id, req.unidadeId)) {
+      return res.status(400).json({ erro: 'prestadora_id de um dos itens não pertence a esta unidade' });
+    }
+    if (item.cliente_id && !await pertenceAUnidade('clientes', item.cliente_id, req.unidadeId)) {
+      return res.status(400).json({ erro: 'cliente_id de um dos itens não pertence a esta unidade' });
     }
   }
 
@@ -223,7 +445,10 @@ router.post('/prestadora/me/:id/aceitar', requireAuth, requireRole('prestadora')
   );
   if (!atual) return res.status(404).json({ erro: 'Convite não encontrado' });
 
-  const hojeISO = new Date().toISOString().slice(0, 10);
+  // toISOString() converte pra UTC — entre ~21h e 23h59 no horário de Brasília
+  // (UTC-3) o UTC já virou o dia seguinte, adiantando "hoje" incorretamente.
+  // toLocaleDateString com o fuso explícito evita esse bug de virada de dia.
+  const hojeISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   const dataISO = atual.data_atendimento.toISOString().slice(0, 10);
   const diasRestantes = Math.round((new Date(dataISO) - new Date(hojeISO)) / 86400000);
   if (diasRestantes > 2) {

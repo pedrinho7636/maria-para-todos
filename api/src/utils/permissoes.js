@@ -11,6 +11,19 @@ async function unidadeDoAdmin(adminId, slug) {
   return unidade ? unidade.id : null;
 }
 
+// Slugs de todas as unidades que um administrador completo administra (um
+// admin pode ter mais de uma franquia — usado pra validar o prefixo de
+// cidade no e-mail institucional em qualquer uma delas, não só a "ativa" no momento).
+async function unidadesDoAdmin(adminId) {
+  const { rows } = await pool.query(
+    `select u.slug from unidades u
+     join administrador_unidades au on au.unidade_id = u.id
+     where au.administrador_id = $1`,
+    [adminId]
+  );
+  return rows.map(r => r.slug);
+}
+
 // Autoriza acesso administrativo (franqueado OU sub-administrador) a uma
 // unidade, opcionalmente exigindo permissão de um módulo específico.
 // Sempre reconsulta o banco — nunca confia em claims do JWT para permissão,
@@ -39,4 +52,4 @@ async function acessoAdminUnidade(user, slug, modulo) {
   return null;
 }
 
-module.exports = { unidadeDoAdmin, acessoAdminUnidade };
+module.exports = { unidadeDoAdmin, unidadesDoAdmin, acessoAdminUnidade };

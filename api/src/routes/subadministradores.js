@@ -3,6 +3,8 @@ const bcrypt = require('bcrypt');
 const { pool } = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { unidadeDoAdmin } = require('../utils/permissoes');
+const { normalizarEmail } = require('../utils/normalizacao');
+const { senhaValida, emailValido, nomeValido } = require('../utils/validacao');
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
@@ -28,6 +30,15 @@ router.post('/:slug', asyncHandler(async (req, res) => {
   if (!nome || !sobrenome || !email || !senha) {
     return res.status(400).json({ erro: 'nome, sobrenome, email e senha são obrigatórios' });
   }
+  // Mesmas regras do cadastro das outras contas (antes aceitava senha de 1 caractere).
+  if (!nomeValido(nome) || !nomeValido(sobrenome)) return res.status(400).json({ erro: 'Informe nome e sobrenome válidos' });
+  if (!emailValido(email) || !senhaValida(senha)) {
+    return res.status(400).json({ erro: 'E-mail inválido ou senha com menos de 8 caracteres' });
+  }
+  // O login do painel procura primeiro em administradores: se o e-mail do
+  // funcionário já fosse de um administrador, os dois se confundiriam na entrada.
+  const { rows: jaEhAdmin } = await pool.query('select 1 from administradores where email = $1', [normalizarEmail(email)]);
+  if (jaEhAdmin.length) return res.status(409).json({ erro: 'E-mail já cadastrado' });
 
   const colunas = MODULOS.map(m => `pode_${m}`);
   const valores = MODULOS.map(m => !!permissoes[m]);
@@ -39,7 +50,7 @@ router.post('/:slug', asyncHandler(async (req, res) => {
       `insert into sub_administradores (nome, sobrenome, email, senha_hash, unidade_id, criado_por, ${colunas.join(', ')})
        values ($1, $2, $3, $4, $5, $6, ${placeholdersValores})
        returning id, nome, sobrenome, email, unidade_id, ativo, ${colunas.join(', ')}`,
-      [nome, sobrenome, email, senhaHash, unidadeId, req.user.id, ...valores]
+      [nome, sobrenome, normalizarEmail(email), senhaHash, unidadeId, req.user.id, ...valores]
     );
     res.status(201).json(sub);
   } catch (erro) {
@@ -72,9 +83,18 @@ router.patch('/:slug/:id', asyncHandler(async (req, res) => {
   const vals = [];
   let i = 1;
 
-  if (nome) { sets.push(`nome = $${i++}`); vals.push(nome); }
-  if (sobrenome) { sets.push(`sobrenome = $${i++}`); vals.push(sobrenome); }
-  if (senha) { sets.push(`senha_hash = $${i++}`); vals.push(await bcrypt.hash(senha, SALT_ROUNDS)); }
+  if (nome) {
+    if (!nomeValido(nome)) return res.status(400).json({ erro: 'Nome inválido' });
+    sets.push(`nome = $${i++}`); vals.push(nome.trim());
+  }
+  if (sobrenome) {
+    if (!nomeValido(sobrenome)) return res.status(400).json({ erro: 'Sobrenome inválido' });
+    sets.push(`sobrenome = $${i++}`); vals.push(sobrenome.trim());
+  }
+  if (senha) {
+    if (!senhaValida(senha)) return res.status(400).json({ erro: 'A senha precisa ter ao menos 8 caracteres' });
+    sets.push(`senha_hash = $${i++}`); vals.push(await bcrypt.hash(senha, SALT_ROUNDS));
+  }
   if (permissoes) {
     for (const modulo of MODULOS) {
       if (modulo in permissoes) { sets.push(`pode_${modulo} = $${i++}`); vals.push(!!permissoes[modulo]); }
