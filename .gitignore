@@ -14,3 +14,7 @@ Thumbs.db
 # Configuração local do Claude Code (pode conter comandos de teste com
 # credenciais/hashes usados durante o desenvolvimento) — nunca é do projeto
 .claude/settings.local.json
+
+# Cópias do banco (pg_dump): têm dados pessoais e hashes de senha — nunca commitar
+*.dump
+*.sql.bak

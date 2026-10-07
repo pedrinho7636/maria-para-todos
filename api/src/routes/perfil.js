@@ -23,8 +23,9 @@ const SALT_ROUNDS = 10;
 const CONFIG = {
   administrador: { tabela: 'administradores', temSobrenome: true, temTelefone: true, telefoneObrigatorio: false, temEmail: true, emailUnico: true, exigeDominio: false },
   sub_administrador: { tabela: 'sub_administradores', temSobrenome: true, temTelefone: true, telefoneObrigatorio: false, temEmail: true, emailUnico: true, exigeDominio: false },
-  // telefone é o login da prestadora (coluna not null unique) — nunca pode ficar em branco, diferente dos outros 3.
-  prestadora: { tabela: 'prestadoras', temSobrenome: false, temTelefone: true, telefoneObrigatorio: true, temEmail: true, emailUnico: false, exigeDominio: false },
+  // telefone é um dos logins da prestadora (único quando existe). Não é obrigatório: as contas criadas
+  // a partir da planilha de atendimentos nascem sem telefone e entram pelo e-mail.
+  prestadora: { tabela: 'prestadoras', temSobrenome: false, temTelefone: true, telefoneObrigatorio: false, temEmail: true, emailUnico: false, exigeDominio: false },
   cliente: { tabela: 'clientes', temSobrenome: false, temTelefone: true, telefoneObrigatorio: false, temEmail: true, emailUnico: true, exigeDominio: false },
 };
 

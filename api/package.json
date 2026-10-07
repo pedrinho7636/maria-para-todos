@@ -6,10 +6,18 @@
   "type": "commonjs",
   "scripts": {
     "start": "node src/server.js",
+    "banco:schema": "node scripts/aplicar-schema.js",
+    "admin:criar": "node scripts/criar-admin.js",
     "dev": "node --watch src/server.js",
     "email:teste": "node scripts/testar-email.js",
     "teste:cadastros": "node scripts/testar-cadastros.js",
-    "teste:recuperacao": "node scripts/testar-recuperacao-valores.js"
+    "teste:recuperacao": "node scripts/testar-recuperacao-valores.js",
+    "teste:recorrencia": "node scripts/testar-recorrencia.js",
+    "teste:financeiro": "node scripts/testar-financeiro.js",
+    "importadas:vincular": "node scripts/vincular-profissionais-importadas.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

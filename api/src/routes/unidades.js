@@ -92,4 +92,25 @@ router.patch('/:slug/telefone', requireAuth, requireRole('administrador'), async
   res.json(unidade);
 }));
 
+// Endereço (local do estabelecimento) da unidade, mostrado no site. Também é só do
+// administrador completo. Vazio é permitido e significa "esta unidade não divulga
+// endereço": o campo some do site. Sem o resumido, o site usa o completo.
+router.patch('/:slug/endereco', requireAuth, requireRole('administrador'), asyncHandler(async (req, res) => {
+  const unidadeId = await unidadeDoAdmin(req.user.id, req.params.slug);
+  if (!unidadeId) return res.status(403).json({ erro: 'Sem acesso a esta unidade' });
+
+  const endereco = String(req.body.endereco ?? '').trim();
+  const curto = String(req.body.endereco_curto ?? '').trim();
+  if (endereco.length > 300 || curto.length > 150) {
+    return res.status(400).json({ erro: 'Endereço muito longo (máximo 300 caracteres; resumido, 150)' });
+  }
+
+  const { rows: [unidade] } = await pool.query(
+    `update unidades set endereco = $1, endereco_curto = $2 where id = $3
+     returning slug, nome, uf, telefone, endereco, endereco_curto`,
+    [endereco || null, endereco ? (curto || null) : null, unidadeId]
+  );
+  res.json(unidade);
+}));
+
 module.exports = router;

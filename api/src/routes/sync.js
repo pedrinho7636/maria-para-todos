@@ -30,10 +30,10 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
       // Conta desativada (ou permissão trocada) pelo admin tem que refletir na
       // hora na tela dele: desativada = 403, permissão nova entra na impressão.
       const { rows: [sub] } = await pool.query(
-        `select ativo, pode_dashboard, pode_agenda, pode_avaliacoes, pode_equipe, pode_clientes
+        `select ativo, pode_dashboard, pode_agenda, pode_avaliacoes, pode_equipe, pode_clientes, pode_financeiro
          from sub_administradores where id = $1`, [id]);
       if (!sub || !sub.ativo) return res.status(403).json({ erro: 'Seu acesso foi desativado pelo administrador.' });
-      permissoes = [sub.pode_dashboard, sub.pode_agenda, sub.pode_avaliacoes, sub.pode_equipe, sub.pode_clientes].map(b => (b ? 1 : 0)).join('');
+      permissoes = [sub.pode_dashboard, sub.pode_agenda, sub.pode_avaliacoes, sub.pode_equipe, sub.pode_clientes, sub.pode_financeiro].map(b => (b ? 1 : 0)).join('');
     }
 
     const acesso = await acessoAdminUnidade(req.user, slug, null);

@@ -2294,6 +2294,93 @@
       color: #9a6a4a
     }
 
+    /* Financeiro */
+    .fin-mes {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      flex-wrap: wrap
+    }
+
+    .fin-mes strong {
+      min-width: 150px;
+      text-align: center
+    }
+
+    .fin-nota {
+      font-size: 12.5px;
+      color: var(--muted);
+      padding: 0 18px 12px;
+      line-height: 1.5
+    }
+
+    .fin-alerta {
+      font-size: 13px;
+      background: #FBF1DD;
+      color: #8a5a12;
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      line-height: 1.45
+    }
+
+    .fin-det {
+      background: var(--bg);
+      padding: 6px 18px 14px 68px;
+      border-bottom: 1px solid var(--line)
+    }
+
+    .fin-det table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px
+    }
+
+    .fin-det th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 500;
+      padding: 6px 8px 6px 0
+    }
+
+    .fin-det td {
+      padding: 5px 8px 5px 0;
+      border-top: 1px solid var(--line)
+    }
+
+    .fin-det .num,
+    .fin-det th.num {
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .fin-acoes {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end
+    }
+
+    .fin-clicavel {
+      cursor: pointer
+    }
+
+    .fin-clicavel:hover {
+      background: var(--bg)
+    }
+
+    @media (max-width: 900px) {
+      .fin-colunas {
+        grid-template-columns: 1fr
+      }
+
+      .fin-det {
+        padding-left: 18px;
+        overflow-x: auto
+      }
+    }
+
     .stars {
       display: inline-flex;
       gap: 1px;
@@ -2710,7 +2797,7 @@
           <div class="hp-eyebrow">Fale com a gente</div>
           <h2 class="sec-title" id="ct-title">Unidade de Carazinho</h2>
           <p class="sec-desc">Conte o que você precisa. A equipe da sua região responde rapidinho.</p>
-          <div class="ci-block">
+          <div class="ci-block" id="ct-addr-bloco">
             <div class="ci-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2">
                 <path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z" />
@@ -2987,6 +3074,7 @@
           <a id="nav-equipe" onclick="adminView('equipe')">Equipe</a>
           <a id="nav-clientes" onclick="adminView('clientes')">Clientes</a>
           <a id="nav-avaliacoes" onclick="adminView('avaliacoes')">Avaliações</a>
+          <a id="nav-financeiro" onclick="adminView('financeiro')">Financeiro</a>
           <a id="nav-subadmins" onclick="adminView('subadmins')">Acessos</a>
         </nav>
         <div class="topbar-right">
@@ -3075,13 +3163,13 @@
                 <h3>Avaliações</h3>
                 <p>Aprove as avaliações antes de irem à prestadora.</p><span class="badge" id="mAval">0 pendentes</span>
               </div>
-              <div class="mod" tabindex="0" onclick="toast('Módulo Financeiro — em breve.')">
+              <div class="mod" tabindex="0" data-modulo="financeiro" onclick="adminView('financeiro')">
                 <div class="mod-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="2" stroke-linecap="round">
                     <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                   </svg></div>
                 <h3>Financeiro</h3>
-                <p>Recebimentos, repasses e fechamento mensal.</p><span class="badge">em breve</span>
+                <p>Receita, margem, repasses às prestadoras e fechamento do mês.</p><span class="badge" data-k="mFin">—</span>
               </div>
               <div class="mod" tabindex="0" onclick="toast('Módulo Relatórios — em breve.')">
                 <div class="mod-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -3160,6 +3248,46 @@
         </div>
       </div>
 
+      <!-- ===== FINANCEIRO ===== -->
+      <div class="adminview" id="av-financeiro" style="display:none">
+        <div class="view-head">
+          <div>
+            <div class="eyebrow">Financeiro</div>
+            <h1>Controle financeiro</h1>
+            <p class="vh-sub" id="fin-unit">Carazinho</p>
+          </div><span class="back-link" onclick="adminView('visaogeral')">← Visão geral</span>
+        </div>
+        <div class="fin-mes">
+          <button class="btn-sm ghost" onclick="finMudarMes(-1)" aria-label="Mês anterior">‹</button>
+          <strong id="fin-mes-label">—</strong>
+          <button class="btn-sm ghost" onclick="finMudarMes(1)" aria-label="Próximo mês">›</button>
+          <button class="btn-sm ghost" id="fin-mes-hoje" onclick="finMudarMes(0)">Mês atual</button>
+        </div>
+        <section class="stats" id="fin-cards"></section>
+        <div id="fin-alertas"></div>
+        <div class="panel" style="margin-bottom:26px">
+          <div class="panel-head"><h2>Repasses às prestadoras</h2><span class="count" id="fin-repasse-total"></span></div>
+          <p class="fin-nota">Atendimentos <b>concluídos</b> no mês × valor por atendimento de cada prestadora (travado no aceite). Marque como pago
+            depois de fazer o pagamento; o botão "Ver" abre os atendimentos e permite baixar a planilha (CSV).</p>
+          <div id="fin-repasses"></div>
+        </div>
+        <div class="columns fin-colunas">
+          <div class="panel">
+            <div class="panel-head"><h2>Margem por serviço</h2></div>
+            <div id="fin-servicos"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Maiores clientes</h2></div>
+            <div id="fin-clientes"></div>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:26px" id="fin-pend-painel">
+          <div class="panel-head"><h2>Pendências nos dados</h2><span class="count" id="fin-pend-count"></span></div>
+          <p class="fin-nota">Atendimentos concluídos com informação faltando. Clique pra abrir o dia na agenda e completar.</p>
+          <div id="fin-pendencias"></div>
+        </div>
+      </div>
+
       <!-- ===== CLIENTES ===== -->
       <div class="adminview" id="av-clientes" style="display:none">
         <div class="view-head">
@@ -3220,6 +3348,20 @@
           </div>
         </div>
         <div class="panel" style="margin-bottom:26px">
+          <div class="panel-head"><h2>Endereço da unidade</h2></div>
+          <div class="form-card" style="padding:20px;border-radius:0">
+            <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Local do estabelecimento, exibido no site (cabeçalho
+              e seção de contato). <b>Deixe em branco se a unidade não divulga endereço</b> — o campo some do site.</p>
+            <div class="field"><label>Endereço completo</label><input id="sa-end-unidade" maxlength="300" placeholder="Rua, número — bairro, cidade/UF"></div>
+            <div class="field-row">
+              <div class="field"><label>Resumido (opcional — cabeçalho do site)</label><input id="sa-end-curto-unidade" maxlength="150" placeholder="Rua, número — bairro"></div>
+              <div class="field" style="flex:0 0 auto;align-self:flex-end">
+                <button class="btn-sm" onclick="salvarEnderecoUnidade()">Salvar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="panel" style="margin-bottom:26px">
           <div class="panel-head"><h2 id="sa-form-titulo">Adicionar funcionário</h2></div>
           <div class="form-card" style="padding:20px;border-radius:0">
             <div class="field-row">
@@ -3238,6 +3380,7 @@
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-equipe"> Equipe</label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-clientes"> Clientes</label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-dashboard"> Visão geral</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-financeiro"> Financeiro</label>
               </div>
             </div>
             <div class="form-actions">
@@ -3504,6 +3647,9 @@
       <div class="modal-head"><h3>Atendimento recorrente</h3>
         <button class="modal-close" onclick="fecharModalRecorrente()" aria-label="Fechar" title="Fechar (Esc)">×</button></div>
       <p>Monte os atendimentos de uma semana-modelo; o sistema repete esse padrão.</p>
+      <p style="font-size:12px;margin-bottom:12px"><b>Valor do mês:</b> informe quanto o cliente paga pelo <b>mês todo</b> daquele dia/horário.
+        O sistema divide entre os atendimentos de cada mês (ex.: R$ 1.200 com 4 terças = R$ 300 cada; com 5 terças = R$ 240 cada) e a soma
+        do mês fecha no valor informado.</p>
       <div class="field-row">
         <div class="field"><label>Semana de início (qualquer dia dela)</label><input id="rec-data" type="date"></div>
         <div class="field"><label>Por quantos meses</label><input id="rec-horizonte" type="number" value="3" min="1"></div>
@@ -3551,10 +3697,11 @@
         </div>
         <div class="field-row">
           <div class="field"><label>Prestadora (opcional)</label><select id="atd-prestadora"></select></div>
-          <div class="field"><label>Valor R$ (opcional)</label><input id="atd-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"></div>
+          <div class="field"><label>Valor do atendimento (R$)</label><input id="atd-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"></div>
         </div>
-        <p style="font-size:12px;margin:0 0 14px">Ao escolher uma prestadora, o atendimento vira um convite e abrimos o WhatsApp
-          com o aviso e o link pra ela confirmar.</p>
+        <p style="font-size:12px;margin:0 0 14px">O valor é o que o <b>cliente paga</b> por este atendimento (alimenta o financeiro e os
+          dashboards); pode ser preenchido depois, clicando no atendimento na agenda. Ao escolher uma prestadora, o atendimento vira
+          um convite e abrimos o WhatsApp com o aviso e o link pra ela confirmar.</p>
         <div class="form-actions">
           <button class="btn-sm ghost" onclick="fecharModalAtendimento()">Cancelar</button>
           <button class="btn-sm" id="atd-salvar" onclick="salvarAtendimentoUnico()">Cadastrar</button>
@@ -3700,11 +3847,15 @@
     </svg><span id="toast-msg"></span></div>
 
   <!-- ============================================================
-       API LOCAL — Node/Express + PostgreSQL rodando na sua máquina
-       (pasta api/). Ajuste API_BASE se a API estiver noutra porta/host.
+       API — Node/Express + PostgreSQL (pasta api/).
+       Servido pela própria API (site publicado, ou localhost:3001) → mesma
+       origem, "/api". Aberto pelo Live Server/`npx serve` (5000/5500) ou
+       direto do arquivo → aponta pra API local em localhost:3001.
        ============================================================ -->
   <script>
-    const API_BASE = "http://localhost:3001/api";
+    const API_BASE = (location.protocol === 'file:' || ['5000', '5500'].includes(location.port))
+      ? "http://localhost:3001/api"
+      : location.origin + "/api";
     let authToken = null;
     try { authToken = localStorage.getItem('pm-token'); } catch (e) { }
 
@@ -3814,12 +3965,12 @@
     // sub_administrador só o que foi marcado nele (colunas pode_* vindas do login).
     function permissoesAtuais() {
       if (!usuarioLogado || usuarioLogado.tipo === 'administrador') {
-        return { dashboard: true, agenda: true, avaliacoes: true, equipe: true, clientes: true, subadmins: true };
+        return { dashboard: true, agenda: true, avaliacoes: true, equipe: true, clientes: true, financeiro: true, subadmins: true };
       }
       const u = usuarioLogado.dados || {};
       return {
         dashboard: !!u.pode_dashboard, agenda: !!u.pode_agenda, avaliacoes: !!u.pode_avaliacoes,
-        equipe: !!u.pode_equipe, clientes: !!u.pode_clientes, subadmins: false
+        equipe: !!u.pode_equipe, clientes: !!u.pode_clientes, financeiro: !!u.pode_financeiro, subadmins: false
       };
     }
     function aplicarPermissoesAdminUI() {
@@ -3830,6 +3981,7 @@
       setDisplay('nav-equipe', p.equipe);
       setDisplay('nav-clientes', p.clientes);
       setDisplay('nav-avaliacoes', p.avaliacoes);
+      setDisplay('nav-financeiro', p.financeiro);
       setDisplay('nav-subadmins', p.subadmins);
       document.querySelectorAll('#screen-franqueado .mod[data-modulo]').forEach(el => {
         el.style.display = p[el.dataset.modulo] === false ? 'none' : '';
@@ -3895,7 +4047,8 @@
         prof: String(dash.prestadoras_escaladas_hoje ?? 0), profT: (dash.prestadoras_escaladas_hoje ?? 0) + ' escalados hoje',
         fat: Number(dash.faturamento_mes ?? 0).toLocaleString('pt-BR'), fatT: '', fatCls: 'up',
         nps: String(dash.nps_medio ?? '—'), npsT: '', npsCls: 'up',
-        mAgenda: (dash.atendimentos_hoje ?? 0) + ' hoje', mEquipe: '—', mClientes: '—', mFin: '—',
+        mAgenda: (dash.atendimentos_hoje ?? 0) + ' hoje', mEquipe: '—', mClientes: '—',
+        mFin: dash.faturamento_mes === undefined ? '—' : 'R$ ' + Number(dash.faturamento_mes).toLocaleString('pt-BR') + ' no mês',
         jobs: agenda.map(atendimentoParaJob)
       };
     }
@@ -3942,13 +4095,21 @@
       document.getElementById('hp-eyebrow').textContent = 'Atendendo ' + c.nome + ' e região';
       document.getElementById('hp-city').textContent = 'em ' + c.nome;
       document.getElementById('hc-city').textContent = 'Maria Brasileira ' + c.nome;
-      document.getElementById('hc-addr').textContent = c.endCurto;
+      aplicarEnderecoNoSite(c);
       document.getElementById('hc-phone').textContent = c.tel;
       document.getElementById('ct-title').textContent = 'Unidade de ' + c.nome;
-      document.getElementById('ct-addr').textContent = c.end;
       document.getElementById('ct-phone').textContent = c.tel;
       document.getElementById('pf-region').textContent = c.nome + '/' + c.uf;
       document.getElementById('cli-unit').textContent = c.nome;
+    }
+    // Endereço da unidade no site: sem endereço cadastrado o campo some (em vez de aparecer vazio).
+    // No cabeçalho vale o resumido, ou o completo se não houver resumido.
+    function aplicarEnderecoNoSite(c) {
+      const curto = c.endCurto || c.end || '';
+      document.getElementById('hc-addr').textContent = curto;
+      document.getElementById('hc-addr').style.display = curto ? '' : 'none';
+      document.getElementById('ct-addr').textContent = c.end || '';
+      document.getElementById('ct-addr-bloco').style.display = c.end ? '' : 'none';
     }
     function goSection(id) { show('screen-home'); setTimeout(() => document.getElementById(id).scrollIntoView({ behavior: 'smooth' }), 60); }
 
@@ -4003,7 +4164,7 @@
           await carregarEquipeClientesAvaliacoes(regiao);
           show('screen-franqueado'); setUnitUI(regiao);
           const p = permissoesAtuais();
-          const ordem = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes']];
+          const ordem = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes'], ['financeiro', 'financeiro']];
           const primeira = (ordem.find(([, modulo]) => p[modulo])?.[0]) || 'agenda';
           adminView(primeira); updateAvalBadge();
         } else if (tipoInterno === 'prestadora') {
@@ -4092,6 +4253,7 @@
         const aberta = id => document.getElementById('av-' + id)?.style.display === 'block';
         if (aberta('agenda')) { await carregarPrestadorasAgenda(slug); await renderCalendarioMes(); }
         else if (aberta('equipe')) renderEquipe();
+        else if (aberta('financeiro')) renderFinanceiro();
         else if (aberta('clientes')) renderClientes();
         else if (aberta('avaliacoes')) renderAvaliacoesAdmin();
       }
@@ -4106,7 +4268,7 @@
       aplicarPermissoesAdminUI();
       toast('Suas permissões foram atualizadas pelo administrador.');
       const p = permissoesAtuais();
-      const modulos = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes']];
+      const modulos = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes'], ['financeiro', 'financeiro']];
       const aberta = modulos.find(([v]) => document.getElementById('av-' + v)?.style.display === 'block');
       if (aberta && !p[aberta[1]]) adminView((modulos.find(([, m]) => p[m]) || ['agenda'])[0]); // a tela atual deixou de ser permitida
     }
@@ -4334,8 +4496,19 @@
     let resumoMensalPorDia = {};
     let prestadorasAgenda = { carazinho: [], panambi: [] }; // lista enxuta p/ atribuição, liberada por 'agenda'
 
-    function renderAgendaAdmin() {
+    // diaInicial (opcional, 'AAAA-MM-DD'): abre a agenda direto naquele dia (usado pelas pendências do Financeiro)
+    function renderAgendaAdmin(diaInicial) {
       renderHorasGutter();
+      if (diaInicial) {
+        const [a, m, d] = diaInicial.split('-').map(Number);
+        mesAtualCalendario = new Date(a, m - 1, 1);
+        const dia = new Date(a, m - 1, d);
+        if (dia.getDay() === 0) dia.setDate(dia.getDate() + 1); // domingo bloqueado: cai pra segunda
+        diaSelecionadoAgenda = dia.getFullYear() + '-' + String(dia.getMonth() + 1).padStart(2, '0') + '-' + String(dia.getDate()).padStart(2, '0');
+        carregarPrestadorasAgenda(currentUnit);
+        renderCalendarioMes();
+        return;
+      }
       mesAtualCalendario = new Date();
       const hoje = new Date();
       if (hoje.getDay() === 0) hoje.setDate(hoje.getDate() + 1); // domingo bloqueado: cai pra segunda
@@ -4470,6 +4643,7 @@
           div.innerHTML = `<strong class="tl-linha">${item.hora_atendimento.slice(0, 5)} · ${escapeHtml(item.tipo_servico)}</strong><span class="tl-linha">${rotulo}</span>${linhaCliente}`;
           div.title = `${hhmm(item.inicioMin)}–${hhmm(item.fimMin)} · ${item.tipo_servico}`
             + (item.area ? ` · Local: ${item.area}` : '')
+            + (item.valor !== null && item.valor !== undefined ? ` · Valor: ${formatarReais(item.valor)}` : '')
             + (item.cliente_nome ? ` · Cliente: ${item.cliente_nome}` : '')
             + (item.prestadora_nome || item.profissional_externo ? ` · ${item.prestadora_nome || item.profissional_externo}` : '');
           div.onclick = ev => abrirReatribuir(ev, item);
@@ -4519,6 +4693,9 @@
         <select id="reatribuir-select" ${concluido ? 'disabled' : ''}><option value="">Sem prestadora</option>${opcoes}</select>
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Local / bairro</label>
         <input id="reatribuir-local" maxlength="500" value="${escapeHtml(item.area || '')}" placeholder="Sem local — deixe vazio pra ocultar">
+        <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Valor do atendimento (R$)</label>
+        <input id="reatribuir-valor" inputmode="decimal" autocomplete="off" value="${item.valor === null || item.valor === undefined ? '' : Number(item.valor).toFixed(2).replace('.', ',')}" placeholder="0,00">
+        ${item.valor_mensal ? `<p style="font-size:11.5px;margin:-4px 0 10px">Parte do valor mensal de ${formatarReais(item.valor_mensal)}, dividido entre os atendimentos do mês.</p>` : ''}
         <div class="form-actions">
           <button class="btn-sm ghost" onclick="fecharReatribuirPop()">Cancelar</button>
           <button class="btn-sm" onclick="salvarReatribuicao('${item.id}')">Salvar</button>
@@ -4554,9 +4731,12 @@
       const concluido = item.status === 'concluido';
       const prestadoraId = concluido ? (item.prestadora_id || null) : (document.getElementById('reatribuir-select').value || null);
       const local = document.getElementById('reatribuir-local').value.trim();
+      const valor = lerReais(document.getElementById('reatribuir-valor').value);
+      if (Number.isNaN(valor)) { toast('Valor inválido — use números, ex.: 150,00.'); return; }
       const mudouPrestadora = prestadoraId !== (item.prestadora_id || null);
       const mudouLocal = local !== (item.area || '');
-      if (!mudouPrestadora && !mudouLocal) { fecharReatribuirPop(); return; }
+      const mudouValor = valor !== (item.valor === null || item.valor === undefined ? null : Number(item.valor));
+      if (!mudouPrestadora && !mudouLocal && !mudouValor) { fecharReatribuirPop(); return; }
 
       // Abre a aba em branco ANTES do await: depois que a resposta da API chega
       // o navegador já não considera mais isso "gesto do usuário" e bloqueia o
@@ -4566,9 +4746,13 @@
         let atendimento = item;
         // o local vai primeiro: o aviso de WhatsApp da nova prestadora já sai com o local certo
         if (mudouLocal) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/local`, { method: 'PATCH', body: JSON.stringify({ area: local }) });
+        if (mudouValor) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/valor`, { method: 'PATCH', body: JSON.stringify({ valor }) });
         if (mudouPrestadora) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/reatribuir`, { method: 'POST', body: JSON.stringify({ prestadora_id: prestadoraId }) });
         fecharReatribuirPop();
-        toast(mudouPrestadora && mudouLocal ? 'Prestadora e local atualizados.' : mudouPrestadora ? 'Prestadora atualizada.' : (local ? 'Local atualizado.' : 'Local removido.'));
+        const alterados = [mudouPrestadora && 'prestadora', mudouLocal && 'local', mudouValor && 'valor'].filter(Boolean);
+        toast(alterados.length === 1
+          ? { prestadora: 'Prestadora atualizada.', local: local ? 'Local atualizado.' : 'Local removido.', valor: valor === null ? 'Valor removido.' : 'Valor atualizado.' }[alterados[0]]
+          : 'Atendimento atualizado (' + alterados.join(', ') + ').');
         if (mudouPrestadora) avisarPrestadoraPorWhatsApp(aba, (prestadorasAgenda[currentUnit] || []).find(p => p.id === prestadoraId), atendimento);
         selecionarDiaAgenda(diaSelecionadoAgenda);
       } catch (err) {
@@ -4630,11 +4814,9 @@
       const corpo = { tipo_servico: servico, data_atendimento: data, hora_atendimento: hora };
       if (atdVal('atd-area').trim()) corpo.area = atdVal('atd-area').trim();
       if (atdVal('atd-duracao')) corpo.duracao_horas = Number(atdVal('atd-duracao'));
-      const valorTxt = atdVal('atd-valor').trim().replace(/^R\$\s*/i, '').replace(',', '.');
-      if (valorTxt) {
-        if (!/^\d{1,8}(\.\d{1,2})?$/.test(valorTxt)) { toast('Valor inválido — use números, ex.: 150,00.'); return; }
-        corpo.valor = Number(valorTxt);
-      }
+      const valorLido = lerReais(atdVal('atd-valor'));
+      if (Number.isNaN(valorLido)) { toast('Valor inválido — use números, ex.: 150,00.'); return; }
+      if (valorLido !== null) corpo.valor = valorLido;
       if (atdVal('atd-prestadora')) corpo.prestadora_id = atdVal('atd-prestadora');
       const cliente = atdVal('atd-cliente');
       if (cliente === '__novo__') {
@@ -4695,8 +4877,8 @@
            </div>`
           + (r.periodo ? `<div class="atd-aviso">Período dos novos: ${dataBR(r.periodo.de)} a ${dataBR(r.periodo.ate)}.</div>` : '')
           + (r.novas === 0 ? '<div class="atd-aviso">Nada de novo neste arquivo — tudo nele já está no sistema.</div>' : '')
-          + (semCadastro.length ? `<div class="atd-aviso"><b>${semCadastro.length}</b> profissional(is) da planilha ainda não têm cadastro como prestadora e
-               aparecem na agenda como “sem cadastro”: ${semCadastro.slice(0, 5).map(p => escapeHtml(p.nome) + ' (' + p.qtd + ')').join(', ')}${semCadastro.length > 5 ? ' e mais ' + (semCadastro.length - 5) + '…' : ''}.</div>` : '')
+          + (semCadastro.length ? `<div class="atd-aviso"><b>${semCadastro.length}</b> profissional(is) da planilha ainda não são prestadoras. Ao importar, o sistema cadastra
+               cada uma (e-mail <i>nome@gmail.com</i>, sem espaços; senha padrão <b>${escapeHtml(r.senha_padrao)}</b>) e já liga os atendimentos a ela: ${semCadastro.slice(0, 5).map(p => escapeHtml(p.nome) + ' (' + p.qtd + ')').join(', ')}${semCadastro.length > 5 ? ' e mais ' + (semCadastro.length - 5) + '…' : ''}.</div>` : '')
           + (r.invalidas ? `<div class="atd-aviso"><b>${r.invalidas}</b> linha(s) ignorada(s): ${r.invalidas_detalhe.slice(0, 5).map(i => 'linha ' + i.linha + ' (' + escapeHtml(i.motivo) + ')').join('; ')}${r.invalidas > 5 ? '…' : ''}.</div>` : '')
           + (r.repetidas_no_arquivo ? `<div class="atd-aviso">${r.repetidas_no_arquivo} linha(s) repetida(s) no próprio arquivo (mesmo Número) — vale a primeira.</div>` : '');
         if (r.novas > 0) { botao.disabled = false; botao.textContent = `Importar ${r.novas} novo${r.novas === 1 ? '' : 's'}`; }
@@ -4714,8 +4896,10 @@
       try {
         const r = await api(`/atendimentos/admin/${currentUnit}/importar`, { method: 'POST', body: JSON.stringify({ arquivo_base64: atdArquivoBase64, confirmar: true }) });
         fecharModalAtendimento();
-        toast(`${r.importados} atendimento(s) importado(s)` + (r.ja_existentes ? ` · ${r.ja_existentes} já existiam` : '') + '.');
+        toast(`${r.importados} atendimento(s) importado(s)` + (r.ja_existentes ? ` · ${r.ja_existentes} já existiam` : '')
+          + (r.prestadoras_criadas?.length ? ` · ${r.prestadoras_criadas.length} prestadora(s) cadastrada(s)` : '') + '.');
         await carregarEquipeClientesAvaliacoes(currentUnit); // clientes novos entram nas listas
+        await carregarPrestadorasAgenda(currentUnit); // e as prestadoras novas, nas listas de atribuição
         await renderCalendarioMes();
       } catch (err) {
         toast('Erro ao importar: ' + err.message);
@@ -4729,7 +4913,7 @@
     let itensRecorrencia = [];
 
     function abrirModalRecorrente() {
-      itensRecorrencia = [{ dia: 1, hora: '', servico: '', area: '', prestadora: '', cliente: '' }];
+      itensRecorrencia = [{ dia: 1, hora: '', servico: '', area: '', valor: '', prestadora: '', cliente: '' }];
       document.getElementById('rec-data').value = diaSelecionadoAgenda || hojeISOBrasil();
       document.getElementById('rec-horizonte').value = 3;
       document.getElementById('rec-alternada').checked = false;
@@ -4738,7 +4922,7 @@
     }
     function fecharModalRecorrente() { document.getElementById('modal-recorrente').classList.remove('show'); }
     function adicionarItemRecorrente() {
-      itensRecorrencia.push({ dia: 1, hora: '', servico: '', area: '', prestadora: '', cliente: '' });
+      itensRecorrencia.push({ dia: 1, hora: '', servico: '', area: '', valor: '', prestadora: '', cliente: '' });
       renderItensRecorrente();
     }
     function removerItemRecorrente(idx) { itensRecorrencia.splice(idx, 1); renderItensRecorrente(); }
@@ -4758,8 +4942,11 @@
             <div class="field"><label>Horário</label><input type="time" value="${item.hora}" onchange="atualizarItemRecorrente(${idx},'hora',this.value)"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label>Serviço</label><input value="${item.servico}" placeholder="Limpeza residencial" onchange="atualizarItemRecorrente(${idx},'servico',this.value)"></div>
-            <div class="field"><label>Bairro / local</label><input value="${item.area}" onchange="atualizarItemRecorrente(${idx},'area',this.value)"></div>
+            <div class="field"><label>Serviço</label><input value="${escapeHtml(item.servico)}" placeholder="Limpeza residencial" onchange="atualizarItemRecorrente(${idx},'servico',this.value)"></div>
+            <div class="field"><label>Bairro / local</label><input value="${escapeHtml(item.area)}" onchange="atualizarItemRecorrente(${idx},'area',this.value)"></div>
+          </div>
+          <div class="field"><label>Valor do mês inteiro (R$) — opcional</label>
+            <input type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${escapeHtml(item.valor)}" onchange="atualizarItemRecorrente(${idx},'valor',this.value)">
           </div>
           <div class="field-row">
             <div class="field"><label>Prestadora (opcional)</label>
@@ -4786,19 +4973,24 @@
       const dataInicio = document.getElementById('rec-data').value;
       if (!dataInicio) { toast('Escolha a semana de início.'); return; }
 
+      // valor do mês de cada dia da semana (vazio = sem valor)
+      const valores = itensValidos.map(i => lerReais(i.valor));
+      if (valores.some(v => Number.isNaN(v))) { toast('Valor do mês inválido — use números, ex.: 1200,00.'); return; }
+
       const body = {
         data_inicio: dataInicio,
         horizonte_meses: document.getElementById('rec-horizonte').value,
         semanas_alternadas: document.getElementById('rec-alternada').checked,
-        itens: itensValidos.map(i => ({
+        itens: itensValidos.map((i, k) => ({
           dia_semana: i.dia, hora_atendimento: i.hora, tipo_servico: i.servico.trim(), area: i.area.trim() || null,
-          prestadora_id: i.prestadora || null, cliente_id: i.cliente || null,
+          prestadora_id: i.prestadora || null, cliente_id: i.cliente || null, valor_mensal: valores[k],
         })),
       };
       try {
         const resp = await api(`/atendimentos/admin/${currentUnit}/recorrente`, { method: 'POST', body: JSON.stringify(body) });
         fecharModalRecorrente();
-        toast(resp.quantidade_gerada + ' atendimentos gerados.');
+        const comValor = resp.atendimentos.filter(a => a.valor !== null && a.valor !== undefined).length;
+        toast(resp.quantidade_gerada + ' atendimentos gerados' + (comValor ? ` (${comValor} com o valor do mês dividido).` : '.'));
         renderCalendarioMes();
       } catch (err) { toast('Erro ao criar recorrência: ' + err.message); }
     }
@@ -4843,11 +5035,11 @@
       const semTarifa = r.valor_por_atendimento === null;
       const dinheiro = v => (semTarifa && !v ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
       document.getElementById('ps-previsto-valor').textContent = dinheiro(r.semana.total);
-      const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
       document.getElementById('ps-previsto-qtd').textContent = plural(r.semana.qtd, 'atendimento', 'atendimentos');
       document.getElementById('ps-tarifa').textContent = semTarifa ? 'valor ainda não definido' : formatarReais(r.valor_por_atendimento) + ' cada';
       document.getElementById('ps-mes-valor').textContent = dinheiro(r.mes.realizados_total + r.mes.previstos_total);
-      document.getElementById('ps-mes-detalhe').textContent = `${plural(r.mes.realizados_qtd, 'realizado', 'realizados')} · ${r.mes.previstos_qtd} a realizar`;
+      document.getElementById('ps-mes-detalhe').textContent = `${plural(r.mes.realizados_qtd, 'realizado', 'realizados')} · ${r.mes.previstos_qtd} a realizar`
+        + (r.mes.pago_total ? ` · ${formatarReais(r.mes.pago_total)} já pago` : '');
       renderPrestAval();
     }
     /* Calendário da prestadora: visão só-leitura dos próximos atendimentos
@@ -4935,9 +5127,9 @@
     function starsHTML(n) { return '<span class="stars">' + [1, 2, 3, 4, 5].map(i => '<span class="' + (i <= n ? '' : 's-off') + '">★</span>').join('') + '</span>'; }
 
     /* navegação interna do admin */
-    function adminView(name) {
+    function adminView(name, arg) {
       fecharReatribuirPop(); // o balão não fecha mais ao clicar fora; não pode ficar órfão em outra tela
-      const mapaModulo = { visaogeral: 'dashboard', agenda: 'agenda', equipe: 'equipe', clientes: 'clientes', avaliacoes: 'avaliacoes', subadmins: 'subadmins' };
+      const mapaModulo = { visaogeral: 'dashboard', agenda: 'agenda', equipe: 'equipe', clientes: 'clientes', avaliacoes: 'avaliacoes', financeiro: 'financeiro', subadmins: 'subadmins' };
       const p = permissoesAtuais();
       const modulo = mapaModulo[name];
       if (modulo && p[modulo] === false) { toast('Você não tem permissão para acessar este módulo.'); return; }
@@ -4946,10 +5138,11 @@
       const view = document.getElementById('av-' + name); if (view) view.style.display = 'block';
       document.querySelectorAll('#screen-franqueado .topnav a').forEach(a => a.classList.remove('active'));
       const nav = document.getElementById('nav-' + name); if (nav) nav.classList.add('active');
-      if (name === 'agenda') renderAgendaAdmin();
+      if (name === 'agenda') renderAgendaAdmin(arg);
       else if (name === 'equipe') renderEquipe();
       else if (name === 'clientes') renderClientes();
       else if (name === 'avaliacoes') renderAvaliacoesAdmin();
+      else if (name === 'financeiro') renderFinanceiro();
       else if (name === 'subadmins') renderSubadmins();
       window.scrollTo(0, 0);
     }
@@ -4964,8 +5157,19 @@
       }).join('');
     }
 
+    // Lê um valor em reais digitado ("1.200,50", "R$ 80", "80.5"): null se vazio, NaN se inválido.
+    // Os campos de valor são de texto de propósito — <input type="number"> descarta a vírgula
+    // em alguns navegadores ("120,50" virava 12050).
+    function lerReais(texto) {
+      let t = String(texto ?? '').trim().replace(/^R\$\s*/i, '');
+      if (t === '') return null;
+      if (/,/.test(t)) t = t.replace(/\./g, '').replace(',', '.'); // "1.200,50" -> "1200.50"
+      return /^\d{1,8}(\.\d{1,2})?$/.test(t) ? Number(t) : NaN;
+    }
+
     /* Valor por atendimento (quanto a franquia paga a cada prestadora) */
     let tarifaPrestadoraId = null, tarifaOcupada = false;
+    const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
     function formatarReais(v) { return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     function abrirTarifa(prestadoraId) {
       const p = (equipeData[currentUnit] || []).find(x => x.id === prestadoraId);
@@ -4979,18 +5183,16 @@
     function fecharTarifa() { document.getElementById('modal-tarifa').classList.remove('show'); }
     async function salvarTarifa() {
       if (tarifaOcupada || !tarifaPrestadoraId) return;
-      // campo de texto de propósito: <input type="number"> descarta a vírgula em alguns
-      // navegadores ("120,50" virava 12050). Aceita "120,50", "120.50" e "120".
-      const valor = document.getElementById('tarifa-valor').value.trim().replace(/^R\$\s*/i, '').replace(',', '.');
-      if (valor !== '' && !/^\d{1,5}(\.\d{1,2})?$/.test(valor)) { toast('Informe um valor válido (ex.: 80,00).'); return; }
+      const valor = lerReais(document.getElementById('tarifa-valor').value);
+      if (Number.isNaN(valor) || (valor !== null && valor >= 100000)) { toast('Informe um valor válido (ex.: 80,00).'); return; }
       tarifaOcupada = true;
       const botao = document.getElementById('tarifa-salvar'); botao.disabled = true;
       try {
-        await api(`/unidades/${currentUnit}/admin/equipe/${tarifaPrestadoraId}`, { method: 'PATCH', body: JSON.stringify({ valor_por_atendimento: valor === '' ? null : valor }) });
+        await api(`/unidades/${currentUnit}/admin/equipe/${tarifaPrestadoraId}`, { method: 'PATCH', body: JSON.stringify({ valor_por_atendimento: valor }) });
         fecharTarifa();
         await carregarEquipeClientesAvaliacoes(currentUnit);
         renderEquipe();
-        toast(valor === '' ? 'Valor removido.' : 'Valor por atendimento atualizado.');
+        toast(valor === null ? 'Valor removido.' : 'Valor por atendimento atualizado.');
       } catch (err) { toast('Erro ao salvar o valor: ' + err.message); }
       finally { tarifaOcupada = false; botao.disabled = false; }
     }
@@ -5028,11 +5230,164 @@
       } catch (err) { toast('Erro ao recusar no banco: ' + err.message); }
     }
 
+    /* ===== Financeiro =====
+       Os números vêm prontos da API (/api/financeiro/...); aqui só se desenha.
+       Receita = o que o CLIENTE paga · custo = repasse à PRESTADORA · realizado = concluído
+       (a API conclui sozinha o atendimento aceito cuja data/hora já passou). */
+    let finMes = null;            // 'AAAA-MM' em exibição (null = mês atual, que a API devolve)
+    let finDados = null;
+    let finOcupado = false;
+    const finAbertas = new Set(); // prestadoras com a lista de atendimentos aberta
+    const finDetalhes = {};       // prestadoraId -> resposta de /repasses (usada no CSV)
+
+    const finReais = v => (v === null || v === undefined ? '—' : formatarReais(v));
+    const finNum = v => (v === null || v === undefined ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    const finRotuloMes = mes => { const [a, m] = mes.split('-').map(Number); const t = new Date(a, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }); return t.charAt(0).toUpperCase() + t.slice(1); };
+    const finIniciais = nome => String(nome).split(' ').filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+
+    function finMudarMes(delta) {
+      if (delta === 0) finMes = null;
+      else {
+        const base = finMes || finDados?.mes_atual;
+        if (!base) return;
+        const [a, m] = base.split('-').map(Number);
+        const d = new Date(a, m - 1 + delta, 1);
+        finMes = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      }
+      finAbertas.clear();
+      renderFinanceiro();
+    }
+
+    async function renderFinanceiro() {
+      document.getElementById('fin-unit').textContent = unidades[currentUnit].nome;
+      try {
+        finDados = await api(`/financeiro/${currentUnit}/resumo${finMes ? '?mes=' + finMes : ''}`);
+      } catch (err) { toast('Erro ao carregar o financeiro: ' + err.message); return; }
+      finMes = finDados.mes;
+      const d = finDados, r = d.realizado, p = d.previsto;
+      document.getElementById('fin-mes-label').textContent = finRotuloMes(d.mes);
+      document.getElementById('fin-mes-hoje').style.display = d.mes === d.mes_atual ? 'none' : '';
+
+      const variacao = (atual, antes) => (antes > 0 && atual !== null ? ` · ${atual >= antes ? '▲' : '▼'} ${Math.abs(Math.round((atual - antes) / antes * 100))}% vs. mês anterior` : '');
+      const card = (cls, rotulo, valor, trend) => `<div class="stat ${cls}"><div class="stat-label">${rotulo}</div><div class="stat-value"><small>R$</small> ${valor}</div><div class="stat-trend up">${trend}</div></div>`;
+      document.getElementById('fin-cards').innerHTML =
+        card('', 'Receita (realizada)', finNum(r.receita), `${plural(r.qtd, 'atendimento concluído', 'atendimentos concluídos')}${variacao(r.receita, d.anterior.receita)}`)
+        + card('b', 'Custo (repasses)', finNum(r.custo), `${finReais(d.alertas.repasses_pendentes)} a pagar${variacao(r.custo, d.anterior.custo)}`)
+        + card('a', 'Margem', finNum(r.margem), `${r.margem_pct === null ? '—' : String(r.margem_pct).replace('.', ',') + '%'}${r.completos < r.qtd ? ` · calculada em ${r.completos} de ${r.qtd}` : ''}`)
+        + card('', 'A realizar no mês', finNum(p.receita), `${plural(p.qtd, 'atendimento', 'atendimentos')} · custo previsto ${finReais(p.custo)}`);
+
+      // alertas: tudo que deixa os números incompletos
+      const al = d.alertas, avisos = [];
+      if (al.realizados_sem_valor) avisos.push(`<b>${plural(al.realizados_sem_valor, 'atendimento concluído', 'atendimentos concluídos')}</b> sem valor cobrado — a receita está subestimada.`);
+      if (al.realizados_sem_custo) avisos.push(`<b>${plural(al.realizados_sem_custo, 'atendimento concluído', 'atendimentos concluídos')}</b> sem custo (prestadora sem valor por atendimento definido, ou sem prestadora) — o custo está subestimado.`);
+      if (p.sem_prestadora_qtd) avisos.push(`<b>${plural(p.sem_prestadora_qtd, 'atendimento futuro', 'atendimentos futuros')}</b> ainda sem prestadora.`);
+      if (al.convites_vencidos) avisos.push(`<b>${plural(al.convites_vencidos, 'convite', 'convites')}</b> venceram sem a prestadora aceitar.`);
+      document.getElementById('fin-alertas').innerHTML = avisos.map(a => `<div class="fin-alerta">⚠ ${a}</div>`).join('');
+
+      // repasses
+      document.getElementById('fin-repasse-total').textContent = d.por_prestadora.length ? `${finReais(al.repasses_pendentes)} a pagar` : '';
+      document.getElementById('fin-repasses').innerHTML = d.por_prestadora.length === 0
+        ? '<div class="empty">Nenhum atendimento concluído neste mês.</div>'
+        : d.por_prestadora.map(x => {
+          const quitado = x.pendentes_qtd === 0 && x.pagos_qtd > 0;
+          const chip = quitado ? '<span class="chip chip-on">pago</span>' : x.pendentes_qtd > 0 ? '<span class="chip chip-off">a pagar</span>' : '<span class="chip chip-off">sem valor</span>';
+          const aberto = finAbertas.has(x.prestadora_id);
+          return `<div class="tablerow"><div class="tr-av">${escapeHtml(finIniciais(x.prestadora))}</div>
+              <div class="tr-body"><strong>${escapeHtml(x.prestadora)}</strong>
+                <span>${plural(x.qtd, 'atendimento', 'atendimentos')} · total ${finReais(x.a_pagar_total)} · pago ${finReais(x.pago)} · pendente <b>${finReais(x.pendente)}</b>${x.sem_custo_qtd ? ` · ${x.sem_custo_qtd} sem valor definido (defina na Equipe)` : ''}</span></div>
+              ${chip}
+              <div class="fin-acoes">
+                <button class="btn-sm ghost" onclick="finVer('${x.prestadora_id}')">${aberto ? 'Ocultar' : 'Ver'}</button>
+                ${x.pendentes_qtd > 0 ? `<button class="btn-sm" onclick="finPagar('${x.prestadora_id}', false)">Marcar como pago</button>` : ''}
+                ${x.pagos_qtd > 0 ? `<button class="btn-sm ghost" onclick="finPagar('${x.prestadora_id}', true)">Desfazer pagamento</button>` : ''}
+              </div></div>
+              <div class="fin-det" id="fin-det-${x.prestadora_id}" style="display:${aberto ? 'block' : 'none'}"></div>`;
+        }).join('');
+
+      const linhaMargem = (titulo, sub, x) => `<div class="tablerow"><div class="tr-body"><strong>${escapeHtml(titulo)}</strong><span>${sub}</span></div><span class="tr-meta">${x.margem_pct === null ? (x.completos === 0 ? 'sem valores' : finReais(x.receita)) : finReais(x.margem) + ' · ' + String(x.margem_pct).replace('.', ',') + '%'}</span></div>`;
+      document.getElementById('fin-servicos').innerHTML = d.por_servico.length === 0 ? '<div class="empty">Sem atendimentos concluídos.</div>'
+        : d.por_servico.map(x => linhaMargem(x.tipo_servico, `${plural(x.qtd, 'atendimento', 'atendimentos')} · receita ${finReais(x.receita)} · custo ${finReais(x.custo)}`, x)).join('');
+      document.getElementById('fin-clientes').innerHTML = d.por_cliente.length === 0 ? '<div class="empty">Sem clientes no período.</div>'
+        : d.por_cliente.map(x => `<div class="tablerow"><div class="tr-body"><strong>${escapeHtml(x.cliente)}</strong><span>${plural(x.qtd, 'atendimento', 'atendimentos')}</span></div><span class="tr-meta">${finReais(x.receita)}</span></div>`).join('');
+
+      document.getElementById('fin-pend-painel').style.display = d.pendencias.length ? '' : 'none';
+      document.getElementById('fin-pend-count').textContent = d.pendencias.length ? `${d.pendencias.length}${d.pendencias.length === 30 ? '+' : ''}` : '';
+      const rotuloFalta = { valor: 'valor cobrado', custo: 'valor da prestadora', prestadora: 'prestadora' };
+      document.getElementById('fin-pendencias').innerHTML = d.pendencias.map(x =>
+        `<div class="tablerow fin-clicavel" onclick="finIrParaDia('${x.dia}')"><div class="tr-body"><strong>${escapeHtml(x.tipo_servico)}</strong><span>${dataBR(x.dia)}${x.hora ? ' · ' + x.hora : ''}${x.cliente ? ' · ' + escapeHtml(x.cliente) : ''}</span></div><span class="chip chip-off">falta: ${x.falta.map(f => rotuloFalta[f]).join(', ')}</span></div>`).join('');
+
+      for (const id of finAbertas) await finCarregarDetalhe(id); // listas abertas continuam abertas (e atualizadas)
+    }
+
+    async function finCarregarDetalhe(prestadoraId) {
+      const alvo = document.getElementById('fin-det-' + prestadoraId);
+      if (!alvo) { finAbertas.delete(prestadoraId); return; }
+      try {
+        const r = await api(`/financeiro/${currentUnit}/repasses/${prestadoraId}?mes=${finMes}`);
+        finDetalhes[prestadoraId] = r;
+        alvo.innerHTML = `<table><thead><tr><th>Data</th><th>Serviço</th><th>Cliente</th><th class="num">Valor</th><th>Situação</th></tr></thead><tbody>`
+          + r.atendimentos.map(a => `<tr><td>${dataBR(a.dia)}${a.hora ? ' ' + a.hora : ''}</td><td>${escapeHtml(a.tipo_servico)}</td><td>${escapeHtml(a.cliente || '—')}</td><td class="num">${finReais(a.custo)}</td><td>${a.repasse_pago_em ? 'pago em ' + dataBR(String(a.repasse_pago_em).slice(0, 10)) : (a.custo === null ? 'sem valor' : 'a pagar')}</td></tr>`).join('')
+          + `</tbody></table><div style="margin-top:10px"><button class="btn-sm ghost" onclick="finBaixarCsv('${prestadoraId}')">Baixar planilha (CSV)</button></div>`;
+      } catch (err) { alvo.innerHTML = `<div class="atd-aviso">${escapeHtml(err.message)}</div>`; }
+    }
+
+    async function finVer(prestadoraId) {
+      const alvo = document.getElementById('fin-det-' + prestadoraId);
+      if (!alvo) return;
+      if (finAbertas.has(prestadoraId)) { finAbertas.delete(prestadoraId); alvo.style.display = 'none'; }
+      else { finAbertas.add(prestadoraId); alvo.style.display = 'block'; alvo.innerHTML = '<div class="atd-aviso">Carregando…</div>'; await finCarregarDetalhe(prestadoraId); }
+      // o texto do botão "Ver/Ocultar" acompanha
+      const linha = alvo.previousElementSibling?.querySelector('.fin-acoes button');
+      if (linha) linha.textContent = finAbertas.has(prestadoraId) ? 'Ocultar' : 'Ver';
+    }
+
+    async function finPagar(prestadoraId, desfazer) {
+      if (finOcupado) return;
+      const x = finDados.por_prestadora.find(p => p.prestadora_id === prestadoraId);
+      if (!x) return;
+      const pergunta = desfazer
+        ? `Desfazer o pagamento dos atendimentos de ${x.prestadora} em ${finRotuloMes(finMes)}? Eles voltam a "a pagar".`
+        : `Marcar como PAGO o repasse de ${x.prestadora} (${finReais(x.pendente)}) referente a ${finRotuloMes(finMes)}?`;
+      if (!window.confirm(pergunta)) return;
+      finOcupado = true;
+      try {
+        const r = await api(`/financeiro/${currentUnit}/repasses/${prestadoraId}/pagar`, { method: 'POST', body: JSON.stringify({ mes: finMes, desfazer }) });
+        toast(desfazer ? `Pagamento desfeito (${plural(r.atualizados, 'atendimento', 'atendimentos')}).` : `Repasse marcado como pago (${plural(r.atualizados, 'atendimento', 'atendimentos')}).`);
+        await renderFinanceiro();
+      } catch (err) { toast('Erro ao atualizar o repasse: ' + err.message); }
+      finally { finOcupado = false; }
+    }
+
+    // Planilha do repasse de uma prestadora (abre direto no Excel pt-BR: separador ";", vírgula
+    // decimal, BOM do UTF-8). Textos que começam com = + - @ ganham um apóstrofo: o Excel
+    // trataria como fórmula (o nome do serviço/cliente vem da planilha importada).
+    function finBaixarCsv(prestadoraId) {
+      const r = finDetalhes[prestadoraId];
+      if (!r) return;
+      const texto = c => { let s = String(c ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
+      const linhas = [['Data', 'Horário', 'Serviço', 'Cliente', 'Valor (R$)', 'Situação'].map(texto).join(';')];
+      for (const a of r.atendimentos) {
+        linhas.push([texto(dataBR(a.dia)), texto(a.hora), texto(a.tipo_servico), texto(a.cliente), a.custo === null ? '' : a.custo.toFixed(2).replace('.', ','),
+          texto(a.repasse_pago_em ? 'pago em ' + dataBR(String(a.repasse_pago_em).slice(0, 10)) : (a.custo === null ? 'sem valor' : 'a pagar'))].join(';'));
+      }
+      const total = r.atendimentos.reduce((s, a) => s + (a.custo ?? 0), 0);
+      linhas.push(['', '', '', texto('Total'), total.toFixed(2).replace('.', ','), ''].join(';'));
+      const blob = new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `repasse-${r.prestadora.nome.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()}-${r.mes}.csv`;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    }
+
+    // Pendência clicada: abre a Agenda no dia daquele atendimento pra completar o que falta
+    function finIrParaDia(dia) { adminView('agenda', dia); }
+
     /* Acessos: CRUD de sub-administradores (funcionários com permissão por módulo) */
     let subadminsCache = [];
     let subadminEditandoId = null; // null = formulário em modo "criar"
-    const SA_MODULOS = ['agenda', 'avaliacoes', 'equipe', 'clientes', 'dashboard'];
-    const SA_ROTULOS = { agenda: 'Agenda', avaliacoes: 'Avaliações', equipe: 'Equipe', clientes: 'Clientes', dashboard: 'Visão geral' };
+    const SA_MODULOS = ['agenda', 'avaliacoes', 'equipe', 'clientes', 'dashboard', 'financeiro'];
+    const SA_ROTULOS = { agenda: 'Agenda', avaliacoes: 'Avaliações', equipe: 'Equipe', clientes: 'Clientes', dashboard: 'Visão geral', financeiro: 'Financeiro' };
 
     async function salvarTelefoneUnidade() {
       const telefone = document.getElementById('sa-tel-unidade').value.trim();
@@ -5043,9 +5398,21 @@
         toast('Telefone da unidade atualizado.');
       } catch (err) { toast('Erro ao salvar telefone: ' + err.message); }
     }
+    async function salvarEnderecoUnidade() {
+      const endereco = document.getElementById('sa-end-unidade').value.trim();
+      const endereco_curto = document.getElementById('sa-end-curto-unidade').value.trim();
+      try {
+        const u = await api(`/unidades/${currentUnit}/endereco`, { method: 'PATCH', body: JSON.stringify({ endereco, endereco_curto }) });
+        cidades[currentUnit].end = u.endereco; cidades[currentUnit].endCurto = u.endereco_curto;
+        aplicarEnderecoNoSite(cidades[currentUnit]);
+        toast(u.endereco ? 'Endereço da unidade atualizado.' : 'Endereço removido — o site não mostra mais esse campo.');
+      } catch (err) { toast('Erro ao salvar endereço: ' + err.message); }
+    }
     async function renderSubadmins() {
       document.getElementById('sa-unit').textContent = unidades[currentUnit].nome;
       document.getElementById('sa-tel-unidade').value = (cidades[currentUnit] || {}).tel || '';
+      document.getElementById('sa-end-unidade').value = (cidades[currentUnit] || {}).end || '';
+      document.getElementById('sa-end-curto-unidade').value = (cidades[currentUnit] || {}).endCurto || '';
       try {
         subadminsCache = await api(`/sub-administradores/${currentUnit}`);
       } catch (err) { toast('Erro ao carregar acessos: ' + err.message); subadminsCache = []; }

@@ -1,16 +1,25 @@
 const { Pool } = require('pg');
 
+// Em produção (Neon/Render) o banco vem numa URL só, e exige SSL; localmente
+// segue valendo o PGHOST/PGUSER/... do .env.
+const conexao = process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+  : {
+      host: process.env.PGHOST || 'localhost',
+      port: Number(process.env.PGPORT) || 5432,
+      database: process.env.PGDATABASE,
+      user: process.env.PGUSER,
+      password: process.env.PGPASSWORD,
+    };
+
 const pool = new Pool({
-  host: process.env.PGHOST || 'localhost',
-  port: Number(process.env.PGPORT) || 5432,
-  database: process.env.PGDATABASE,
-  user: process.env.PGUSER,
-  password: process.env.PGPASSWORD,
+  ...conexao,
   max: 10,
   idleTimeoutMillis: 30000,
   // Sem isso, com o Postgres fora do ar a requisição fica pendurada pra sempre
   // em vez de falhar rápido com erro claro; e uma query travada nunca solta a conexão.
-  connectionTimeoutMillis: 5000,
+  // (Banco hospedado grátis, tipo Neon, "dorme" quando ocioso: acordar pode passar de 5 s.)
+  connectionTimeoutMillis: process.env.DATABASE_URL ? 20000 : 5000,
   statement_timeout: 15000,
   application_name: 'portal-da-maria-api',
 });
@@ -73,6 +82,52 @@ const MIGRACOES = [
   `alter table prestadoras  add column if not exists atualizado_em timestamptz not null default now()`,
   `alter table atendimentos add column if not exists valor_prestadora numeric(10,2)`,
 
+  // prestadoras vindas da planilha de atendimentos não têm telefone (só o nome): o login
+  // delas é pelo e-mail. O telefone continua único quando existe (NULLs não colidem).
+  `alter table prestadoras alter column telefone drop not null`,
+
+  // o endereço da unidade passou a ser opcional: sem endereço, o campo some do site
+  `alter table unidades alter column endereco drop not null`,
+  `alter table unidades alter column endereco_curto drop not null`,
+
+  // atendimento de uma série recorrente guarda o valor MENSAL informado; o valor de cada
+  // ocorrência (atendimentos.valor) é a parte dele que cabe naquele atendimento
+  `alter table atendimentos add column if not exists valor_mensal numeric(10,2)`,
+
+  // quando o repasse (pagamento à prestadora) deste atendimento foi pago; nulo = a pagar
+  `alter table atendimentos add column if not exists repasse_pago_em timestamptz`,
+
+  // As views da Visão geral e da Equipe juntavam atendimentos com avaliações num mesmo
+  // select: cada atendimento era contado uma vez POR AVALIAÇÃO (1 atendimento + 5 avaliações
+  // = "5 atendimentos hoje") e o faturamento do mês saía multiplicado. Agora cada número vem
+  // da sua própria subconsulta. Mesmas colunas de antes (só o cálculo mudou). "Hoje" é a
+  // data de Brasília, não a do servidor; atendimento cancelado não conta.
+  `create or replace view vw_dashboard_unidade as
+   select
+     u.id as unidade_id,
+     u.nome as unidade_nome,
+     (select count(*) from atendimentos a
+       where a.unidade_id = u.id and a.status <> 'cancelado'
+         and a.data_atendimento = (now() at time zone 'America/Sao_Paulo')::date) as atendimentos_hoje,
+     (select count(distinct a.prestadora_id) from atendimentos a
+       where a.unidade_id = u.id and a.status = 'aceito'
+         and a.data_atendimento = (now() at time zone 'America/Sao_Paulo')::date) as prestadoras_escaladas_hoje,
+     coalesce((select sum(a.valor) from atendimentos a
+       where a.unidade_id = u.id and a.status = 'concluido'
+         and date_trunc('month', a.data_atendimento) = date_trunc('month', (now() at time zone 'America/Sao_Paulo')::date)), 0) as faturamento_mes,
+     (select round(avg(av.nota), 1) from avaliacoes av join prestadoras p on p.id = av.prestadora_id
+       where p.unidade_id = u.id and av.status = 'aprovada') as nps_medio
+   from unidades u`,
+  `create or replace view vw_equipe_unidade as
+   select
+     p.id as prestadora_id,
+     p.unidade_id,
+     p.nome,
+     p.ativa,
+     (select count(*) from atendimentos a where a.prestadora_id = p.id and a.status = 'concluido') as total_atendimentos,
+     (select round(avg(av.nota), 1) from avaliacoes av where av.prestadora_id = p.id and av.status = 'aprovada') as nota_media
+   from prestadoras p`,
+
   // índices que a sincronização entre usuários consulta a cada poucos segundos
   `create index if not exists idx_atendimentos_unidade_atualizado on atendimentos(unidade_id, atualizado_em)`,
   `create index if not exists idx_atendimentos_cliente on atendimentos(cliente_id)`,
@@ -114,7 +169,7 @@ async function prepararBanco() {
   );
   const faltando = rows.filter(r => !r.existe).map(r => r.tabela);
   if (faltando.length) {
-    throw new Error(`O banco "${process.env.PGDATABASE}" não tem as tabelas: ${faltando.join(', ')}. Rode: psql -U postgres -d ${process.env.PGDATABASE} -f banco-schema.sql`);
+    throw new Error(`O banco não tem as tabelas: ${faltando.join(', ')}. Rode (dentro de api/): npm run banco:schema`);
   }
 
   for (const comando of MIGRACOES) {

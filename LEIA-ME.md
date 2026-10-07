@@ -76,7 +76,16 @@ limite de login, e apaga tudo que criou. Dica: pra ele não disparar e-mail de v
 
 Outro teste, `npm run teste:recuperacao`, cobre recuperação de senha (todos os perfis e os limites contra abuso), o valor
 por atendimento das prestadoras e o local do atendimento. Ele dispara pedidos de código, então rode contra uma API de
-teste **sem** provedor de e-mail (instruções no cabeçalho de `api/scripts/testar-recuperacao-valores.js`).
+teste **sem** provedor de e-mail (instruções no cabeçalho de `api/scripts/testar-recuperacao-valores.js`). Esse mesmo
+teste cobre também o valor dos atendimentos (unitário e em grupo), o endereço da unidade e a criação automática de
+prestadoras a partir da planilha, além do Financeiro (permissões, repasses, pagamento), das views corrigidas e da
+conclusão automática (essa parte roda numa transação revertida, sem tocar nos atendimentos reais).
+`npm run teste:recorrencia` (divisão do valor mensal) e `npm run teste:financeiro` (receita, custo, margem, repasses)
+não precisam de API nem de banco.
+
+**Publicar na internet (Render + Neon):** passo a passo, e o que só você pode fazer, em `PUBLICAR-SITE.md`. No
+código já estão: banco por `DATABASE_URL`, `render.yaml`, `/api/ping`, `npm run banco:schema` (`-- --sem-exemplos`
+pra não criar contas de exemplo) e `npm run admin:criar` (cria o 1º administrador direto no banco).
 
 ### 3.1 (Opcional) Envio real de e-mail
 
@@ -149,7 +158,10 @@ api/
       importarPlanilha.js    — lê e valida a planilha .xlsx de atendimentos (cabeçalho flexível, datas/horas)
     scripts/testar-email.js  — `npm run email:teste -- destino@x.com`: testa o provedor de e-mail do .env
     scripts/testar-cadastros.js — `npm run teste:cadastros`: teste de ponta a ponta de cadastro/acesso/sincronização
-    scripts/testar-recuperacao-valores.js — `npm run teste:recuperacao`: recuperação de senha, valor por atendimento, local
+    scripts/testar-recuperacao-valores.js — `npm run teste:recuperacao`: recuperação de senha, valores, local, endereço, planilha
+    scripts/testar-recorrencia.js — `npm run teste:recorrencia`: divisão do valor mensal entre as ocorrências
+    scripts/testar-financeiro.js — `npm run teste:financeiro`: cálculos do módulo Financeiro (sem API/banco)
+    scripts/vincular-profissionais-importadas.js — `npm run importadas:vincular`: liga atendimentos importados às prestadoras
       asyncHandler.js        — evita que erro numa rota derrube o processo
     routes/
       auth.js                — cadastro (admin/prestadora/cliente) + login unificado + recuperação de senha
@@ -160,6 +172,9 @@ api/
       sync.js                   — impressão digital do que cada usuário enxerga (a tela consulta a cada 4s)
       subadministradores.js     — CRUD de sub-administradores (só admin completo)
       perfil.js                 — "Meu perfil": nome/foto/telefone/senha + e-mail com verificação, pros 4 tipos
+      financeiro.js             — resumo do mês (receita/custo/margem), folha e pagamento de repasses às prestadoras
+    utils/financeiro.js        — cálculos do Financeiro (em centavos, testáveis sem banco)
+    utils/conclusao.js         — conclui sozinho o atendimento aceito cuja data/hora já passou (a cada 5 min)
 ```
 
 Autenticação: senha com hash `bcrypt`, sessão via JWT (7 dias) guardado no `localStorage` do navegador (`pm-token`).
@@ -197,6 +212,56 @@ tarifa definida o valor simplesmente não aparece. Atendimentos "aceitos" com da
 Dá pra corrigir ou preencher o local (administrador e funcionário com agenda), inclusive em atendimento concluído;
 deixar vazio apaga. Nas telas de quem lê (prestadora, avisos de WhatsApp) atendimento sem local não mostra a linha.
 
+**Endereço da unidade (local do estabelecimento):** é o endereço que aparece no site (cabeçalho e seção "Fale com a
+gente"). O administrador edita em **Acessos → Endereço da unidade** (completo + um resumido opcional pro cabeçalho;
+só administrador completo, nunca funcionário). **Deixando em branco, o campo some do site** em vez de aparecer vazio.
+
+**Valor do atendimento (o que o cliente paga):** é coletado no cadastro.
+- *Atendimento único*: campo "Valor do atendimento (R$)" (opcional). Dá pra preencher ou corrigir depois, clicando
+  no atendimento na agenda (o balão tem Prestadora, Local e Valor).
+- *Atendimento recorrente (em grupo)*: cada dia da semana tem o campo **"Valor do mês inteiro (R$)"**. O sistema
+  divide esse valor entre os atendimentos de cada mês, **pelo número de vezes que o padrão ocorre naquele mês**: R$ 1.200
+  com 4 terças = R$ 300 cada; com 5 terças = R$ 240 cada; quinzenal (2 ou 3 por mês) idem. A soma do mês fecha no
+  valor informado, centavo a centavo. Mês só parcialmente coberto (a série começa ou termina no meio dele) recebe a
+  parte proporcional às ocorrências que de fato entram. Cada atendimento guarda o seu valor (`atendimentos.valor`)
+  e o mensal original (`valor_mensal`) — é daí que os dashboards vão somar o faturamento.
+- Planilha importada: não traz coluna de valor, então esses atendimentos ficam sem valor até alguém preenchê-lo.
+- Não confundir com o **valor pago à prestadora** (tela Equipe), que é o repasse.
+
+**Prestadoras vindas da planilha:** ao importar, as profissionais que ainda não existem como prestadoras são
+**cadastradas automaticamente** e os atendimentos já ficam ligados a elas. Como a planilha só traz o nome, a conta
+nasce assim: e-mail = nome sem espaços/acentos + `@gmail.com` (ex.: `clarisseiracemarother@gmail.com`; homônimas
+ganham um número), **senha padrão `senha123`**, sem telefone (o login é pelo e-mail). A prestadora ou o admin troca
+e-mail e senha no "Meu perfil". Atenção: o e-mail é presumido, então códigos de recuperação de senha vão pra esse
+endereço — troque pelo e-mail real. Os atendimentos já importados antes disso foram ligados com
+`npm run importadas:vincular -- --aplicar` (sem o `--aplicar` ele só simula e mostra o que faria).
+
+**Conclusão automática:** a cada 5 minutos (e ao subir a API) o atendimento **aceito** cuja data/hora + duração já
+passou vira **concluído** (sem horário, vale o dia inteiro; convite nunca aceito não conclui). Ao concluir, trava a
+tarifa da prestadora. É o que faz o "realizado" existir: libera a avaliação pelo cliente, alimenta o total de
+atendimentos da Equipe e é a base do Financeiro.
+
+**Financeiro (menu *Financeiro*; administrador, ou funcionário com a permissão "Financeiro" marcada em Acessos):**
+tela por mês (setas ‹ ›) com
+- **Receita** (soma do valor cobrado dos concluídos), **Custo** (repasses às prestadoras) e **Margem** (R$ e %),
+  com comparação ao mês anterior; mais o **A realizar no mês** (receita e custo previstos dos agendados).
+  A margem só considera os atendimentos em que se sabe o valor E o custo (a tela diz "calculada em X de Y") — receita
+  sem custo pareceria lucro puro.
+- **Repasses às prestadoras**: por prestadora, os atendimentos concluídos do mês × o valor por atendimento dela, com
+  total, pago e pendente. **Ver** abre os atendimentos e permite **baixar a planilha (CSV, abre no Excel)**;
+  **Marcar como pago** registra o pagamento (e trava o valor: mudar a tarifa depois não altera o que foi pago) e
+  **Desfazer pagamento** reverte. A prestadora vê no painel dela quanto do mês já foi pago.
+- **Margem por serviço** e **Maiores clientes**.
+- **Alertas e pendências**: concluídos sem valor cobrado, sem custo (prestadora sem valor por atendimento definido), futuros sem
+  prestadora, convites vencidos. Cada pendência é clicável e abre a agenda no dia, pra completar o valor.
+Os cálculos ficam em `api/src/utils/financeiro.js` (testados por `npm run teste:financeiro`, sem banco) e a API em
+`/api/financeiro/:slug/...`. Receita = o que o **cliente** paga; custo = o que a **franquia** paga à prestadora.
+
+**Correção das contagens da Visão geral e da Equipe:** as views do banco juntavam atendimentos com avaliações e
+contavam cada atendimento uma vez por avaliação (1 atendimento + 5 avaliações = "5 hoje"; o faturamento e o total da
+Equipe saíam multiplicados). Agora cada número tem a sua própria consulta; "hoje" é a data de Brasília e cancelado não
+conta. A migração roda sozinha ao subir a API.
+
 **Limite de login:** só tentativas ERRADAS contam (10 por conta+IP em 15 min; 60 por IP) — logins certos, mesmo
 muitos seguidos, nunca bloqueiam.
 
@@ -223,10 +288,10 @@ com `<script>` no lugar do serviço executaria no navegador de quem visualizasse
   com prestadora vira convite e abre o WhatsApp com o link pra ela confirmar. *Importar planilha*: aceita o `.xlsx`
   exportado do sistema da franquia (colunas Orçamento, Número, Data, Horário, Período, Serviço, Tipo, Horas,
   Cliente, Profissionais, Situação, Recorrente). Mostra uma **pré-visualização** (quantos são novos, quantos já
-  existiam, clientes novos, profissionais sem cadastro) e só grava quando você confirma. A coluna **Número** é a
+  existiam, clientes novos, profissionais que serão cadastradas) e só grava quando você confirma. A coluna **Número** é a
   chave: reimportar o mesmo arquivo (ou um export mais novo) só traz o que ainda não existe. Clientes são criados
-  (sem login) pelo nome; profissionais que ainda não são prestadoras cadastradas aparecem na agenda como "sem
-  cadastro". A duração da coluna Horas define a altura do bloco na agenda.
+  (sem login) pelo nome, e as profissionais da planilha viram prestadoras (e-mail `nome@gmail.com`, senha `senha123`,
+  ver abaixo). A duração da coluna Horas define a altura do bloco na agenda.
 - **WhatsApp (clique pra conversar)**: ao reatribuir prestadora, ao ela confirmar um atendimento, e ao pedir um
   orçamento marcando "via WhatsApp", o sistema abre automaticamente um link `wa.me` com a mensagem (dados do
   atendimento ou do pedido) já preenchida para o número certo — prestadora ou unidade. Quem abriu ainda aperta
@@ -248,6 +313,5 @@ com `<script>` no lugar do serviço executaria no navegador de quem visualizasse
   processa a resposta automaticamente. A API oficial fica pra uma versão futura.
 - Atualizar atendimentos já importados quando uma planilha mais nova traz mudança neles (ex.: "Previsto" que virou
   "Concluído") — hoje a reimportação só traz o que for novo.
-- Cadastrar automaticamente como prestadoras as profissionais que aparecem na planilha (elas ficam como "sem
-  cadastro" na agenda até alguém criar a conta).
+- Valor (cobrado do cliente) vindo da planilha: ela não tem essa coluna.
 - Edição de data/hora de um atendimento já criado (só reatribuição de prestadora).

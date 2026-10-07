@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
@@ -12,6 +13,8 @@ const atendimentosRoutes = require('./routes/atendimentos');
 const avaliacoesRoutes = require('./routes/avaliacoes');
 const subadministradoresRoutes = require('./routes/subadministradores');
 const perfilRoutes = require('./routes/perfil');
+const financeiroRoutes = require('./routes/financeiro');
+const { iniciarConclusaoAutomatica } = require('./utils/conclusao');
 
 // Fail-fast: subir com o segredo de exemplo (ou um segredo curto) deixaria
 // qualquer token assinável por quem lesse este repositório — o valor do
@@ -23,6 +26,20 @@ if (!segredo || segredo === 'troque-este-segredo' || segredo.length < 32) {
 }
 
 const app = express();
+app.disable('x-powered-by'); // não anuncia "Express" pra quem olha os cabeçalhos
+// Cabeçalhos de segurança básicos pro site público: o navegador não "adivinha" tipo de
+// arquivo, o site não abre dentro de iframe de outro endereço (clickjacking) e links de saída
+// não vazam o endereço completo. HSTS só em produção (HTTPS garantido pela hospedagem).
+// Sem CSP de propósito: o frontend é um arquivo único com scripts e estilos embutidos.
+app.use((req, res, next) => {
+  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'strict-origin-when-cross-origin' });
+  if (process.env.NODE_ENV === 'production') res.set('Strict-Transport-Security', 'max-age=15552000');
+  next();
+});
+// Atrás do proxy da hospedagem (Render), o IP do visitante chega no
+// X-Forwarded-For; sem isso req.ip seria sempre o do proxy e os limites de
+// login/cadastro abaixo valeriam pra TODOS os usuários juntos.
+if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
 // Allowlist explícita em vez de cors() aberto pra qualquer origem — mantém o
 // Live Server/`npx serve` local funcionando e já fica pronto pra um domínio
 // de produção via variável de ambiente.
@@ -69,6 +86,10 @@ app.post('/api/auth/recuperar-senha/confirmar', limiteRecuperarIp, limiteRecuper
 app.use('/api/auth/login', limiteLoginIp, limiteLoginConta);
 app.use('/api/auth/cadastro', limiteCadastro);
 
+// Resposta leve, sem banco: é o que o health check da hospedagem chama (com frequência —
+// consultar o Postgres a cada chamada o manteria acordado e gastaria a cota do plano grátis).
+app.get('/api/ping', (req, res) => res.json({ ok: true }));
+
 // Health de verdade: toca o banco. Antes respondia {ok:true} mesmo com o Postgres fora do ar.
 app.get('/api/health', async (req, res) => {
   try {
@@ -86,6 +107,12 @@ app.use('/api/atendimentos', atendimentosRoutes);
 app.use('/api/avaliacoes', avaliacoesRoutes);
 app.use('/api/sub-administradores', subadministradoresRoutes);
 app.use('/api/perfil', perfilRoutes);
+app.use('/api/financeiro', financeiroRoutes);
+
+// O próprio servidor entrega o frontend (mesma origem da API = sem CORS no site
+// publicado). Só esse arquivo — nunca a pasta inteira, que tem .env, .sql etc.
+const ARQUIVO_SITE = path.join(__dirname, '..', '..', 'Portal Da Maria.html');
+app.get('/', (req, res) => res.sendFile(ARQUIVO_SITE));
 
 app.use((req, res) => res.status(404).json({ erro: 'Rota não encontrada' }));
 
@@ -107,6 +134,7 @@ prepararBanco()
   .then(() => new Promise((resolve, reject) => {
     const servidor = app.listen(PORT, () => {
       console.log(`API do Portal da Maria rodando em http://localhost:${PORT}`);
+      iniciarConclusaoAutomatica();
       resolve(servidor);
     });
     servidor.on('error', (erro) => {

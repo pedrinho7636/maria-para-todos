@@ -67,11 +67,12 @@ Navegação interna via `adminView(name)`, com sub-telas (`.adminview`) — cada
 | Sub-tela | Função de render | Fonte de dados |
 |---|---|---|
 | Visão geral | `carregarUnidadeAdmin()` | `GET /unidades/:slug/admin/dashboard` (view `vw_dashboard_unidade`) |
-| Agenda | `renderAgendaAdmin()` | `GET /atendimentos/admin/:slug/agenda` (calendário + linha do tempo do dia, reatribuição de prestadora, recorrência semanal) |
+| Agenda | `renderAgendaAdmin()` | `GET /atendimentos/admin/:slug/agenda` (calendário + linha do tempo do dia; o balão do atendimento troca prestadora e edita local e valor — `PATCH .../:id/local` e `.../:id/valor`; recorrência semanal com "valor do mês inteiro" dividido pelas ocorrências de cada mês, ver `api/src/utils/recorrencia.js`) |
 | Equipe | `renderEquipe()` | `GET /unidades/:slug/admin/equipe` (view `vw_equipe_unidade` + `prestadoras.valor_por_atendimento`); `PATCH /unidades/:slug/admin/equipe/:prestadoraId` define quanto a franquia paga por atendimento (só admin completo) |
+| Financeiro | `renderFinanceiro()` | `GET /financeiro/:slug/resumo?mes=` (receita, custo, margem, previsto, repasses por prestadora, margem por serviço, maiores clientes, pendências), `GET .../repasses/:prestadoraId?mes=` (folha do mês, base do CSV) e `POST .../repasses/:prestadoraId/pagar` (marca/desfaz o pagamento do mês). Módulo `financeiro` (admin completo ou funcionário com `pode_financeiro`). Cálculo em `api/src/utils/financeiro.js` |
 | Clientes | `renderClientes()` | `GET /unidades/:slug/admin/clientes` (view `vw_clientes_unidade`) |
 | Avaliações | `renderAvaliacoesAdmin()` | `GET /avaliacoes/admin/:slug` (moderação) |
-| Acessos | `renderSubadmins()` | `GET /sub-administradores/:slug` — CRUD de sub-administradores + telefone de WhatsApp da unidade (só admin completo, nunca delegável) |
+| Acessos | `renderSubadmins()` | `GET /sub-administradores/:slug` — CRUD de sub-administradores + telefone de WhatsApp e **endereço** da unidade (`PATCH /unidades/:slug/endereco`; só admin completo, nunca delegável; endereço vazio some do site) |
 
 Alternância de unidade (Carazinho/Panambi) via `setUnit(key)`, que recarrega os dados da unidade escolhida.
 

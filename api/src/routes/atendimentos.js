@@ -5,6 +5,8 @@ const { pool } = require('../db');
 const { requireAuth, requireRole, requireAcessoUnidade } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 const { lerAtendimentos, normalizarTexto } = require('../utils/importarPlanilha');
+const { garantirPrestadoras, SENHA_PADRAO } = require('../utils/prestadorasImportadas');
+const { gerarOcorrencias } = require('../utils/recorrencia');
 
 const router = express.Router();
 
@@ -79,7 +81,7 @@ router.get('/admin/:slug/agenda', requireAuth, requireAcessoUnidade('agenda'), a
      from atendimentos a
      left join prestadoras p on p.id = a.prestadora_id
      left join clientes c on c.id = a.cliente_id
-     where a.unidade_id = $1 and a.data_atendimento = coalesce($2::date, current_date)
+     where a.unidade_id = $1 and a.data_atendimento = coalesce($2::date, (now() at time zone 'America/Sao_Paulo')::date)
        and a.status <> 'cancelado'
      order by a.hora_atendimento nulls last`,
     [req.unidadeId, data || null]
@@ -168,6 +170,27 @@ router.patch('/admin/:slug/:id/local', requireAuth, requireAcessoUnidade('agenda
      where id = $2 and unidade_id = $3 and status <> 'cancelado'
      returning *`,
     [local || null, req.params.id, req.unidadeId]
+  );
+  if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado ou cancelado' });
+  res.json(atendimento);
+}));
+
+// Valor cobrado do cliente por este atendimento. Vazio remove. (Atendimento de uma série
+// recorrente ganha o valor dividido na criação; aqui dá pra ajustar um deles à mão.)
+router.patch('/admin/:slug/:id/valor', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
+  const bruto = req.body.valor;
+  let valor = null;
+  if (bruto !== null && bruto !== undefined && String(bruto).trim() !== '') {
+    valor = Number(String(bruto).trim().replace(',', '.'));
+    if (!Number.isFinite(valor) || valor < 0 || valor >= 1e8) return res.status(400).json({ erro: 'Valor inválido' });
+    valor = Math.round(valor * 100) / 100;
+  }
+
+  const { rows: [atendimento] } = await pool.query(
+    `update atendimentos set valor = $1, atualizado_em = now()
+     where id = $2 and unidade_id = $3 and status <> 'cancelado'
+     returning *`,
+    [valor, req.params.id, req.unidadeId]
   );
   if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado ou cancelado' });
   res.json(atendimento);
@@ -308,7 +331,10 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
     invalidas: lido.invalidos.length,
     invalidas_detalhe: lido.invalidos.slice(0, 20),
     clientes_novos: clientesNovos.size,
+    // profissionais que ainda não são prestadoras: a confirmação cria a conta de cada uma
+    // (e-mail nome@gmail.com, senha padrão) e já liga os atendimentos a ela
     profissionais_sem_cadastro: [...semCadastro].map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd),
+    senha_padrao: SENHA_PADRAO,
     periodo: datas.length ? { de: datas[0], ate: datas[datas.length - 1] } : null,
   };
 
@@ -317,6 +343,11 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // cria (na mesma transação) as prestadoras que a planilha cita e ainda não existem
+    const { ids: idsPrestadoras, criadas } = await garantirPrestadoras(
+      client, req.unidadeId, [...new Set(novas.map(l => l.profissional).filter(Boolean))]
+    );
+    for (const [chave, id] of idsPrestadoras) idPrestadora.set(chave, id);
     let importados = 0;
     for (const l of novas) {
       let clienteId = null;
@@ -351,7 +382,10 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
       importados += r.rowCount;
     }
     await client.query('COMMIT');
-    res.json({ confirmado: true, importados, ja_existentes: lido.linhas.length - importados, resumo });
+    res.json({
+      confirmado: true, importados, ja_existentes: lido.linhas.length - importados, resumo,
+      prestadoras_criadas: criadas.map(({ nome, email }) => ({ nome, email })),
+    });
   } catch (erro) {
     await client.query('ROLLBACK');
     throw erro;
@@ -383,29 +417,25 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
     if (item.cliente_id && !await pertenceAUnidade('clientes', item.cliente_id, req.unidadeId)) {
       return res.status(400).json({ erro: 'cliente_id de um dos itens não pertence a esta unidade' });
     }
+    // valor do MÊS inteiro desse item (opcional); cada ocorrência recebe a parte dela
+    if (item.valor_mensal === undefined || item.valor_mensal === null || String(item.valor_mensal).trim() === '') {
+      item.valor_mensal = null;
+    } else {
+      const v = Number(String(item.valor_mensal).replace(',', '.'));
+      if (!Number.isFinite(v) || v < 0 || v >= 1e8) return res.status(400).json({ erro: 'Valor do mês inválido em um dos itens' });
+      item.valor_mensal = Math.round(v * 100) / 100;
+    }
   }
 
-  const inicio = new Date(data_inicio + 'T00:00:00');
-  if (Number.isNaN(inicio.getTime())) return res.status(400).json({ erro: 'data_inicio inválida' });
-  const horizonte = parseInt(horizonte_meses, 10) || 3;
-  const fim = new Date(inicio);
-  fim.setMonth(fim.getMonth() + horizonte);
-
-  // domingo da semana que contém data_inicio = semana 0 do padrão
-  const domingoSemana0 = new Date(inicio);
-  domingoSemana0.setDate(domingoSemana0.getDate() - domingoSemana0.getDay());
-
-  const linhas = [];
-  for (let semana = new Date(domingoSemana0), indiceSemana = 0; semana <= fim; semana.setDate(semana.getDate() + 7), indiceSemana++) {
-    if (semanas_alternadas && indiceSemana % 2 !== 0) continue; // semana "sim/não": pula a semana inteira, sem exceção
-    for (const item of itens) {
-      const data = new Date(semana);
-      data.setDate(data.getDate() + Number(item.dia_semana));
-      if (data < inicio || data > fim) continue;
-      linhas.push({ data: data.toISOString().slice(0, 10), item });
-      if (linhas.length >= 200) break; // trava de segurança contra input absurdo
-    }
-    if (linhas.length >= 200) break;
+  // trava de segurança contra input absurdo: até 200 ocorrências por série
+  let linhas;
+  try {
+    linhas = gerarOcorrencias({
+      dataInicio: data_inicio, horizonteMeses: horizonte_meses, alternadas: !!semanas_alternadas,
+      itens: itens.map(i => ({ dia_semana: Number(i.dia_semana), valor_mensal: i.valor_mensal })),
+    });
+  } catch (erro) {
+    return res.status(400).json({ erro: erro.message });
   }
   if (linhas.length === 0) return res.status(400).json({ erro: 'Nenhuma ocorrência gerada nesse período' });
 
@@ -414,16 +444,17 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
   try {
     await client.query('BEGIN');
     const inseridos = [];
-    for (const { data, item } of linhas) {
+    for (const { data, item: indice, valor, valor_mensal: valorMensal } of linhas) {
+      const item = itens[indice];
       const status = item.prestadora_id ? 'proposto' : 'pedido';
       const { rows: [linha] } = await client.query(
         `insert into atendimentos
            (unidade_id, cliente_id, prestadora_id, tipo_servico, area, data_atendimento,
-            hora_atendimento, valor, status, origem, serie_id)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'manual', $10)
+            hora_atendimento, valor, valor_mensal, status, origem, serie_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'manual', $11)
          returning *`,
         [req.unidadeId, item.cliente_id || null, item.prestadora_id || null, item.tipo_servico, item.area || null,
-         data, item.hora_atendimento, item.valor || null, status, serieId]
+         data, item.hora_atendimento, valor, valorMensal, status, serieId]
       );
       inseridos.push(linha);
     }
@@ -441,7 +472,7 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
 router.post('/admin/:slug/serie/:serieId/cancelar', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `update atendimentos set status = 'cancelado', atualizado_em = now()
-     where serie_id = $1 and unidade_id = $2 and data_atendimento >= current_date
+     where serie_id = $1 and unidade_id = $2 and data_atendimento >= (now() at time zone 'America/Sao_Paulo')::date
        and status not in ('concluido', 'cancelado')
      returning id`,
     [req.params.serieId, req.unidadeId]
@@ -485,7 +516,7 @@ router.get('/prestadora/me/resumo', requireAuth, requireRole('prestadora'), asyn
     `with datas as (
        select (now() at time zone 'America/Sao_Paulo')::date as hoje
      ), dados as (
-       select a.data_atendimento as dia, a.status,
+       select a.data_atendimento as dia, a.status, a.repasse_pago_em,
               coalesce(a.valor_prestadora, p.valor_por_atendimento) as valor
        from atendimentos a join prestadoras p on p.id = a.prestadora_id
        where a.prestadora_id = $1 and a.status in ('aceito', 'concluido')
@@ -496,6 +527,7 @@ router.get('/prestadora/me/resumo', requireAuth, requireRole('prestadora'), asyn
        coalesce(sum(valor) filter (where dia >= hoje - extract(dow from hoje)::int and dia < hoje - extract(dow from hoje)::int + 7), 0) as semana_total,
        count(*) filter (where date_trunc('month', dia) = date_trunc('month', hoje) and (status = 'concluido' or dia < hoje))::int as mes_realizados_qtd,
        coalesce(sum(valor) filter (where date_trunc('month', dia) = date_trunc('month', hoje) and (status = 'concluido' or dia < hoje)), 0) as mes_realizados_total,
+       coalesce(sum(valor) filter (where date_trunc('month', dia) = date_trunc('month', hoje) and repasse_pago_em is not null), 0) as mes_pago_total,
        count(*) filter (where date_trunc('month', dia) = date_trunc('month', hoje) and status = 'aceito' and dia >= hoje)::int as mes_previstos_qtd,
        coalesce(sum(valor) filter (where date_trunc('month', dia) = date_trunc('month', hoje) and status = 'aceito' and dia >= hoje), 0) as mes_previstos_total
      from dados, datas`,
@@ -506,7 +538,7 @@ router.get('/prestadora/me/resumo', requireAuth, requireRole('prestadora'), asyn
     valor_por_atendimento: n(r.valor_por_atendimento),
     semana: { qtd: r.semana_qtd, total: n(r.semana_total) },
     mes: {
-      realizados_qtd: r.mes_realizados_qtd, realizados_total: n(r.mes_realizados_total),
+      realizados_qtd: r.mes_realizados_qtd, realizados_total: n(r.mes_realizados_total), pago_total: n(r.mes_pago_total),
       previstos_qtd: r.mes_previstos_qtd, previstos_total: n(r.mes_previstos_total),
     },
   });

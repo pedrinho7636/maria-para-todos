@@ -185,18 +185,25 @@ comment on table codigos_verificacao is 'Códigos/tokens de verificação por e-
 -- ============================================================================
 
 -- Dashboard "Visão geral" do admin
+-- Cada número vem da sua própria subconsulta: juntar atendimentos com avaliações no mesmo select
+-- multiplicava a contagem (1 atendimento + 5 avaliações = "5 atendimentos") e o faturamento.
+-- "Hoje" = data de Brasília; atendimento cancelado não conta.
 create view vw_dashboard_unidade as
 select
   u.id as unidade_id,
   u.nome as unidade_nome,
-  count(*) filter (where a.data_atendimento = current_date) as atendimentos_hoje,
-  count(distinct a.prestadora_id) filter (where a.data_atendimento = current_date and a.status = 'aceito') as prestadoras_escaladas_hoje,
-  coalesce(sum(a.valor) filter (where date_trunc('month', a.data_atendimento) = date_trunc('month', current_date) and a.status = 'concluido'), 0) as faturamento_mes,
-  round(avg(av.nota) filter (where av.status = 'aprovada'), 1) as nps_medio
-from unidades u
-left join atendimentos a on a.unidade_id = u.id
-left join avaliacoes av on av.prestadora_id in (select id from prestadoras p where p.unidade_id = u.id)
-group by u.id, u.nome;
+  (select count(*) from atendimentos a
+    where a.unidade_id = u.id and a.status <> 'cancelado'
+      and a.data_atendimento = (now() at time zone 'America/Sao_Paulo')::date) as atendimentos_hoje,
+  (select count(distinct a.prestadora_id) from atendimentos a
+    where a.unidade_id = u.id and a.status = 'aceito'
+      and a.data_atendimento = (now() at time zone 'America/Sao_Paulo')::date) as prestadoras_escaladas_hoje,
+  coalesce((select sum(a.valor) from atendimentos a
+    where a.unidade_id = u.id and a.status = 'concluido'
+      and date_trunc('month', a.data_atendimento) = date_trunc('month', (now() at time zone 'America/Sao_Paulo')::date)), 0) as faturamento_mes,
+  (select round(avg(av.nota), 1) from avaliacoes av join prestadoras p on p.id = av.prestadora_id
+    where p.unidade_id = u.id and av.status = 'aprovada') as nps_medio
+from unidades u;
 
 -- Tela "Equipe"
 create view vw_equipe_unidade as
@@ -205,12 +212,9 @@ select
   p.unidade_id,
   p.nome,
   p.ativa,
-  count(a.id) filter (where a.status = 'concluido') as total_atendimentos,
-  round(avg(av.nota) filter (where av.status = 'aprovada'), 1) as nota_media
-from prestadoras p
-left join atendimentos a on a.prestadora_id = p.id
-left join avaliacoes av on av.prestadora_id = p.id
-group by p.id, p.unidade_id, p.nome, p.ativa;
+  (select count(*) from atendimentos a where a.prestadora_id = p.id and a.status = 'concluido') as total_atendimentos,
+  (select round(avg(av.nota), 1) from avaliacoes av where av.prestadora_id = p.id and av.status = 'aprovada') as nota_media
+from prestadoras p;
 
 -- Tela "Clientes"
 create view vw_clientes_unidade as
@@ -347,6 +351,21 @@ create unique index uq_atendimentos_codigo_externo on atendimentos(unidade_id, c
 alter table prestadoras  add column valor_por_atendimento numeric(10,2);
 alter table prestadoras  add column atualizado_em timestamptz not null default now();
 alter table atendimentos add column valor_prestadora numeric(10,2);
+
+-- Prestadoras vindas da planilha de atendimentos só têm o nome: o telefone passa a ser
+-- opcional (continua único quando existe) e o login delas é pelo e-mail.
+alter table prestadoras alter column telefone drop not null;
+
+-- O endereço da unidade é editável pelo administrador e opcional: sem ele, some do site.
+alter table unidades alter column endereco drop not null;
+alter table unidades alter column endereco_curto drop not null;
+
+-- Atendimentos de uma série recorrente guardam o valor MENSAL informado; atendimentos.valor
+-- de cada ocorrência é a parte dele que cabe naquele atendimento (proporcional às ocorrências do mês).
+alter table atendimentos add column valor_mensal numeric(10,2);
+
+-- Financeiro: quando o repasse (pagamento à prestadora) deste atendimento foi pago; nulo = a pagar.
+alter table atendimentos add column repasse_pago_em timestamptz;
 
 create table sub_administradores (
   id              uuid primary key default gen_random_uuid(),

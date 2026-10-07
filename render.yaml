@@ -1,0 +1,40 @@
+# Blueprint do Render (https://render.com/docs/blueprint-spec): a API em Node
+# entrega o site (Portal Da Maria.html) e a API no mesmo endereço. O banco fica
+# no Neon (Postgres grátis sem prazo de expiração) — cole a URL dele em DATABASE_URL.
+#
+# Sem "rootDir" de propósito: o servidor lê o HTML (e o schema) da raiz do repositório,
+# que ficaria fora do alcance se o serviço fosse isolado na pasta api/.
+services:
+  - type: web
+    name: portal-da-maria
+    runtime: node
+    plan: free
+    # Mesma região do banco no Neon (AWS US East 2 / Ohio): cada requisição faz várias
+    # consultas, e banco em outro continente deixaria o site lento.
+    region: ohio
+    buildCommand: cd api && npm ci
+    startCommand: cd api && npm start
+    # /api/ping não consulta o banco: o Render chama a rota com frequência, e consultar o
+    # Neon a cada chamada o manteria acordado o tempo todo (gasta a cota do plano grátis).
+    # A saúde de verdade (com banco) fica em /api/health.
+    healthCheckPath: /api/ping
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      # Conclusão automática de atendimentos a cada 30 min (padrão local: 5). Um intervalo curto
+      # manteria o Neon grátis acordado o tempo todo e gastaria a cota mensal dele.
+      - key: CONCLUSAO_MINUTOS
+        value: "30"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      # E-mail: o plano grátis do Render bloqueia SMTP, então use a Resend (HTTP).
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: "Portal da Maria <onboarding@resend.dev>"

@@ -303,7 +303,7 @@ router.post('/login', async (req, res) => {
       }
       if (!usuario) return res.status(401).json({ erro: 'Credenciais inválidas' });
       if (perfilResolvido === 'sub_administrador' && !usuario.ativo) {
-        return res.status(401).json({ erro: 'Conta desativada' });
+        return res.status(401).json({ erro: 'Seu acesso está desativado. Peça ao administrador para reativá-lo (tela Acessos).' });
       }
 
       delete usuario.senha_hash;
