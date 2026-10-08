@@ -2980,6 +2980,20 @@
               </svg><span>Você administra mais de uma franquia? Informe <b>todos os CNPJs</b>, separados por
                 vírgula — mesmo que duas unidades usem o mesmo CNPJ.</span></div>
           </div>
+          <div class="field">
+            <label>Unidade(s) que você administra</label>
+            <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:6px">
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:14px"><input type="checkbox" class="cad-admin-un" value="carazinho"> Carazinho</label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:14px"><input type="checkbox" class="cad-admin-un" value="panambi"> Panambi</label>
+            </div>
+            <div class="warn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+                <path d="M12 9v4M12 17h.01" />
+              </svg><span>Seu CNPJ já está cadastrado na unidade? Pode deixar sem marcar. <b>CNPJ novo?</b> Marque a unidade:
+                se ela ainda <b>não tem administrador</b>, o CNPJ digitado passa a ser o dela; se já tem, o CNPJ precisa ser
+                o que está cadastrado.</span></div>
+          </div>
           <div class="field"><label>Senha</label><input id="cad-administrador-senha" type="password"
               placeholder="Crie uma senha"></div>
           <div class="field"><label>Confirmar senha</label><input id="cad-administrador-senha2" type="password"
@@ -3913,7 +3927,9 @@
       const detalhe = {
         'nao-configurado': 'O servidor de e-mail da API não está configurado.',
         'recusado-pelo-provedor': 'O provedor de e-mail recusou esse destinatário (conta de teste da Resend só entrega pro e-mail dono da conta).',
-        'erro-de-envio': 'O envio falhou (confira usuário/senha do SMTP e a conexão).',
+        'smtp-autenticacao': 'O servidor de e-mail recusou o usuário/senha (confira SMTP_USER e se SMTP_PASS é a senha de app do Gmail, 16 letras, sem espaços).',
+        'smtp-conexao': 'O servidor não conseguiu se conectar ao servidor de e-mail (porta bloqueada pela hospedagem ou falha de rede).',
+        'erro-de-envio': 'O envio falhou (veja o motivo nos logs da API).',
       }[motivo] || 'O envio falhou.';
       return 'Não foi possível enviar o e-mail. ' + detalhe + ' Em desenvolvimento o código aparece no console da API.';
     }
@@ -4379,7 +4395,10 @@
         if (!email) { toast('Preencha o e-mail.'); return; }
         if (!cnpjRaw) { toast('Informe o CNPJ de ao menos uma franquia.'); return; }
         if (!senha) { toast('Defina sua senha (abaixo) antes de verificar o e-mail.'); return; }
-        dados = { nome, sobrenome, email, senha, cnpjs: cnpjRaw.split(',').map(c => c.trim()).filter(Boolean) };
+        dados = {
+          nome, sobrenome, email, senha, cnpjs: cnpjRaw.split(',').map(c => c.trim()).filter(Boolean),
+          unidades: [...document.querySelectorAll('.cad-admin-un:checked')].map(el => el.value),
+        };
         rota = '/auth/cadastro/admin';
       } else if (ctx === 'prestadora-email') {
         const nome = document.getElementById('cad-prestadora-nome').value.trim();
@@ -4414,7 +4433,8 @@
         dadosCadastroPendente[ctx] = dados;
         document.getElementById(ctx + '-codebox').style.display = 'block';
         document.getElementById(ctx + '-verifybtn').textContent = 'Reenviar';
-        toast(mensagemEnvioEmail(resp.emailEnviado, dados.email, resp.motivoEmail));
+        toast(mensagemEnvioEmail(resp.emailEnviado, dados.email, resp.motivoEmail)
+          + (resp.cnpjNovo ? ` Ao confirmar, o CNPJ ${resp.cnpjNovo} passa a ser o da(s) unidade(s) marcada(s).` : ''));
       } catch (err) { toast('Erro ao verificar e-mail: ' + err.message); }
     }
     async function confirmarCodigo(ctx) {
@@ -4435,7 +4455,7 @@
       // Conta criada: limpa o formulário (a senha não fica na tela) e já ENTRA nela —
       // sem mandar a pessoa digitar login e senha de novo.
       const entrada = { 'admin-email': ['franqueado', dados.email], 'prestadora-email': ['prestadora', dados.telefone], 'cliente-email': ['cliente', dados.email] }[ctx];
-      document.querySelectorAll('#cad-fields-' + cadPerfil + ' input, #cad-fields-' + cadPerfil + ' select').forEach(el => { el.value = ''; });
+      document.querySelectorAll('#cad-fields-' + cadPerfil + ' input, #cad-fields-' + cadPerfil + ' select').forEach(el => { if (el.type === 'checkbox') el.checked = false; else el.value = ''; });
       document.getElementById(ctx + '-codebox').style.display = 'none';
       document.getElementById(ctx + '-ok').style.display = 'none';
       document.getElementById(ctx + '-verifybtn').textContent = 'Verificar';

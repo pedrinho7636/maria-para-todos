@@ -83,8 +83,18 @@ async function enviarEmail({ to, subject, html }) {
   } catch (erro) {
     console.error(`[email] falha ao enviar pra ${to} via ${via}:`, erro.message);
     logSimulado(to, subject, html, `falha no envio via ${via}`);
-    return { enviado: false, via, motivo: erro.recusado ? 'recusado-pelo-provedor' : 'erro-de-envio' };
+    return { enviado: false, via, motivo: classificarErro(erro) };
   }
+}
+
+// Diz à tela (sem vazar nenhum segredo) QUAL foi o tipo de falha, pra quem opera o site
+// saber o que consertar sem precisar abrir os logs: senha recusada é um problema, porta
+// bloqueada ou servidor inalcançável é outro, bem diferente.
+function classificarErro(erro) {
+  if (erro.recusado) return 'recusado-pelo-provedor';
+  if (erro.code === 'EAUTH' || [534, 535].includes(erro.responseCode)) return 'smtp-autenticacao';
+  if (['ETIMEDOUT', 'ECONNECTION', 'ESOCKET', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EDNS'].includes(erro.code)) return 'smtp-conexao';
+  return 'erro-de-envio';
 }
 
 function htmlCodigo(codigo, motivo) {
@@ -96,4 +106,4 @@ function htmlCodigo(codigo, motivo) {
   </div>`;
 }
 
-module.exports = { enviarEmail, configurado, smtpConfigurado, resendConfigurado, htmlCodigo };
+module.exports = { enviarEmail, classificarErro, configurado, smtpConfigurado, resendConfigurado, htmlCodigo };

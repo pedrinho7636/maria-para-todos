@@ -67,6 +67,78 @@ async function codigoDe(email) {
   const aCnpjRuim = await http('POST', '/auth/cadastro/admin', { ...adm, email: emailQa('admin2'), cnpjs: ['123'] });
   ok(aCnpjRuim.status === 400, 'CNPJ inválido é recusado com mensagem clara', `("${aCnpjRuim.json.erro}")`);
 
+  // ---------- ADMINISTRADOR COM CNPJ NOVO ----------
+  // Unidades de teste (sem administrador), pra não mexer nas unidades reais.
+  console.log('\nAdministrador com CNPJ novo (assume uma unidade livre)');
+  const gerarCnpj = (base12) => { // calcula os dois dígitos verificadores
+    const dv = (b) => { let s = 0, p = b.length - 7; for (const n of b) { s += Number(n) * p--; if (p < 2) p = 9; } const r = s % 11; return r < 2 ? 0 : 11 - r; };
+    const d1 = dv(base12), d2 = dv(base12 + d1);
+    return base12 + d1 + d2;
+  };
+  const formatar = (d) => `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  const novaUnidade = async (sufixo) => {
+    const slug = `qa-un-${id}-${sufixo}`;
+    await pool.query(`insert into unidades (slug, nome, uf, cnpj, telefone, endereco, endereco_curto) values ($1, $2, 'RS', '00.000.000/0000-00', '(00) 0 0000-0000', null, null)`, [slug, `QA Unidade ${sufixo}`]);
+    return slug;
+  };
+  const slugA = await novaUnidade('a'), slugB = await novaUnidade('b');
+  const base = String(Date.now()).slice(-8).padStart(8, '1');
+  const cnpjA = gerarCnpj(base + '0001'), cnpjB = gerarCnpj(base + '0002');
+  const admNovo = (nome, extra = {}) => ({ nome: 'QA', sobrenome: nome, email: emailQa(nome), senha: 'senha-qa-123', ...extra });
+
+  const n1 = admNovo('novo1', { cnpjs: [formatar(cnpjA)], unidades: [slugA] });
+  criados.emails.push(n1.email);
+  const n1a = await http('POST', '/auth/cadastro/admin', n1);
+  ok(n1a.status === 200 && n1a.json.cnpjNovo === formatar(cnpjA) && n1a.json.unidades?.[0]?.slug === slugA,
+    'CNPJ novo + unidade livre marcada: aceita e avisa qual CNPJ vai valer', `(HTTP ${n1a.status} ${n1a.json.erro || ''})`);
+  const n1b = await http('POST', '/auth/cadastro/admin/confirmar', { ...n1, codigo: await codigoDe(n1.email) });
+  ok(n1b.status === 201 && n1b.json.token, 'confirma o código e a conta é criada');
+  if (n1b.json.administrador) criados.admins.push(n1b.json.administrador.id);
+  const { rows: [uA] } = await pool.query('select cnpj from unidades where slug = $1', [slugA]);
+  ok(uA.cnpj === formatar(cnpjA), 'o CNPJ digitado passou a ser o CNPJ da unidade', `(${uA.cnpj})`);
+  const n1login = await http('POST', '/auth/login', { perfil: 'administrador', identificador: n1.email, senha: n1.senha });
+  const n1painel = await http('GET', `/unidades/${slugA}/admin/dashboard`, null, n1login.json.token);
+  ok(n1login.status === 200 && n1login.json.usuario.unidades_slugs?.includes(slugA) && n1painel.status === 200, 'entra e abre o painel da unidade assumida');
+
+  // a unidade agora TEM dono: ninguém assume com outro CNPJ
+  const n2 = admNovo('novo2', { cnpjs: [formatar(cnpjB)], unidades: [slugA] });
+  criados.emails.push(n2.email);
+  const n2a = await http('POST', '/auth/cadastro/admin', n2);
+  ok(n2a.status === 409 && /já tem administrador/.test(n2a.json.erro), 'unidade que já tem administrador NÃO é assumida com CNPJ novo', `("${n2a.json.erro}")`);
+  const n2b = await http('POST', '/auth/cadastro/admin', { ...n2, unidades: [] });
+  ok(n2b.status === 400 && /marque a unidade/.test(n2b.json.erro), 'CNPJ novo sem marcar unidade: mensagem diz o que fazer', `("${n2b.json.erro}")`);
+  const takeover = await http('POST', '/auth/cadastro/admin', { ...n2, unidades: ['carazinho'] });
+  ok(takeover.status === 409, 'tentativa de tomar a unidade Carazinho (que tem dono) com CNPJ novo é barrada');
+
+  // o administrador dono, ou quem digita o CNPJ já cadastrado dela, segue funcionando como antes
+  const n3 = admNovo('novo3', { cnpjs: [formatar(cnpjA)] });
+  criados.emails.push(n3.email);
+  const n3a = await http('POST', '/auth/cadastro/admin', n3);
+  ok(n3a.status === 200 && n3a.json.unidades?.some(u => u.slug === slugA) && !n3a.json.cnpjNovo, 'CNPJ já cadastrado na unidade segue vinculando (caminho de sempre)');
+
+  // validações do CNPJ novo
+  const cnpjRuim = cnpjB.slice(0, 13) + String((Number(cnpjB[13]) + 1) % 10);
+  const n4 = await http('POST', '/auth/cadastro/admin', admNovo('novo4', { cnpjs: [cnpjRuim], unidades: [slugB] }));
+  ok(n4.status === 400 && /inválido/.test(n4.json.erro), 'CNPJ novo com dígito verificador errado é recusado', `("${n4.json.erro}")`);
+  const n5 = await http('POST', '/auth/cadastro/admin', admNovo('novo5', { cnpjs: [formatar(cnpjB), formatar(gerarCnpj(base + '0003'))], unidades: [slugB] }));
+  ok(n5.status === 400 && /único CNPJ novo/.test(n5.json.erro), 'dois CNPJs novos de uma vez: pede um só', `("${n5.json.erro}")`);
+  const n6 = await http('POST', '/auth/cadastro/admin', admNovo('novo6', { cnpjs: [formatar(cnpjB)], unidades: ['qa-nao-existe'] }));
+  ok(n6.status === 400 && /inexistente/.test(n6.json.erro), 'unidade inexistente é recusada');
+
+  // corrida: dois cadastros ao mesmo tempo pela MESMA unidade livre — só um assume
+  const corr1 = admNovo('corr1', { cnpjs: [formatar(cnpjB)], unidades: [slugB] });
+  const corr2 = admNovo('corr2', { cnpjs: [formatar(cnpjB)], unidades: [slugB] });
+  criados.emails.push(corr1.email, corr2.email);
+  await Promise.all([http('POST', '/auth/cadastro/admin', corr1), http('POST', '/auth/cadastro/admin', corr2)]);
+  const [cod1, cod2] = [await codigoDe(corr1.email), await codigoDe(corr2.email)];
+  const corridaUnidade = await Promise.all([
+    http('POST', '/auth/cadastro/admin/confirmar', { ...corr1, codigo: cod1 }),
+    http('POST', '/auth/cadastro/admin/confirmar', { ...corr2, codigo: cod2 }),
+  ]);
+  for (const r of corridaUnidade) if (r.json.administrador) criados.admins.push(r.json.administrador.id);
+  const resultados = corridaUnidade.map(r => r.status).sort();
+  ok(resultados[0] === 201 && resultados[1] === 409, 'duas confirmações simultâneas pela mesma unidade livre: uma assume, a outra é barrada', `(${resultados.join(' e ')})`);
+
   // ---------- FUNCIONÁRIO ----------
   console.log('\nFuncionário (criado pelo administrador)');
   const tokenAdm = aLogin.json.token;
@@ -174,6 +246,8 @@ async function codigoDe(email) {
   await pool.query('delete from sub_administradores where id = any($1::uuid[])', [criados.subs]);
   await pool.query('delete from administrador_unidades where administrador_id = any($1::uuid[])', [criados.admins]);
   await pool.query('delete from administradores where id = any($1::uuid[])', [criados.admins]);
+  await pool.query(`delete from administrador_unidades where unidade_id in (select id from unidades where slug like 'qa-un-%')`);
+  await pool.query(`delete from unidades where slug like 'qa-un-%'`);
   await pool.query('delete from prestadoras where id = any($1::uuid[])', [criados.prestadoras]);
   await pool.query('delete from clientes where id = any($1::uuid[])', [criados.clientes]);
   await pool.query('delete from codigos_verificacao where destino like $1', [`qa-%-${id}@qa.invalid`]);

@@ -22,6 +22,27 @@ function normalizarCnpj(cnpj) {
   return String(cnpj || '').replace(/\D/g, '');
 }
 
+// CNPJ de verdade: 14 dígitos, não todos iguais, com os dois dígitos verificadores corretos
+// (módulo 11). Só é exigido pra CNPJ NOVO — o que já está cadastrado numa unidade é casado
+// como está (os de exemplo do schema não passariam, e não precisam).
+function cnpjValido(cnpj) {
+  const d = normalizarCnpj(cnpj);
+  if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false;
+  const digito = (base) => {
+    let soma = 0, peso = base.length - 7;
+    for (const n of base) { soma += Number(n) * peso--; if (peso < 2) peso = 9; }
+    const resto = soma % 11;
+    return resto < 2 ? 0 : 11 - resto;
+  };
+  return digito(d.slice(0, 12)) === Number(d[12]) && digito(d.slice(0, 13)) === Number(d[13]);
+}
+
+// "11222333000181" -> "11.222.333/0001-81" (como as unidades guardam o CNPJ)
+function formatarCnpj(cnpj) {
+  const d = normalizarCnpj(cnpj);
+  return d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : d;
+}
+
 // E-mail institucional exigido de administrador/sub-administrador: domínio
 // fixo da franquia + prefixo com o nome (slug) da unidade que a pessoa
 // administra — evita que qualquer e-mail pessoal seja usado pra uma conta
@@ -35,4 +56,4 @@ function emailInstitucionalValido(email, slugsPermitidos) {
   return (slugsPermitidos || []).some(slug => local.startsWith(String(slug).toLowerCase()));
 }
 
-module.exports = { normalizarEmail, normalizarTelefone, normalizarCnpj, emailInstitucionalValido, DOMINIO_INSTITUCIONAL };
+module.exports = { normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido, formatarCnpj, emailInstitucionalValido, DOMINIO_INSTITUCIONAL };

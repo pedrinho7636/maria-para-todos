@@ -262,6 +262,15 @@ contavam cada atendimento uma vez por avaliação (1 atendimento + 5 avaliaçõe
 Equipe saíam multiplicados). Agora cada número tem a sua própria consulta; "hoje" é a data de Brasília e cancelado não
 conta. A migração roda sozinha ao subir a API.
 
+**Cadastro de administrador com CNPJ novo:** na tela de cadastro o administrador digita o CNPJ e marca a(s)
+unidade(s) que administra. CNPJ já cadastrado numa unidade vincula como sempre. **CNPJ novo** só vale para unidade que
+**ainda não tem administrador**: o CNPJ digitado (validado pelos dígitos verificadores) passa a ser o da unidade; se ela
+já tem dono, o CNPJ precisa bater com o cadastrado — sem essa regra qualquer visitante do site público viraria
+administrador de uma unidade que já funciona. É um CNPJ novo por cadastro (duas unidades podem dividir o mesmo CNPJ), a
+unidade fica travada durante a confirmação (dois cadastros simultâneos não assumem a mesma unidade) e tudo continua
+exigindo o código por e-mail. O sistema segue com as unidades Carazinho e Panambi: criar uma unidade de outra cidade
+exigiria generalizar as telas.
+
 **Limite de login:** só tentativas ERRADAS contam (10 por conta+IP em 15 min; 60 por IP) — logins certos, mesmo
 muitos seguidos, nunca bloqueiam.
 

@@ -112,9 +112,14 @@ O Render grátis **bloqueia SMTP** (o Gmail que usamos no seu computador não fu
 3. Crie um atendimento com prestadora no PC: o convite aparece no celular em poucos segundos.
 
 ### 8. *(Se for o caso)* Ajustes depois de publicado
-- **CNPJ das unidades:** o schema traz CNPJs de exemplo (`12.345.678/0001-90`). Só importa se franqueados forem se
-  cadastrar sozinhos pela tela de cadastro (ela casa o CNPJ). Para corrigir: Neon → **SQL Editor**:
-  `update unidades set cnpj = '00.000.000/0001-00' where slug = 'carazinho';`
+- **CNPJ das unidades:** o schema traz CNPJs de exemplo (`12.345.678/0001-90`). No cadastro de administrador, quem
+  digita um **CNPJ novo** marca a unidade (Carazinho/Panambi): se ela **ainda não tem administrador**, o CNPJ digitado
+  passa a ser o dela; se já tem, o CNPJ precisa ser o cadastrado (assim ninguém toma uma unidade que já tem dono).
+  Para trocar o CNPJ à mão: Neon → **SQL Editor**: `update unidades set cnpj = '00.000.000/0001-00' where slug = 'carazinho';`
+- **E-mail que não sai:** a tela agora diz o motivo — *"recusou o usuário/senha"* (conferir `SMTP_USER` e a senha de
+  app em `SMTP_PASS`) ou *"não conseguiu se conectar"* (porta de SMTP bloqueada pela hospedagem).
+- **Publicar uma atualização:** como o Render clona o repositório sem estar conectado à sua conta do GitHub, o `git push`
+  pode não republicar sozinho. No painel do serviço, use **Manual Deploy → Deploy latest commit**.
 - **Telefone e endereço da unidade:** o administrador edita em **Acessos** no próprio portal.
 - **Domínio próprio no site:** Render → serviço → Settings → Custom Domains (você compra o domínio).
 

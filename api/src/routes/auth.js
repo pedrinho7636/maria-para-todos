@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
-const { normalizarEmail, normalizarTelefone, normalizarCnpj } = require('../utils/normalizacao');
+const { normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido, formatarCnpj } = require('../utils/normalizacao');
 const { senhaValida, emailValido, nomeValido, telefoneValido } = require('../utils/validacao');
 const { enviarCodigoConfirmacao, consumirCodigo, MOTIVO_CADASTRO, MOTIVO_RECUPERACAO } = require('../utils/verificacaoEmail');
 const { unidadesDoAdmin } = require('../utils/permissoes');
@@ -58,14 +58,67 @@ function responderErroCadastro(res, erro, mensagemDuplicado) {
 //
 // O CNPJ é comparado só pelos dígitos: "12.345.678/0001-90" e "12345678000190"
 // são o mesmo CNPJ (antes, digitar sem pontuação dava "nenhuma unidade encontrada").
+//
+// Duas formas de chegar numa unidade:
+//  1. CNPJ JÁ cadastrado numa unidade → vincula a(s) unidade(s) desse CNPJ (como sempre foi).
+//  2. CNPJ NOVO + unidade marcada na tela (`unidades: ['carazinho']`) → só vale se a unidade
+//     AINDA NÃO TEM administrador: aí o CNPJ digitado passa a ser o da unidade e a pessoa a
+//     assume. Se a unidade já tem dono, o CNPJ precisa bater com o dela. Sem essa regra
+//     qualquer visitante do site público poderia virar administrador de uma unidade que
+//     já funciona, só digitando um CNPJ.
 const SQL_UNIDADES_POR_CNPJ = `select id, slug, nome from unidades where regexp_replace(cnpj, '\\D', '', 'g') = any($1::text[])`;
 
 function cnpjsValidos(cnpjs) {
   return Array.isArray(cnpjs) ? [...new Set(cnpjs.map(normalizarCnpj).filter(c => c.length === 14))] : [];
 }
 
+function slugsValidos(unidades) {
+  return Array.isArray(unidades)
+    ? [...new Set(unidades.map(s => String(s).trim().toLowerCase()).filter(s => /^[a-z0-9-]{1,40}$/.test(s)))].slice(0, 10)
+    : [];
+}
+
+// Decide a quais unidades o cadastro vincula (e quais ele "assume" com CNPJ novo).
+// Com `travar`, trava as linhas das unidades marcadas até o fim da transação: dois cadastros
+// simultâneos não conseguem assumir a mesma unidade livre.
+// Devolve { unidades: [{id, slug, nome}], assumir: [{id, slug, nome, cnpj}] }; erro de regra = ErroNegocio.
+async function resolverUnidadesDoAdmin(db, listaCnpj, slugs, { travar = false } = {}) {
+  const { rows: porCnpj } = await db.query(SQL_UNIDADES_POR_CNPJ, [listaCnpj]);
+  const faltam = slugs.filter(s => !porCnpj.some(u => u.slug === s));
+  const assumir = [];
+
+  if (faltam.length > 0) {
+    if (travar) await db.query('select id from unidades where slug = any($1::text[]) for update', [faltam]);
+    const { rows: marcadas } = await db.query(
+      `select u.id, u.slug, u.nome,
+              (select count(*) from administrador_unidades au where au.unidade_id = u.id)::int as admins
+       from unidades u where u.slug = any($1::text[])`, [faltam]);
+    if (marcadas.length !== faltam.length) throw new ErroNegocio(400, 'Unidade inexistente.');
+    const ocupada = marcadas.find(u => u.admins > 0);
+    if (ocupada) {
+      throw new ErroNegocio(409, `A unidade ${ocupada.nome} já tem administrador — informe o CNPJ que está cadastrado nela, ou peça acesso ao administrador atual.`);
+    }
+
+    // qual CNPJ passa a ser o das unidades assumidas: o único CNPJ novo digitado
+    const { rows: conhecidos } = await db.query(`select regexp_replace(cnpj, '\\D', '', 'g') as d from unidades`);
+    const jaCadastrados = new Set(conhecidos.map(r => r.d));
+    const novos = listaCnpj.filter(c => !jaCadastrados.has(c));
+    const candidatos = novos.length > 0 ? novos : listaCnpj;
+    if (candidatos.length !== 1) throw new ErroNegocio(400, 'Informe um único CNPJ novo por cadastro (uma mesma franquia pode ter duas unidades com o mesmo CNPJ).');
+    const cnpjNovo = candidatos[0];
+    if (!jaCadastrados.has(cnpjNovo) && !cnpjValido(cnpjNovo)) throw new ErroNegocio(400, 'CNPJ inválido — confira os 14 dígitos.');
+    for (const u of marcadas) assumir.push({ id: u.id, slug: u.slug, nome: u.nome, cnpj: formatarCnpj(cnpjNovo) });
+  }
+
+  const unidades = [...porCnpj, ...assumir.map(({ id, slug, nome }) => ({ id, slug, nome }))];
+  if (unidades.length === 0) {
+    throw new ErroNegocio(400, 'Nenhuma unidade encontrada para os CNPJs informados. Se o CNPJ é novo, marque a unidade que você administra.');
+  }
+  return { unidades, assumir };
+}
+
 router.post('/cadastro/admin', async (req, res) => {
-  const { nome, sobrenome, email, senha, cnpjs } = req.body;
+  const { nome, sobrenome, email, senha, cnpjs, unidades: slugsMarcados } = req.body;
   if (!nome || !sobrenome || !email || !senha || !Array.isArray(cnpjs) || cnpjs.length === 0) {
     return res.status(400).json({ erro: 'nome, sobrenome, email, senha e cnpjs são obrigatórios' });
   }
@@ -79,15 +132,19 @@ router.post('/cadastro/admin', async (req, res) => {
     const { rows: existentes } = await pool.query('select id from administradores where email = $1', [emailNormalizado]);
     if (existentes.length > 0) return res.status(409).json({ erro: 'E-mail já cadastrado' });
 
-    const { rows: unidades } = await pool.query(SQL_UNIDADES_POR_CNPJ, [listaCnpj]);
-    if (unidades.length === 0) {
-      return res.status(400).json({ erro: 'Nenhuma unidade encontrada para os CNPJs informados' });
-    }
+    // as regras são conferidas JÁ aqui (antes de mandar o código), pra pessoa descobrir o problema
+    // sem gastar um e-mail; a confirmação confere de novo, dentro da transação
+    const { unidades, assumir } = await resolverUnidadesDoAdmin(pool, listaCnpj, slugsValidos(slugsMarcados));
 
     const envio = await enviarCodigoConfirmacao(emailNormalizado, MOTIVO_CADASTRO);
 
-    res.json({ aguardandoConfirmacao: true, emailEnviado: envio.enviado, motivoEmail: envio.motivo, unidades: unidades.map(u => ({ slug: u.slug, nome: u.nome })) });
+    res.json({
+      aguardandoConfirmacao: true, emailEnviado: envio.enviado, motivoEmail: envio.motivo,
+      unidades: unidades.map(u => ({ slug: u.slug, nome: u.nome })),
+      cnpjNovo: assumir.length > 0 ? assumir[0].cnpj : null,
+    });
   } catch (erro) {
+    if (erro instanceof ErroNegocio) return res.status(erro.status).json({ erro: erro.message });
     console.error(erro);
     res.status(500).json({ erro: 'Erro ao iniciar cadastro' });
   }
@@ -95,7 +152,7 @@ router.post('/cadastro/admin', async (req, res) => {
 
 // Confirma o código enviado por e-mail e só então cria a conta + vincula as unidades
 router.post('/cadastro/admin/confirmar', async (req, res) => {
-  const { nome, sobrenome, email, senha, cnpjs, codigo } = req.body;
+  const { nome, sobrenome, email, senha, cnpjs, codigo, unidades: slugsMarcados } = req.body;
   if (!nome || !sobrenome || !email || !senha || !Array.isArray(cnpjs) || cnpjs.length === 0 || !codigo) {
     return res.status(400).json({ erro: 'nome, sobrenome, email, senha, cnpjs e codigo são obrigatórios' });
   }
@@ -110,8 +167,7 @@ router.post('/cadastro/admin/confirmar', async (req, res) => {
     const { admin, unidades } = await emTransacao(async (db) => {
       if (!await consumirCodigo(db, emailNormalizado, String(codigo).trim())) throw new ErroNegocio(400, 'Código inválido ou expirado');
 
-      const { rows: unidadesDoAdmin } = await db.query(SQL_UNIDADES_POR_CNPJ, [listaCnpj]);
-      if (unidadesDoAdmin.length === 0) throw new ErroNegocio(400, 'Nenhuma unidade encontrada para os CNPJs informados');
+      const { unidades: unidadesDoAdmin, assumir } = await resolverUnidadesDoAdmin(db, listaCnpj, slugsValidos(slugsMarcados), { travar: true });
 
       const { rows: [novo] } = await db.query(
         `insert into administradores (nome, sobrenome, email, senha_hash)
@@ -121,6 +177,8 @@ router.post('/cadastro/admin/confirmar', async (req, res) => {
       for (const unidade of unidadesDoAdmin) {
         await db.query('insert into administrador_unidades (administrador_id, unidade_id) values ($1, $2)', [novo.id, unidade.id]);
       }
+      // unidade assumida com CNPJ novo: o CNPJ digitado passa a ser o dela
+      for (const u of assumir) await db.query('update unidades set cnpj = $1 where id = $2', [u.cnpj, u.id]);
       return { admin: novo, unidades: unidadesDoAdmin };
     });
 
