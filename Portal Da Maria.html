@@ -2604,7 +2604,7 @@
           <div><strong id="hc-city">Maria Brasileira Carazinho</strong><span id="hc-addr">Rua Exemplo, 123 —
               Centro</span></div>
         </div>
-        <div class="hc-row">
+        <div class="hc-row" id="hc-phone-linha">
           <div class="hc-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EAF4EF"
               stroke-width="2">
               <path
@@ -2805,7 +2805,7 @@
               </svg></div>
             <div><strong>Endereço</strong><span id="ct-addr">Rua Exemplo, 123 — Centro, Carazinho/RS</span></div>
           </div>
-          <div class="ci-block">
+          <div class="ci-block" id="ct-phone-bloco">
             <div class="ci-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2">
                 <path
@@ -2962,13 +2962,14 @@
           </div>
           <div class="field">
             <label>Telefone (WhatsApp)</label>
-            <input type="tel" placeholder="(00) 0 0000-0000">
+            <input id="cad-admin-tel" type="tel" placeholder="(00) 0 0000-0000">
             <div class="warn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2">
                 <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
                 <path d="M12 9v4M12 17h.01" />
               </svg><span>O portal usa o <b>WhatsApp deste número</b> para enviar mensagens da franquia (avisos de
-                proposta, confirmações e contato com prestadoras e clientes).</span></div>
+                proposta, confirmações e contato com prestadoras e clientes). Se a unidade ainda não tem telefone, este
+                passa a ser o dela (dá pra mudar depois em Acessos).</span></div>
           </div>
           <div class="field">
             <label>CNPJ da(s) franquia(s)</label>
@@ -2981,7 +2982,7 @@
                 vírgula — mesmo que duas unidades usem o mesmo CNPJ.</span></div>
           </div>
           <div class="field">
-            <label>Unidade(s) que você administra</label>
+            <label>Unidade(s) que você administra <span style="font-weight:400;color:var(--muted)">(obrigatório)</span></label>
             <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:6px">
               <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:14px"><input type="checkbox" class="cad-admin-un" value="carazinho"> Carazinho</label>
               <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:14px"><input type="checkbox" class="cad-admin-un" value="panambi"> Panambi</label>
@@ -2990,9 +2991,8 @@
                 stroke-width="2">
                 <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
                 <path d="M12 9v4M12 17h.01" />
-              </svg><span>Seu CNPJ já está cadastrado na unidade? Pode deixar sem marcar. <b>CNPJ novo?</b> Marque a unidade:
-                se ela ainda <b>não tem administrador</b>, o CNPJ digitado passa a ser o dela; se já tem, o CNPJ precisa ser
-                o que está cadastrado.</span></div>
+              </svg><span>Se a unidade ainda <b>não tem administrador</b>, o CNPJ digitado passa a ser o dela e você a
+                assume. Se já tem, o CNPJ precisa ser o que está cadastrado nela.</span></div>
           </div>
           <div class="field"><label>Senha</label><input id="cad-administrador-senha" type="password"
               placeholder="Crie uma senha"></div>
@@ -4112,9 +4112,12 @@
       document.getElementById('hp-city').textContent = 'em ' + c.nome;
       document.getElementById('hc-city').textContent = 'Maria Brasileira ' + c.nome;
       aplicarEnderecoNoSite(c);
-      document.getElementById('hc-phone').textContent = c.tel;
+      // sem telefone cadastrado (unidade ainda sem dono), a linha some em vez de aparecer vazia
+      document.getElementById('hc-phone').textContent = c.tel || '';
+      document.getElementById('hc-phone-linha').style.display = c.tel ? '' : 'none';
       document.getElementById('ct-title').textContent = 'Unidade de ' + c.nome;
-      document.getElementById('ct-phone').textContent = c.tel;
+      document.getElementById('ct-phone').textContent = c.tel || '';
+      document.getElementById('ct-phone-bloco').style.display = c.tel ? '' : 'none';
       document.getElementById('pf-region').textContent = c.nome + '/' + c.uf;
       document.getElementById('cli-unit').textContent = c.nome;
     }
@@ -4395,9 +4398,11 @@
         if (!email) { toast('Preencha o e-mail.'); return; }
         if (!cnpjRaw) { toast('Informe o CNPJ de ao menos uma franquia.'); return; }
         if (!senha) { toast('Defina sua senha (abaixo) antes de verificar o e-mail.'); return; }
+        const unidadesMarcadas = [...document.querySelectorAll('.cad-admin-un:checked')].map(el => el.value);
+        if (unidadesMarcadas.length === 0) { toast('Marque a unidade (Carazinho e/ou Panambi) que você administra.'); return; }
         dados = {
           nome, sobrenome, email, senha, cnpjs: cnpjRaw.split(',').map(c => c.trim()).filter(Boolean),
-          unidades: [...document.querySelectorAll('.cad-admin-un:checked')].map(el => el.value),
+          unidades: unidadesMarcadas, telefone: document.getElementById('cad-admin-tel').value.trim() || undefined,
         };
         rota = '/auth/cadastro/admin';
       } else if (ctx === 'prestadora-email') {

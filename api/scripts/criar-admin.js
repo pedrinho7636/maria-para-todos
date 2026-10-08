@@ -3,6 +3,8 @@
 // DATABASE_URL (Neon).
 //
 //   npm run admin:criar -- --email voce@exemplo.com --nome Maria --sobrenome Silva --unidades carazinho,panambi
+//   (opcional)  --cnpj 00.000.000/0001-00   define o CNPJ das unidades que ainda não têm CNPJ
+//   (opcional)  --telefone "(54) 9 9999-9999"   define o WhatsApp das unidades que ainda não têm telefone
 //
 // A senha NÃO vai na linha de comando (ficaria no histórico do terminal): o script pergunta
 // (a digitação fica oculta) ou lê a variável ADMIN_SENHA. Mínimo 8 caracteres.
@@ -10,6 +12,7 @@
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { pool } = require('../src/db');
+const { cnpjValido, formatarCnpj } = require('../src/utils/normalizacao');
 
 function argumento(nome) {
   const i = process.argv.indexOf('--' + nome);
@@ -65,6 +68,9 @@ function perguntarSenha(texto) {
       return;
     }
 
+    const cnpj = argumento('cnpj');
+    const telefone = argumento('telefone');
+    if (cnpj && !cnpjValido(cnpj)) throw new Error('CNPJ inválido — confira os 14 dígitos.');
     const slugs = argumento('unidades').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     const { rows: unidades } = await pool.query('select id, slug from unidades where slug = any($1::text[])', [slugs]);
     const faltando = slugs.filter(s => !unidades.some(u => u.slug === s));
@@ -78,6 +84,9 @@ function perguntarSenha(texto) {
         [argumento('nome').trim(), argumento('sobrenome').trim(), email, hash]
       );
       for (const u of unidades) await cliente.query('insert into administrador_unidades (administrador_id, unidade_id) values ($1, $2)', [novo.id, u.id]);
+      // CNPJ/telefone só entram nas unidades que ainda não têm (nunca sobrescreve o de uma unidade já configurada)
+      if (cnpj) await cliente.query('update unidades set cnpj = $1 where id = any($2::uuid[]) and cnpj is null', [formatarCnpj(cnpj), unidades.map(u => u.id)]);
+      if (telefone) await cliente.query('update unidades set telefone = $1 where id = any($2::uuid[]) and telefone is null', [telefone, unidades.map(u => u.id)]);
       await cliente.query('commit');
     } catch (erro) { await cliente.query('rollback').catch(() => {}); throw erro; } finally { cliente.release(); }
     console.log(`Administrador criado: ${email} (unidades: ${unidades.map(u => u.slug).join(', ')}). Já dá pra entrar no portal.`);

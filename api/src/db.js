@@ -86,6 +86,11 @@ const MIGRACOES = [
   // delas é pelo e-mail. O telefone continua único quando existe (NULLs não colidem).
   `alter table prestadoras alter column telefone drop not null`,
 
+  // CNPJ e telefone da unidade também são opcionais: a unidade pode existir "vazia", sem dono, e
+  // o 1º administrador a se cadastrar nela define o CNPJ (e o telefone)
+  `alter table unidades alter column cnpj drop not null`,
+  `alter table unidades alter column telefone drop not null`,
+
   // o endereço da unidade passou a ser opcional: sem endereço, o campo some do site
   `alter table unidades alter column endereco drop not null`,
   `alter table unidades alter column endereco_curto drop not null`,

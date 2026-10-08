@@ -118,7 +118,7 @@ async function resolverUnidadesDoAdmin(db, listaCnpj, slugs, { travar = false } 
 }
 
 router.post('/cadastro/admin', async (req, res) => {
-  const { nome, sobrenome, email, senha, cnpjs, unidades: slugsMarcados } = req.body;
+  const { nome, sobrenome, email, senha, cnpjs, unidades: slugsMarcados, telefone } = req.body;
   if (!nome || !sobrenome || !email || !senha || !Array.isArray(cnpjs) || cnpjs.length === 0) {
     return res.status(400).json({ erro: 'nome, sobrenome, email, senha e cnpjs são obrigatórios' });
   }
@@ -126,6 +126,7 @@ router.post('/cadastro/admin', async (req, res) => {
   if (!emailValido(email) || !senhaValida(senha)) return erroCredencial(res);
   const listaCnpj = cnpjsValidos(cnpjs);
   if (listaCnpj.length === 0) return res.status(400).json({ erro: 'CNPJ inválido (são 14 dígitos)' });
+  if (telefone && !telefoneValido(normalizarTelefone(telefone))) return res.status(400).json({ erro: 'Telefone inválido — informe DDD + número' });
 
   const emailNormalizado = normalizarEmail(email);
   try {
@@ -152,7 +153,7 @@ router.post('/cadastro/admin', async (req, res) => {
 
 // Confirma o código enviado por e-mail e só então cria a conta + vincula as unidades
 router.post('/cadastro/admin/confirmar', async (req, res) => {
-  const { nome, sobrenome, email, senha, cnpjs, codigo, unidades: slugsMarcados } = req.body;
+  const { nome, sobrenome, email, senha, cnpjs, codigo, unidades: slugsMarcados, telefone } = req.body;
   if (!nome || !sobrenome || !email || !senha || !Array.isArray(cnpjs) || cnpjs.length === 0 || !codigo) {
     return res.status(400).json({ erro: 'nome, sobrenome, email, senha, cnpjs e codigo são obrigatórios' });
   }
@@ -160,6 +161,7 @@ router.post('/cadastro/admin/confirmar', async (req, res) => {
   if (!emailValido(email) || !senhaValida(senha)) return erroCredencial(res);
   const listaCnpj = cnpjsValidos(cnpjs);
   if (listaCnpj.length === 0) return res.status(400).json({ erro: 'CNPJ inválido (são 14 dígitos)' });
+  if (telefone && !telefoneValido(normalizarTelefone(telefone))) return res.status(400).json({ erro: 'Telefone inválido — informe DDD + número' });
   const emailNormalizado = normalizarEmail(email);
 
   try {
@@ -170,15 +172,18 @@ router.post('/cadastro/admin/confirmar', async (req, res) => {
       const { unidades: unidadesDoAdmin, assumir } = await resolverUnidadesDoAdmin(db, listaCnpj, slugsValidos(slugsMarcados), { travar: true });
 
       const { rows: [novo] } = await db.query(
-        `insert into administradores (nome, sobrenome, email, senha_hash)
-         values ($1, $2, $3, $4) returning id, nome, sobrenome, email`,
-        [nome.trim(), sobrenome.trim(), emailNormalizado, senhaHash]
+        `insert into administradores (nome, sobrenome, email, senha_hash, telefone)
+         values ($1, $2, $3, $4, $5) returning id, nome, sobrenome, email`,
+        [nome.trim(), sobrenome.trim(), emailNormalizado, senhaHash, telefone ? normalizarTelefone(telefone) : null]
       );
       for (const unidade of unidadesDoAdmin) {
         await db.query('insert into administrador_unidades (administrador_id, unidade_id) values ($1, $2)', [novo.id, unidade.id]);
       }
-      // unidade assumida com CNPJ novo: o CNPJ digitado passa a ser o dela
-      for (const u of assumir) await db.query('update unidades set cnpj = $1 where id = $2', [u.cnpj, u.id]);
+      // unidade assumida: o CNPJ digitado passa a ser o dela e o telefone do cadastro vira o WhatsApp
+      // da franquia (só se a unidade ainda não tinha um)
+      for (const u of assumir) {
+        await db.query('update unidades set cnpj = $1, telefone = coalesce(telefone, $2) where id = $3', [u.cnpj, telefone ? String(telefone).trim() : null, u.id]);
+      }
       return { admin: novo, unidades: unidadesDoAdmin };
     });
 

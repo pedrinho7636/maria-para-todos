@@ -41,13 +41,14 @@ create table unidades (
   slug           text unique not null,          -- 'carazinho' | 'panambi'
   nome           text not null,                 -- 'Carazinho'
   uf             text not null,                 -- 'RS'
-  cnpj           text not null,                 -- CNPJ da franquia dessa unidade. Duas unidades PODEM
+  cnpj           text,                          -- CNPJ da franquia dessa unidade. Duas unidades PODEM
                                                  -- compartilhar o mesmo CNPJ (mesmo franqueado/mesma empresa)
                                                  -- ou ter CNPJs diferentes — por isso o campo fica na unidade,
-                                                 -- não no administrador.
-  telefone       text not null,
-  endereco       text not null,                 -- endereço completo (contato)
-  endereco_curto text not null,                 -- endereço curto (home)
+                                                 -- não no administrador. Nulo = unidade ainda sem dono: o 1º
+                                                 -- administrador a se cadastrar nela define o CNPJ.
+  telefone       text,                          -- WhatsApp da franquia (o administrador preenche)
+  endereco       text,                          -- endereço completo (contato); nulo = não divulga
+  endereco_curto text,                          -- endereço curto (home)
   criado_em      timestamptz not null default now()
 );
 

@@ -78,7 +78,7 @@ async function codigoDe(email) {
   const formatar = (d) => `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
   const novaUnidade = async (sufixo) => {
     const slug = `qa-un-${id}-${sufixo}`;
-    await pool.query(`insert into unidades (slug, nome, uf, cnpj, telefone, endereco, endereco_curto) values ($1, $2, 'RS', '00.000.000/0000-00', '(00) 0 0000-0000', null, null)`, [slug, `QA Unidade ${sufixo}`]);
+    await pool.query(`insert into unidades (slug, nome, uf, cnpj, telefone, endereco, endereco_curto) values ($1, $2, 'RS', null, null, null, null)`, [slug, `QA Unidade ${sufixo}`]);
     return slug;
   };
   const slugA = await novaUnidade('a'), slugB = await novaUnidade('b');
@@ -86,7 +86,7 @@ async function codigoDe(email) {
   const cnpjA = gerarCnpj(base + '0001'), cnpjB = gerarCnpj(base + '0002');
   const admNovo = (nome, extra = {}) => ({ nome: 'QA', sobrenome: nome, email: emailQa(nome), senha: 'senha-qa-123', ...extra });
 
-  const n1 = admNovo('novo1', { cnpjs: [formatar(cnpjA)], unidades: [slugA] });
+  const n1 = admNovo('novo1', { cnpjs: [formatar(cnpjA)], unidades: [slugA], telefone: '(54) 9 9999-0001' });
   criados.emails.push(n1.email);
   const n1a = await http('POST', '/auth/cadastro/admin', n1);
   ok(n1a.status === 200 && n1a.json.cnpjNovo === formatar(cnpjA) && n1a.json.unidades?.[0]?.slug === slugA,
@@ -94,8 +94,11 @@ async function codigoDe(email) {
   const n1b = await http('POST', '/auth/cadastro/admin/confirmar', { ...n1, codigo: await codigoDe(n1.email) });
   ok(n1b.status === 201 && n1b.json.token, 'confirma o código e a conta é criada');
   if (n1b.json.administrador) criados.admins.push(n1b.json.administrador.id);
-  const { rows: [uA] } = await pool.query('select cnpj from unidades where slug = $1', [slugA]);
+  const { rows: [uA] } = await pool.query('select cnpj, telefone from unidades where slug = $1', [slugA]);
   ok(uA.cnpj === formatar(cnpjA), 'o CNPJ digitado passou a ser o CNPJ da unidade', `(${uA.cnpj})`);
+  ok(uA.telefone === '(54) 9 9999-0001', 'o telefone do cadastro virou o WhatsApp da unidade (que estava sem)', `(${uA.telefone})`);
+  const telRuim = await http('POST', '/auth/cadastro/admin', { ...n1, email: emailQa('novo1b'), telefone: '123' });
+  ok(telRuim.status === 400, 'telefone inválido no cadastro é recusado');
   const n1login = await http('POST', '/auth/login', { perfil: 'administrador', identificador: n1.email, senha: n1.senha });
   const n1painel = await http('GET', `/unidades/${slugA}/admin/dashboard`, null, n1login.json.token);
   ok(n1login.status === 200 && n1login.json.usuario.unidades_slugs?.includes(slugA) && n1painel.status === 200, 'entra e abre o painel da unidade assumida');
