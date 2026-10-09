@@ -2638,7 +2638,7 @@
               <path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z" />
               <circle cx="12" cy="10" r="3" />
             </svg>
-            <span id="chip-region">Carazinho</span>
+            <span id="chip-region">Sua cidade</span>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M6 9l6 6 6-6" />
             </svg>
@@ -2650,13 +2650,13 @@
 
     <div class="hero-pub">
       <div>
-        <div class="hp-eyebrow" id="hp-eyebrow">Atendendo Carazinho e região</div>
-        <h1>Limpeza que transforma, <em id="hp-city">em Carazinho</em>.</h1>
+        <div class="hp-eyebrow" id="hp-eyebrow">Atendendo a sua região</div>
+        <h1>Limpeza que transforma, <em id="hp-city">na sua cidade</em>.</h1>
         <p class="lead">Profissionais treinados, agendamento simples e a confiança da maior rede de limpeza do Brasil —
           pertinho de você.</p>
         <div class="hero-cta">
           <button class="btn-lg green" onclick="goSection('contato')">Pedir um orçamento</button>
-          <button class="btn-lg wa" onclick="abrirWhatsApp(cidades[regiao].tel, 'Olá! Gostaria de falar sobre um serviço de limpeza com a unidade de ' + cidades[regiao].nome + '.')">
+          <button class="btn-lg wa" onclick="abrirWhatsApp((cidades[regiao] || {}).tel, 'Olá! Gostaria de falar sobre um serviço de limpeza com a unidade de ' + (cidades[regiao] || {}).nome + '.')">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2a10 10 0 0 0-8.7 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2z" />
             </svg>Falar no WhatsApp
@@ -2671,8 +2671,7 @@
               <path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z" />
               <circle cx="12" cy="10" r="3" />
             </svg></div>
-          <div><strong id="hc-city">Maria Brasileira Carazinho</strong><span id="hc-addr">Rua Exemplo, 123 —
-              Centro</span></div>
+          <div><strong id="hc-city">Maria Brasileira</strong><span id="hc-addr"></span></div>
         </div>
         <div class="hc-row" id="hc-phone-linha">
           <div class="hc-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EAF4EF"
@@ -2680,7 +2679,7 @@
               <path
                 d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.4 2.1L8 9.6a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z" />
             </svg></div>
-          <div><strong id="hc-phone">(54) 9 9999-0001</strong><span>seg a sáb · 8h às 18h</span></div>
+          <div><strong id="hc-phone"></strong><span>seg a sáb · 8h às 18h</span></div>
         </div>
         <div class="hc-row">
           <div class="hc-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EAF4EF"
@@ -2865,7 +2864,7 @@
       <div class="contact-inner">
         <div class="contact-info">
           <div class="hp-eyebrow">Fale com a gente</div>
-          <h2 class="sec-title" id="ct-title">Unidade de Carazinho</h2>
+          <h2 class="sec-title" id="ct-title">Fale com a unidade da sua região</h2>
           <p class="sec-desc">Conte o que você precisa. A equipe da sua região responde rapidinho.</p>
           <div class="ci-block" id="ct-addr-bloco">
             <div class="ci-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -2873,7 +2872,7 @@
                 <path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z" />
                 <circle cx="12" cy="10" r="3" />
               </svg></div>
-            <div><strong>Endereço</strong><span id="ct-addr">Rua Exemplo, 123 — Centro, Carazinho/RS</span></div>
+            <div><strong>Endereço</strong><span id="ct-addr"></span></div>
           </div>
           <div class="ci-block" id="ct-phone-bloco">
             <div class="ci-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -2926,7 +2925,7 @@
         <div class="pb-brand">
           <div class="brand-mark">M</div>Maria Brasileira · Portal da Maria
         </div>
-        <span>Atendimento de seg a sáb · <span id="pf-region">Carazinho/RS</span></span>
+        <span>Atendimento de seg a sáb · <span id="pf-region"></span></span>
         <span class="mono">Portal da Maria · v0.4</span>
       </div>
     </footer>
@@ -3169,7 +3168,7 @@
           <div>
             <div class="eyebrow">Painel do administrador</div>
             <h1>Bom dia, vamos organizar o dia.</h1>
-            <p id="hero-sub">Resumo da unidade <strong>Carazinho</strong> · segunda-feira, 22 de junho</p>
+            <p id="hero-sub">Resumo da unidade <strong>—</strong></p>
           </div>
           <div class="switcher" id="unit-switcher"></div>
         </section>
@@ -3261,7 +3260,7 @@
             </div>
             <div class="panel">
               <div class="panel-head">
-                <h2 id="panel-unit">Carazinho</h2><span class="count"><span data-k="jCount">5</span> atendimentos</span>
+                <h2 id="panel-unit">—</h2><span class="count"><span data-k="jCount">5</span> atendimentos</span>
               </div>
               <div id="joblist"></div>
             </div>
@@ -3275,7 +3274,7 @@
           <div>
             <div class="eyebrow">Agenda</div>
             <h1>Agenda da unidade</h1>
-            <p class="vh-sub" id="agv-unit">Carazinho</p>
+            <p class="vh-sub" id="agv-unit">—</p>
           </div><span class="back-link" onclick="adminView('visaogeral')">← Visão geral</span>
         </div>
         <div class="pcols">
@@ -3312,7 +3311,7 @@
           <div>
             <div class="eyebrow">Equipe</div>
             <h1>Profissionais da unidade</h1>
-            <p class="vh-sub" id="eqv-unit">Carazinho</p>
+            <p class="vh-sub" id="eqv-unit">—</p>
           </div>
           <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
             <button class="btn-sm" id="eqv-nova" onclick="abrirNovaPrestadora()">+ Nova prestadora</button>
@@ -3330,7 +3329,7 @@
           <div>
             <div class="eyebrow">Financeiro</div>
             <h1>Controle financeiro</h1>
-            <p class="vh-sub" id="fin-unit">Carazinho</p>
+            <p class="vh-sub" id="fin-unit">—</p>
           </div><span class="back-link" onclick="adminView('visaogeral')">← Visão geral</span>
         </div>
         <div class="fin-mes">
@@ -3370,7 +3369,7 @@
           <div>
             <div class="eyebrow">Clientes</div>
             <h1>Base de clientes</h1>
-            <p class="vh-sub" id="clv-unit">Carazinho</p>
+            <p class="vh-sub" id="clv-unit">—</p>
           </div><span class="back-link" onclick="adminView('visaogeral')">← Visão geral</span>
         </div>
         <div class="panel">
@@ -3405,37 +3404,9 @@
         <div class="view-head">
           <div>
             <div class="eyebrow">Acessos</div>
-            <h1>Administradores da unidade</h1>
-            <p class="vh-sub" id="sa-unit">Carazinho</p>
+            <h1>Funcionários da unidade</h1>
+            <p class="vh-sub" id="sa-unit">—</p>
           </div><span class="back-link" onclick="adminView('visaogeral')">← Visão geral</span>
-        </div>
-        <div class="panel" style="margin-bottom:26px">
-          <div class="panel-head"><h2>Telefone (WhatsApp) da unidade</h2></div>
-          <div class="form-card" style="padding:20px;border-radius:0">
-            <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Número usado nos links de WhatsApp do
-              site e nos avisos automáticos de atendimento (com DDD, sem o +55).</p>
-            <div class="field-row">
-              <div class="field"><label>Telefone</label><input id="sa-tel-unidade" placeholder="(00) 0 0000-0000">
-              </div>
-              <div class="field" style="flex:0 0 auto;align-self:flex-end">
-                <button class="btn-sm" onclick="salvarTelefoneUnidade()">Salvar</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="panel" style="margin-bottom:26px">
-          <div class="panel-head"><h2>Endereço da unidade</h2></div>
-          <div class="form-card" style="padding:20px;border-radius:0">
-            <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Local do estabelecimento, exibido no site (cabeçalho
-              e seção de contato). <b>Deixe em branco se a unidade não divulga endereço</b> — o campo some do site.</p>
-            <div class="field"><label>Endereço completo</label><input id="sa-end-unidade" maxlength="300" placeholder="Rua, número — bairro, cidade/UF"></div>
-            <div class="field-row">
-              <div class="field"><label>Resumido (opcional — cabeçalho do site)</label><input id="sa-end-curto-unidade" maxlength="150" placeholder="Rua, número — bairro"></div>
-              <div class="field" style="flex:0 0 auto;align-self:flex-end">
-                <button class="btn-sm" onclick="salvarEnderecoUnidade()">Salvar</button>
-              </div>
-            </div>
-          </div>
         </div>
         <div class="panel" style="margin-bottom:26px">
           <div class="panel-head"><h2 id="sa-form-titulo">Adicionar funcionário</h2></div>
@@ -3602,7 +3573,7 @@
           <div class="brand-name">Portal da Maria <span>· cliente</span></div>
         </div>
         <div class="topbar-right">
-          <button class="btn-wa" onclick="abrirWhatsApp(cidades[regiao].tel, 'Olá! Preciso falar sobre um atendimento com a unidade de ' + cidades[regiao].nome + '.')"><svg
+          <button class="btn-wa" onclick="abrirWhatsApp((cidades[regiao] || {}).tel, 'Olá! Preciso falar sobre um atendimento com a unidade de ' + (cidades[regiao] || {}).nome + '.')"><svg
               width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2a10 10 0 0 0-8.7 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2z" />
             </svg>Falar com a unidade</button>
@@ -3620,7 +3591,7 @@
         <div>
           <div class="eyebrow">Meus serviços</div>
           <h1 id="cli-saudacao">Olá.</h1>
-          <p>Cliente da unidade <strong id="cli-unit">Carazinho</strong> · acompanhe seus atendimentos</p>
+          <p>Cliente da unidade <strong id="cli-unit">—</strong> · acompanhe seus atendimentos</p>
         </div>
         <button class="btn-lg green" onclick="show('screen-home');goSection('contato')">Pedir novo serviço</button>
       </section>
@@ -3666,7 +3637,7 @@
             <p style="font-size:13.5px;color:var(--muted);line-height:1.6;margin-bottom:16px">Fale direto com a sua
               unidade para tirar dúvidas, remarcar ou pedir um novo serviço.</p>
             <button class="btn-lg wa" style="width:100%;justify-content:center;margin-bottom:10px"
-              onclick="abrirWhatsApp(cidades[regiao].tel, 'Olá! Preciso de ajuda com um atendimento na unidade de ' + cidades[regiao].nome + '.')"><svg width="16" height="16"
+              onclick="abrirWhatsApp((cidades[regiao] || {}).tel, 'Olá! Preciso de ajuda com um atendimento na unidade de ' + (cidades[regiao] || {}).nome + '.')"><svg width="16" height="16"
                 viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2a10 10 0 0 0-8.7 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2z" />
               </svg>Chamar no WhatsApp</button>
@@ -3963,9 +3934,9 @@
         <div class="field"><label>Nome</label><input id="perfil-nome"></div>
         <div class="field" id="perfil-sobrenome-wrap" style="display:none"><label>Sobrenome</label><input id="perfil-sobrenome"></div>
       </div>
-      <div class="field"><label>Telefone</label><input id="perfil-telefone" placeholder="(00) 0 0000-0000"></div>
+      <div class="field" id="perfil-telefone-wrap"><label>Telefone</label><input id="perfil-telefone" placeholder="(00) 0 0000-0000"></div>
       <div class="form-actions" style="margin-bottom:18px">
-        <button class="btn-sm" style="width:100%" onclick="salvarPerfilBasico()">Salvar nome e telefone</button>
+        <button class="btn-sm" style="width:100%" id="perfil-basico-botao" onclick="salvarPerfilBasico()">Salvar nome e telefone</button>
       </div>
 
       <div style="border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px">
@@ -3996,23 +3967,37 @@
         </div>
       </div>
 
-      <!-- Só administrador: a empresa (CNPJ) e as unidades dela; é aqui que se acrescenta uma nova franquia -->
+      <!-- Só administrador: a empresa (CNPJ), os dados de cada unidade (telefone/endereço do site) e a criação de nova franquia -->
       <div id="perfil-empresa" style="display:none;border-top:1px solid var(--line);padding-top:14px;margin-top:14px">
         <label style="font-weight:500;font-size:13px;display:block;margin-bottom:4px">Sua empresa</label>
-        <p id="perfil-empresa-resumo" style="font-size:13px;margin-bottom:10px"></p>
-        <label style="font-weight:500;font-size:13px;display:block;margin-bottom:8px">Adicionar uma nova unidade (franquia) a esta empresa</label>
-        <p style="font-size:12px;margin-bottom:10px">A nova unidade usa o <b>mesmo CNPJ</b>, e você alterna entre elas com este mesmo login.
-          Franquia com <b>outro CNPJ</b> é outra empresa: precisa de um login novo (Criar conta → Administrador).</p>
-        <div class="field-row">
-          <div class="field"><label>Cidade / nome da unidade</label><input id="perfil-un-nome" placeholder="Ex.: Passo Fundo"></div>
-          <div class="field" style="flex:0 0 80px"><label>UF</label><input id="perfil-un-uf" maxlength="2" placeholder="RS" style="text-transform:uppercase"></div>
+        <p id="perfil-empresa-resumo" style="font-size:13px;margin-bottom:12px"></p>
+
+        <label style="font-weight:500;font-size:13px;display:block;margin-bottom:8px">Dados da unidade</label>
+        <div class="field"><label for="perfil-un-sel">Unidade</label><select id="perfil-un-sel" onchange="perfilCarregarUnidade()"></select></div>
+        <div class="field"><label for="perfil-un-edit-tel">Telefone (WhatsApp)</label><input id="perfil-un-edit-tel" type="tel" placeholder="(00) 0 0000-0000">
+          <p style="font-size:12px;margin:4px 0 0">Número usado nos links de WhatsApp do site e nos avisos automáticos de atendimento (com DDD).</p></div>
+        <div class="field"><label for="perfil-un-edit-end">Endereço completo</label><input id="perfil-un-edit-end" maxlength="300" placeholder="Rua, número — bairro, cidade/UF"></div>
+        <div class="field"><label for="perfil-un-edit-curto">Endereço resumido <span style="font-weight:400;color:var(--muted)">(opcional — cabeçalho do site)</span></label><input id="perfil-un-edit-curto" maxlength="150" placeholder="Rua, número — bairro">
+          <p style="font-size:12px;margin:4px 0 0">Deixe o endereço em branco se a unidade não divulga: o campo some do site.</p></div>
+        <div class="form-actions" style="margin-bottom:14px">
+          <button class="btn-sm" style="width:100%" id="perfil-un-salvar" onclick="salvarDadosUnidadePerfil()">Salvar dados da unidade</button>
         </div>
-        <div class="field"><label>Telefone (WhatsApp) da unidade</label><input id="perfil-un-tel" type="tel" placeholder="(00) 0 0000-0000"></div>
-        <div class="field"><label>Endereço <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><input id="perfil-un-end" placeholder="Rua, número — bairro"></div>
-        <div class="field" id="perfil-un-cnpj-wrap" style="display:none"><label>CNPJ da empresa <span style="font-weight:400;color:var(--muted)">(sua conta ainda não tem um)</span></label><input id="perfil-un-cnpj" placeholder="00.000.000/0000-00"></div>
-        <div class="form-actions">
-          <button class="btn-sm" style="width:100%" id="perfil-un-botao" onclick="adicionarUnidadePerfil()">Adicionar unidade</button>
-        </div>
+
+        <details>
+          <summary style="cursor:pointer;font-weight:500;font-size:13px;margin-bottom:8px">Adicionar uma nova unidade (franquia)</summary>
+          <p style="font-size:12px;margin:8px 0 10px">A nova unidade usa o <b>mesmo CNPJ</b>, e você alterna entre elas com este mesmo login.
+            Franquia com <b>outro CNPJ</b> é outra empresa: precisa de um login novo (Criar conta → Administrador).</p>
+          <div class="field-row">
+            <div class="field"><label>Cidade / nome da unidade</label><input id="perfil-un-nome" placeholder="Ex.: Passo Fundo"></div>
+            <div class="field" style="flex:0 0 80px"><label>UF</label><input id="perfil-un-uf" maxlength="2" placeholder="RS" style="text-transform:uppercase"></div>
+          </div>
+          <div class="field"><label>Telefone (WhatsApp) da unidade</label><input id="perfil-un-tel" type="tel" placeholder="(00) 0 0000-0000"></div>
+          <div class="field"><label>Endereço <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><input id="perfil-un-end" placeholder="Rua, número — bairro"></div>
+          <div class="field" id="perfil-un-cnpj-wrap" style="display:none"><label>CNPJ da empresa <span style="font-weight:400;color:var(--muted)">(sua conta ainda não tem um)</span></label><input id="perfil-un-cnpj" placeholder="00.000.000/0000-00"></div>
+          <div class="form-actions">
+            <button class="btn-sm" style="width:100%" id="perfil-un-botao" onclick="adicionarUnidadePerfil()">Adicionar unidade</button>
+          </div>
+        </details>
       </div>
 
       <div class="form-actions" style="margin-top:16px">
@@ -4082,7 +4067,7 @@
        ================================================================ */
     let cidades = {};
     let unidades = {};
-    let prestadora = { nome: "", unidade: "carazinho", id: null };
+    let prestadora = { nome: "", unidade: "", id: null };
     let usuarioLogado = null;   // { id, tipo: 'administrador'|'prestadora'|'cliente' }
     let convites = [];
     let agendaPrestadora = [];
@@ -4213,7 +4198,16 @@
     function renderUnidadesPublicas() {
       const lista = Object.entries(cidades);
       document.getElementById('sem-unidades').style.display = lista.length ? 'none' : '';
-      if (!lista.length) document.getElementById('chip-region').textContent = 'Sem unidades';
+      if (!lista.length) {
+        document.getElementById('chip-region').textContent = 'Sem unidades';
+        ['hc-phone-linha', 'ct-addr-bloco', 'ct-phone-bloco'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+        document.getElementById('hc-addr').style.display = 'none';
+        document.getElementById('hp-eyebrow').textContent = 'Atendendo a sua região';
+        document.getElementById('hp-city').textContent = 'na sua cidade';
+        document.getElementById('hc-city').textContent = 'Maria Brasileira';
+        document.getElementById('ct-title').textContent = 'Fale com a unidade da sua região';
+        document.getElementById('pf-region').textContent = '';
+      }
       const pino = '<div class="ro-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg></div>';
       document.getElementById('region-lista').innerHTML = lista.length
         ? lista.map(([slug, c]) => `<button class="region-opt" onclick="setRegiao('${escapeHtml(slug)}')">${pino}<div><strong>${escapeHtml(c.nome)}</strong><span>e região${c.uf ? ' · ' + escapeHtml(c.uf) : ''}</span></div></button>`).join('')
@@ -4305,7 +4299,7 @@
     }
 
     /* região */
-    let regiao = 'carazinho';
+    let regiao = null; // cidade escolhida na home: vem da lista de unidades cadastradas, nenhuma é fixa
     function openRegion() { document.getElementById('region-modal').classList.add('show'); }
     function setRegiao(key) {
       regiao = key; const c = cidades[key];
@@ -5495,7 +5489,7 @@
     /* ===== dados do admin (Equipe e Clientes) =====
        equipeData / clientesData / avaliacoes já são carregados da API
        local em carregarEquipeClientesAvaliacoes() (topo do script) */
-    let currentUnit = 'carazinho';
+    let currentUnit = null; // unidade aberta no painel (definida no login)
     function starsHTML(n) { return '<span class="stars">' + [1, 2, 3, 4, 5].map(i => '<span class="' + (i <= n ? '' : 's-off') + '">★</span>').join('') + '</span>'; }
 
     /* navegação interna do admin */
@@ -5936,31 +5930,9 @@
     const SA_MODULOS = ['agenda', 'avaliacoes', 'equipe', 'clientes', 'dashboard', 'financeiro'];
     const SA_ROTULOS = { agenda: 'Agenda', avaliacoes: 'Avaliações', equipe: 'Equipe', clientes: 'Clientes', dashboard: 'Visão geral', financeiro: 'Financeiro' };
 
-    async function salvarTelefoneUnidade() {
-      const telefone = document.getElementById('sa-tel-unidade').value.trim();
-      if (!telefone) { toast('Informe um telefone.'); return; }
-      try {
-        const unidade = await api(`/unidades/${currentUnit}/telefone`, { method: 'PATCH', body: JSON.stringify({ telefone }) });
-        cidades[currentUnit].tel = unidade.telefone;
-        toast('Telefone da unidade atualizado.');
-      } catch (err) { toast('Erro ao salvar telefone: ' + err.message); }
-    }
-    async function salvarEnderecoUnidade() {
-      const endereco = document.getElementById('sa-end-unidade').value.trim();
-      const endereco_curto = document.getElementById('sa-end-curto-unidade').value.trim();
-      try {
-        const u = await api(`/unidades/${currentUnit}/endereco`, { method: 'PATCH', body: JSON.stringify({ endereco, endereco_curto }) });
-        cidades[currentUnit].end = u.endereco; cidades[currentUnit].endCurto = u.endereco_curto;
-        aplicarEnderecoNoSite(cidades[currentUnit]);
-        toast(u.endereco ? 'Endereço da unidade atualizado.' : 'Endereço removido — o site não mostra mais esse campo.');
-      } catch (err) { toast('Erro ao salvar endereço: ' + err.message); }
-    }
     async function renderSubadmins() {
       document.getElementById('sa-unit').textContent = unidades[currentUnit].nome;
       document.getElementById('sa-func-unidade').textContent = unidades[currentUnit].nome;
-      document.getElementById('sa-tel-unidade').value = (cidades[currentUnit] || {}).tel || '';
-      document.getElementById('sa-end-unidade').value = (cidades[currentUnit] || {}).end || '';
-      document.getElementById('sa-end-curto-unidade').value = (cidades[currentUnit] || {}).endCurto || '';
       try {
         subadminsCache = await api(`/sub-administradores/${currentUnit}`);
       } catch (err) { toast('Erro ao carregar acessos: ' + err.message); subadminsCache = []; }
@@ -6148,6 +6120,10 @@
       document.getElementById('perfil-sobrenome-wrap').style.display = perfilAtual.temSobrenome ? 'block' : 'none';
       document.getElementById('perfil-sobrenome').value = perfilAtual.sobrenome || '';
       document.getElementById('perfil-telefone').value = perfilAtual.telefone || '';
+      // administrador: o telefone que importa é o da UNIDADE (abaixo, em "Dados da unidade"); o pessoal não é usado em lugar nenhum
+      const ehAdmin = perfilAtual.perfil === 'administrador';
+      document.getElementById('perfil-telefone-wrap').style.display = ehAdmin ? 'none' : '';
+      document.getElementById('perfil-basico-botao').textContent = ehAdmin ? 'Salvar nome' : 'Salvar nome e telefone';
       document.getElementById('perfil-email').value = perfilAtual.email || '';
       document.getElementById('perfil-email-codigo').value = '';
       document.getElementById('perfil-email-codebox').style.display = 'none';
@@ -6172,8 +6148,12 @@
       if (perfilAtual.empresa) {
         const e = perfilAtual.empresa;
         document.getElementById('perfil-empresa-resumo').innerHTML =
-          (e.cnpj ? `CNPJ <b>${escapeHtml(e.cnpj)}</b> · ` : 'Sem CNPJ definido · ')
-          + (e.unidades.length ? 'unidades: ' + e.unidades.map(u => `<b>${escapeHtml(u.nome)}</b>/${escapeHtml(u.uf)}`).join(', ') : 'nenhuma unidade ainda');
+          (e.cnpj ? `CNPJ <b>${escapeHtml(e.cnpj)}</b> · ` : 'Sem CNPJ definido · ') + plural(e.unidades.length, 'unidade', 'unidades');
+        // seletor das unidades da empresa (abre na que está aberta no painel)
+        const sel = document.getElementById('perfil-un-sel');
+        sel.innerHTML = e.unidades.map(u => `<option value="${escapeHtml(u.slug)}">${escapeHtml(u.nome)}/${escapeHtml(u.uf)}</option>`).join('');
+        if (e.unidades.some(u => u.slug === currentUnit)) sel.value = currentUnit;
+        perfilCarregarUnidade();
         ['perfil-un-nome', 'perfil-un-uf', 'perfil-un-tel', 'perfil-un-end', 'perfil-un-cnpj'].forEach(id => { document.getElementById(id).value = ''; });
         document.getElementById('perfil-un-cnpj-wrap').style.display = e.cnpj ? 'none' : 'block'; // conta criada por script pode não ter CNPJ
       }
@@ -6181,6 +6161,37 @@
       document.getElementById('modal-perfil').classList.add('show');
     }
     function fecharPerfil() { document.getElementById('modal-perfil').classList.remove('show'); }
+
+    // Dados da unidade (telefone de WhatsApp e endereço mostrado no site), editáveis pelo administrador no Meu perfil.
+    function perfilCarregarUnidade() {
+      const c = cidades[document.getElementById('perfil-un-sel').value] || {};
+      document.getElementById('perfil-un-edit-tel').value = c.tel || '';
+      document.getElementById('perfil-un-edit-end').value = c.end || '';
+      document.getElementById('perfil-un-edit-curto').value = c.endCurto || '';
+    }
+    let salvandoUnidadePerfil = false;
+    async function salvarDadosUnidadePerfil() {
+      if (salvandoUnidadePerfil) return;
+      const slug = document.getElementById('perfil-un-sel').value;
+      const c = cidades[slug];
+      if (!c) { toast('Escolha a unidade.'); return; }
+      const telefone = document.getElementById('perfil-un-edit-tel').value.trim();
+      const endereco = document.getElementById('perfil-un-edit-end').value.trim();
+      const endereco_curto = document.getElementById('perfil-un-edit-curto').value.trim();
+      const mudouTel = telefone !== (c.tel || ''), mudouEnd = endereco !== (c.end || '') || endereco_curto !== (c.endCurto || '');
+      if (!mudouTel && !mudouEnd) { toast('Nada mudou.'); return; }
+      if (mudouTel && !telefone) { toast('Informe o telefone da unidade (o WhatsApp do site usa esse número).'); return; }
+      salvandoUnidadePerfil = true;
+      const botao = document.getElementById('perfil-un-salvar'); botao.disabled = true;
+      try {
+        if (mudouTel) { const u = await api(`/unidades/${slug}/telefone`, { method: 'PATCH', body: JSON.stringify({ telefone }) }); c.tel = u.telefone; }
+        if (mudouEnd) { const u = await api(`/unidades/${slug}/endereco`, { method: 'PATCH', body: JSON.stringify({ endereco, endereco_curto }) }); c.end = u.endereco; c.endCurto = u.endereco_curto; }
+        if (slug === regiao) setRegiao(slug); // o site da cidade aberta na home já mostra o dado novo
+        perfilCarregarUnidade();
+        toast(`Dados da unidade ${c.nome} atualizados.`);
+      } catch (err) { toast('Erro ao salvar os dados da unidade: ' + err.message); }
+      finally { salvandoUnidadePerfil = false; botao.disabled = false; }
+    }
 
     // "Adicionar unidade" dentro do perfil: acrescenta uma franquia à empresa (mesmo CNPJ) da conta logada.
     let adicionandoUnidade = false;
@@ -6269,7 +6280,8 @@
     async function salvarPerfilBasico() {
       const nome = document.getElementById('perfil-nome').value.trim();
       if (!nome) { toast('Informe seu nome.'); return; }
-      const body = { nome, telefone: document.getElementById('perfil-telefone').value.trim() };
+      const body = { nome };
+      if (perfilAtual.perfil !== 'administrador') body.telefone = document.getElementById('perfil-telefone').value.trim(); // administrador: sem telefone pessoal
       if (perfilAtual.temSobrenome) {
         const sobrenome = document.getElementById('perfil-sobrenome').value.trim();
         if (!sobrenome) { toast('Informe seu sobrenome.'); return; }

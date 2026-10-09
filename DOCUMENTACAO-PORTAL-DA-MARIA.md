@@ -72,7 +72,7 @@ Navegação interna via `adminView(name)`, com sub-telas (`.adminview`) — cada
 | Financeiro | `renderFinanceiro()` | `GET /financeiro/:slug/resumo?mes=` (receita, custo, margem, previsto, repasses por prestadora, margem por serviço, maiores clientes, pendências), `GET .../repasses/:prestadoraId?mes=` (folha do mês, base do CSV) e `POST .../repasses/:prestadoraId/pagar` (marca/desfaz o pagamento do mês). Módulo `financeiro` (admin completo ou funcionário com `pode_financeiro`). Cálculo em `api/src/utils/financeiro.js` |
 | Clientes | `renderClientes()` | `GET /unidades/:slug/admin/clientes` (view `vw_clientes_unidade`) |
 | Avaliações | `renderAvaliacoesAdmin()` | `GET /avaliacoes/admin/:slug` (moderação) |
-| Acessos | `renderSubadmins()` | `GET /sub-administradores/:slug` — CRUD de sub-administradores + telefone de WhatsApp e **endereço** da unidade (`PATCH /unidades/:slug/endereco`; só admin completo, nunca delegável; endereço vazio some do site) |
+| Acessos | `renderSubadmins()` | `GET /sub-administradores/:slug` — CRUD de sub-administradores (funcionários da unidade). Telefone de WhatsApp e **endereço** da unidade ficam em **Meu perfil → Dados da unidade** (`PATCH /unidades/:slug/telefone` e `/endereco`; só admin completo, nunca delegável; endereço vazio some do site) |
 
 Alternância de unidade (Carazinho/Panambi) via `setUnit(key)`, que recarrega os dados da unidade escolhida.
 

@@ -213,8 +213,9 @@ Dá pra corrigir ou preencher o local (administrador e funcionário com agenda),
 deixar vazio apaga. Nas telas de quem lê (prestadora, avisos de WhatsApp) atendimento sem local não mostra a linha.
 
 **Endereço da unidade (local do estabelecimento):** é o endereço que aparece no site (cabeçalho e seção "Fale com a
-gente"). O administrador edita em **Acessos → Endereço da unidade** (completo + um resumido opcional pro cabeçalho;
-só administrador completo, nunca funcionário). **Deixando em branco, o campo some do site** em vez de aparecer vazio.
+gente"). O administrador edita em **Meu perfil → Dados da unidade** (escolhe a unidade; telefone de WhatsApp, endereço completo
+e um resumido opcional pro cabeçalho; só administrador completo, nunca funcionário). A tela **Acessos** é só de
+funcionários. **Deixando em branco, o campo some do site** em vez de aparecer vazio.
 
 **Valor do atendimento (o que o cliente paga):** é coletado no cadastro.
 - *Atendimento único*: campo "Valor do atendimento (R$)" (opcional). Dá pra preencher ou corrigir depois, clicando
