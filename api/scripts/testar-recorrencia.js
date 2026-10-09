@@ -57,6 +57,20 @@ let erro = null; try { gerarOcorrencias({ dataInicio: '2026-02-30', itens: [{ di
 check('data inexistente (30/02) é recusada', erro === 'data_inicio inválida', erro);
 ls = gerarOcorrencias({ dataInicio: '2026-01-01', horizonteMeses: 24, alternadas: false, itens: [0, 1, 2, 3, 4, 5, 6].map(d => ({ dia_semana: d })) });
 check('trava de 200 ocorrências', ls.length === 200);
+// Série com VÁRIOS dias da semana e um valor do mês só: dividido entre TODAS as ocorrências do mês
+// (outubro/2026: 4 terças + 5 quintas = 9 atendimentos; R$ 1.000 ÷ 9, fechando em 1.000,00 exato)
+ls = gerarOcorrencias({ dataInicio: '2026-10-01', horizonteMeses: 1, alternadas: false, itens: [{ dia_semana: 2 }, { dia_semana: 4 }], valorMensalTotal: 1000 });
+m = porMes(ls);
+check('terça+quinta em outubro: 9 atendimentos', m['2026-10'].length === 9, String(m['2026-10']?.length));
+check('R$ 1.000 do mês dividido entre os 9 (não 1.000 por dia da semana): soma exata 1.000,00', soma(m['2026-10']) === 100000, String(soma(m['2026-10'])));
+check('o centavo que sobra vai pra primeira ocorrência (111,12 e 111,11)', m['2026-10'][0].valor === 111.12 && m['2026-10'][1].valor === 111.11);
+check('todas guardam o valor do mês informado (1000)', ls.every(l => l.valor_mensal === 1000));
+ls = gerarOcorrencias({ dataInicio: '2026-10-01', horizonteMeses: 1, alternadas: false, itens: [{ dia_semana: 2 }, { dia_semana: 4 }] });
+check('sem valor do mês, nenhum valor é calculado', ls.every(l => l.valor === null));
+ls = gerarOcorrencias({ dataInicio: '2026-10-15', horizonteMeses: 1, alternadas: false, itens: [{ dia_semana: 2 }, { dia_semana: 4 }], valorMensalTotal: 900 });
+m = porMes(ls);
+check('mês parcial (começa dia 15): cada atendimento recebe a parte proporcional ao mês cheio (900 ÷ 9 = 100)', m['2026-10'].every(l => l.valor === 100), JSON.stringify(m['2026-10'].map(l => l.valor)));
+
 console.log(`\n${ok} ok, ${falhas} falha(s)`);
 process.exit(falhas ? 1 : 0);
 

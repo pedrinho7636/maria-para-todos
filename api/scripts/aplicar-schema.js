@@ -4,9 +4,8 @@
 // tabelas e insere os dados de exemplo, então rodar de novo duplicaria/falharia.
 //
 //   npm run banco:schema                          (com os dados de exemplo — bom pra demonstração)
-//   npm run banco:schema -- --sem-exemplos        (começa LIMPO: as unidades Carazinho e Panambi existem
-//                                                  vazias — sem CNPJ, telefone, endereço, contas ou atendimentos.
-//                                                  O 1º administrador a se cadastrar define o CNPJ de cada uma.)
+//   npm run banco:schema -- --sem-exemplos        (começa LIMPO: nenhuma unidade, conta ou atendimento. O 1º administrador
+//                                                  se cadastra pelo site (CNPJ + dados da unidade) e cria a empresa.)
 //   npm run banco:schema -- --sem-exemplos --recriar
 //                                                 (APAGA TUDO do banco apontado e recria do zero. Mostra qual
 //                                                  banco é e exige digitar APAGAR TUDO pra confirmar.)
@@ -67,15 +66,14 @@ function perguntar(texto) {
     await cliente.query('begin');
     await cliente.query(sql);
     if (semExemplos) {
-      // Sai tudo que é conta/atendimento de exemplo (na ordem das chaves) e as unidades ficam
-      // "vazias": sem o CNPJ/telefone/endereço fictícios. Sem CNPJ cadastrado, ninguém "casa" uma
-      // unidade digitando um número público — quem assume é o 1º administrador a se cadastrar nela.
+      // Sai tudo que é exemplo (na ordem das chaves), inclusive as unidades fictícias: o site começa sem
+      // nenhuma, e cada empresa cria as suas ao se cadastrar (CNPJ + dados da unidade). Assim não existe
+      // CNPJ de exemplo que dê acesso a coisa alguma.
       await cliente.query(`delete from avaliacoes; delete from atendimentos; delete from clientes; delete from prestadoras;
                            delete from sub_administradores; delete from administrador_unidades; delete from administradores;
-                           delete from codigos_verificacao;
-                           update unidades set cnpj = null, telefone = null, endereco = null, endereco_curto = null;`);
+                           delete from codigos_verificacao; delete from unidades;`);
       await cliente.query('commit');
-      console.log('Pronto: banco LIMPO. Carazinho e Panambi existem vazias. Cadastre o administrador pelo site (marcando a unidade) ou com: npm run admin:criar -- --help');
+      console.log('Pronto: banco LIMPO (sem unidades). Cadastre o administrador e a 1ª unidade pelo site (Criar conta → Administrador) ou com: npm run admin:criar -- --help');
     } else {
       await cliente.query('commit');
       console.log('Pronto: tabelas criadas e dados de exemplo inseridos (senhas de exemplo: senha123).');

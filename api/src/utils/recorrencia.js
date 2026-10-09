@@ -8,6 +8,10 @@
 // informado, centavo a centavo. Mês só parcialmente coberto (começa no meio do mês, ou o
 // período termina no meio dele) recebe a parte proporcional às ocorrências que de fato entram.
 // O divisor é sempre o mês cheio do padrão, ignorando onde a série começa/termina.
+//
+// Série com VÁRIOS dias da semana (ex.: terça e quinta) e um único valor do mês: passe
+// 'valorMensalTotal': o valor do mês é dividido entre TODAS as ocorrências do mês (de todos os
+// dias), e não repetido por dia da semana. Cada item pode, em vez disso, trazer o seu 'valor_mensal'.
 const DIA_MS = 86400000;
 
 const iso = (d) => d.toISOString().slice(0, 10);
@@ -20,7 +24,7 @@ function lerData(s) {
 
 // itens: [{ dia_semana (0=domingo..6), valor_mensal? }]. Devolve, em ordem de data,
 // [{ data: 'YYYY-MM-DD', item: índice em itens, valor: number|null, valor_mensal: number|null }].
-function gerarOcorrencias({ dataInicio, horizonteMeses, alternadas, itens, limite = 200 }) {
+function gerarOcorrencias({ dataInicio, horizonteMeses, alternadas, itens, valorMensalTotal = null, limite = 200 }) {
   const inicio = lerData(dataInicio);
   if (!inicio) throw new Error('data_inicio inválida');
   const meses = Math.min(Math.max(parseInt(horizonteMeses, 10) || 3, 1), 24);
@@ -52,6 +56,24 @@ function gerarOcorrencias({ dataInicio, horizonteMeses, alternadas, itens, limit
     }
     return n;
   };
+
+  // valor do mês pra série inteira: um único grupo por mês, dividindo entre as ocorrências de todos os itens
+  if (valorMensalTotal !== null && valorMensalTotal !== undefined) {
+    const centavos = Math.round(valorMensalTotal * 100);
+    const porMes = new Map();
+    for (const l of linhas) { const m = l.data.slice(0, 7); if (!porMes.has(m)) porMes.set(m, []); porMes.get(m).push(l); }
+    for (const [mes, doMes] of porMes) {
+      const total = itens.reduce((s, _, i) => s + totalNoMes(i, mes), 0);
+      if (doMes.length === total) {
+        const base = Math.floor(centavos / total), resto = centavos - base * total;
+        doMes.forEach((l, k) => { l.valor = (base + (k < resto ? 1 : 0)) / 100; });
+      } else {
+        doMes.forEach((l) => { l.valor = Math.round(centavos / total) / 100; });
+      }
+      doMes.forEach((l) => { l.valor_mensal = centavos / 100; });
+    }
+    return linhas;
+  }
 
   const grupos = new Map(); // "item|mês" -> linhas
   for (const l of linhas) {

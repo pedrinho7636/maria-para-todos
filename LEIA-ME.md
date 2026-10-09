@@ -262,14 +262,44 @@ contavam cada atendimento uma vez por avaliação (1 atendimento + 5 avaliaçõe
 Equipe saíam multiplicados). Agora cada número tem a sua própria consulta; "hoje" é a data de Brasília e cancelado não
 conta. A migração roda sozinha ao subir a API.
 
-**Cadastro de administrador com CNPJ novo:** na tela de cadastro o administrador digita o CNPJ e marca a(s)
-unidade(s) que administra. CNPJ já cadastrado numa unidade vincula como sempre. **CNPJ novo** só vale para unidade que
-**ainda não tem administrador**: o CNPJ digitado (validado pelos dígitos verificadores) passa a ser o da unidade; se ela
-já tem dono, o CNPJ precisa bater com o cadastrado — sem essa regra qualquer visitante do site público viraria
-administrador de uma unidade que já funciona. É um CNPJ novo por cadastro (duas unidades podem dividir o mesmo CNPJ), a
-unidade fica travada durante a confirmação (dois cadastros simultâneos não assumem a mesma unidade) e tudo continua
-exigindo o código por e-mail. O sistema segue com as unidades Carazinho e Panambi: criar uma unidade de outra cidade
-exigiria generalizar as telas.
+**Empresas e unidades (CNPJ):** uma conta de administrador pertence a **uma empresa (um CNPJ)**, e a empresa pode ter
+**várias unidades** (franquias de qualquer cidade) — o mesmo login alterna entre elas pelo seletor no topo do painel. Quem
+tem **outro CNPJ** é outra empresa e usa **outro login** (e-mail diferente).
+- *Criar conta → Administrador:* CNPJ, dados do administrador e os dados da unidade que está cadastrando (cidade, UF,
+  telefone/WhatsApp, endereço opcional). **CNPJ novo** → nasce a empresa e a primeira unidade, depois do código por e-mail
+  (o CNPJ é conferido pelos dígitos verificadores). **CNPJ que já existe** → só o dono acrescenta unidade: precisa informar
+  **exatamente o mesmo nome, e-mail e senha** da conta da empresa (a senha é a prova; sem código); a unidade nova é
+  acrescentada e ele entra. Errar qualquer dado dá sempre a mesma resposta (não revela qual falhou) e conta no limite de
+  tentativas (por e-mail+IP), porque seria um jeito de chutar senha. Saber o CNPJ — que é público — nunca basta.
+- *Meu perfil → Adicionar unidade* (administrador logado): a mesma ação, sem redigitar nada; mostra o CNPJ da empresa e as
+  unidades que ela tem. A nova unidade herda o CNPJ.
+- Nome de unidade repetido dentro da mesma empresa é recusado; pedidos simultâneos não duplicam (trava por empresa no banco).
+- O site começa **sem unidades** no banco limpo; tudo que depende da lista (seletor de cidade da home, cadastros de cliente e
+  prestadora, seletor do painel) é montado a partir do que existe, sem nada fixo.
+- **Funcionários são por unidade:** cada funcionário acessa só a unidade em que foi criado; quem cuida da agenda de uma franquia
+  não ganha acesso às outras da mesma empresa (o administrador troca de unidade no seletor e cadastra o funcionário lá).
+
+**Prestadora criada pelo administrador:** na aba **Equipe → "+ Nova prestadora"** (só administrador completo): nome, e-mail e/ou
+telefone (é por um deles que ela entra) e senha provisória (em branco, o sistema gera uma de 8 caracteres e mostra **uma vez**,
+com atalho pra mandar o acesso por WhatsApp). Se a agenda tinha atendimentos com o nome dela vindos da planilha ("prestadora sem
+cadastro"), eles são ligados à conta nova na hora. Na agenda, esses atendimentos mostram **"prestadora sem cadastro no Portal da
+Maria"** e o balão tem o botão "Cadastrar agora" com o nome já preenchido.
+
+**Painel inicial personalizável por unidade:** na Visão geral, **Personalizar** (só administrador) escolhe quais atalhos
+(Agenda, Equipe, Clientes, Avaliações, Financeiro, Relatórios) e cartões (atendimentos hoje, profissionais, faturamento, NPS, agenda
+de hoje) aparecem e a ordem dos atalhos. Cada unidade tem o seu layout, salvo no banco (`unidades.painel_config`), e vale para toda a
+equipe daquela unidade.
+
+**Cadastro de atendimento (um formulário só):** a aba *Atendimento* serve para um atendimento avulso **ou** para repetir toda semana
+(caixa "Repetir toda semana": dias da semana, por quantos meses, semana sim/não). Ligada a repetição, o valor passa a ser o do **mês
+inteiro** e é dividido entre todas as ocorrências do mês de todos os dias marcados (R$ 1.000 com 4 terças + 5 quintas = 9 atendimentos,
+somando exatamente 1.000,00). Antes eram dois formulários com os mesmos campos repetidos; a recorrência agora também guarda a duração
+e aceita cliente novo.
+
+**Modelo da planilha de importação:** na aba *Importar planilha* há a lista de colunas consideradas e o botão **Baixar modelo (.xlsx)**
+(colunas Número, Data, Horário e Serviço obrigatórias; Orçamento, Tipo, Horas, Cliente, Profissionais, Situação opcionais; e **Valor** e
+**Custo** opcionais — o que o cliente paga e o repasse à prestadora —, para quando o sistema da franquia exportar isso). O modelo traz
+3 linhas de exemplo com Número `EXEMPLO-n`, que o importador **ignora**, e uma aba "Como preencher".
 
 **Limite de login:** só tentativas ERRADAS contam (10 por conta+IP em 15 min; 60 por IP) — logins certos, mesmo
 muitos seguidos, nunca bloqueiam.

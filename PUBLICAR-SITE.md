@@ -58,9 +58,9 @@ npm run banco:schema -- --sem-exemplos
 ```
 Tem que aparecer `Pronto: tabelas criadas SEM dados de exemplo`. Escolha **uma** das duas variações:
 
-- **`-- --sem-exemplos` (recomendado pra site público):** banco **limpo**. Carazinho e Panambi existem, mas **vazias**
-  (sem CNPJ, telefone nem endereço) e sem nenhuma conta. O 1º administrador a se cadastrar em cada unidade define o
-  CNPJ dela — não existe mais CNPJ de exemplo que dê acesso a alguma coisa. Siga o 3-A.
+- **`-- --sem-exemplos` (recomendado pra site público):** banco **limpo**: nenhuma unidade, conta ou atendimento. Cada
+  empresa cria as suas unidades ao se cadastrar (CNPJ + cidade/UF/telefone), então não existe mais CNPJ de exemplo que
+  dê acesso a alguma coisa. Siga o 3-A.
 - **Já rodou o `banco:schema` antes e quer começar do zero (apagar os dados de exemplo ou de teste do Neon)?**
   Acrescente `--recriar`: `npm run banco:schema -- --sem-exemplos --recriar`. Ele mostra **qual banco** vai ser apagado e
   só continua se você digitar `APAGAR TUDO`. Só apaga o banco da `DATABASE_URL` da janela atual: o seu banco local
@@ -69,17 +69,18 @@ Tem que aparecer `Pronto: tabelas criadas SEM dados de exemplo`. Escolha **uma**
   `senha123`** (ex.: `renata@mariabrasileira.com`). Qualquer pessoa que leia o repositório consegue entrar nelas.
   Aceitável só pra uma demonstração curta; depois apague os dados ou troque as senhas.
 
-**3-A. Criar o seu administrador.** Dois jeitos:
+**3-A. Criar o seu administrador e a(s) unidade(s).** Dois jeitos:
 
-- **Pelo próprio site** (cadastro de administrador): digite o CNPJ, **marque a unidade** (Carazinho e/ou Panambi) e o
-  telefone; se a unidade ainda não tem administrador, o CNPJ e o telefone viram os dela. Exige o código por e-mail, então
-  só funciona depois que o e-mail estiver saindo (item 6).
+- **Pelo próprio site** (*Entrar → Criar conta → Administrador*): CNPJ, seus dados e os dados da unidade (cidade, UF,
+  telefone/WhatsApp). CNPJ novo cria a empresa e a primeira unidade; as outras unidades da mesma empresa entram depois por
+  *Meu perfil → Adicionar unidade*. Exige o código por e-mail, então só funciona depois que o e-mail estiver saindo (item 6).
 - **Pelo PowerShell, sem e-mail** (ainda na mesma janela, com `DATABASE_URL` definida):
   ```powershell
-  npm run admin:criar -- --email SEU@EMAIL.com --nome SeuNome --sobrenome SeuSobrenome --unidades carazinho,panambi --cnpj 00.000.000/0001-00 --telefone "(54) 9 9999-9999"
+  npm run admin:criar -- --email SEU@EMAIL.com --nome SeuNome --sobrenome SeuSobrenome --cnpj 00.000.000/0001-00 --unidades "Carazinho/RS,Panambi/RS" --telefone "(54) 9 9999-9999"
   ```
-  `--cnpj` e `--telefone` são opcionais e só preenchem unidades que ainda estão vazias. Ele pergunta a senha (a digitação
-  fica oculta). Depois feche o PowerShell (ou rode `$env:DATABASE_URL = $null`).
+  `--unidades` é uma lista de `Cidade/UF`: cada uma é **criada** (precisa do `--cnpj`, validado pelos dígitos). Todas as
+  unidades da conta ficam no mesmo CNPJ, e o mesmo login alterna entre elas. Ele pergunta a senha (a digitação fica
+  oculta). Depois feche o PowerShell (ou rode `$env:DATABASE_URL = $null`).
 
 ### 4. *(Opcional)* Levar os seus dados reais pro Neon
 Se quiser o site já com a agenda importada, as 11 prestadoras da planilha, os funcionários etc. — **no lugar do
@@ -124,16 +125,19 @@ O Render grátis **bloqueia SMTP** (o Gmail que usamos no seu computador não fu
 3. Crie um atendimento com prestadora no PC: o convite aparece no celular em poucos segundos.
 
 ### 8. *(Se for o caso)* Ajustes depois de publicado
-- **CNPJ das unidades:** no banco limpo elas começam sem CNPJ. No cadastro de administrador, a pessoa digita o CNPJ e
-  **marca a unidade** (Carazinho/Panambi): se ela **ainda não tem administrador**, o CNPJ digitado (conferido pelos
-  dígitos verificadores) passa a ser o dela; se já tem, o CNPJ precisa ser o cadastrado (assim ninguém toma uma unidade
-  que já tem dono). Para trocar o CNPJ à mão: Neon → **SQL Editor**:
-  `update unidades set cnpj = '00.000.000/0001-00' where slug = 'carazinho';`
-  ⚠ CNPJ é dado público: quem digitar o CNPJ já cadastrado de uma unidade e marcá-la consegue se vincular a ela, mesmo
-  com dono (só o código por e-mail é exigido). Se isso incomodar, dá pra fechar: unidade com dono só aceita novos
-  administradores criados por ele mesmo.
-- **E-mail que não sai:** a tela agora diz o motivo — *"recusou o usuário/senha"* (conferir `SMTP_USER` e a senha de
-  app em `SMTP_PASS`) ou *"não conseguiu se conectar"* (porta de SMTP bloqueada pela hospedagem).
+- **Empresas, CNPJ e unidades:** uma conta de administrador é de **uma empresa (um CNPJ)**, que pode ter várias unidades
+  (o mesmo login alterna entre elas); outro CNPJ = outro login. Pelo site: *Criar conta → Administrador* (CNPJ novo cria
+  empresa + primeira unidade; CNPJ que já existe só aceita quem informar o **mesmo nome, e-mail e senha** da conta da
+  empresa) e, logado, *Meu perfil → Adicionar unidade*. Saber o CNPJ (dado público) nunca dá acesso a uma empresa.
+  Para trocar o CNPJ de uma unidade à mão: Neon → **SQL Editor**:
+  `update unidades set cnpj = '00.000.000/0001-00' where slug = 'carazinho';` (use o mesmo CNPJ em todas as unidades
+  da mesma empresa).
+- **E-mail que não sai:** a tela diz o motivo — *"recusou o usuário/senha"* ou *"não conseguiu se conectar"* (porta de
+  SMTP bloqueada pela hospedagem). Se for **"recusou o usuário/senha"**: `SMTP_USER` tem que ser **exatamente a conta do
+  Google que gerou a senha de app** (não o e-mail que vai receber o código!) e `SMTP_PASS` a senha de app de 16 letras,
+  sem espaços nem aspas. Ao subir, a API escreve nos **Logs** do Render uma linha `[email] SMTP smtp.gmail.com:587 · conta
+  pe***@gmail.com · senha com 16 caracteres` — confira se a conta e o tamanho batem com o que você espera. No **Shell** do
+  Render (planos pagos) dá pra testar sem passar pela tela: `cd api && npm run email:teste -- seu@email.com`.
 - **Publicar uma atualização:** como o Render clona o repositório sem estar conectado à sua conta do GitHub, o `git push`
   pode não republicar sozinho. No painel do serviço, use **Manual Deploy → Deploy latest commit**.
 - **Telefone e endereço da unidade:** o administrador edita em **Acessos** no próprio portal.

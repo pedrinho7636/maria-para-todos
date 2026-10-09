@@ -1,10 +1,50 @@
+const crypto = require('crypto');
 const express = require('express');
+const bcrypt = require('bcrypt');
 const { pool } = require('../db');
 const { requireAuth, requireRole, requireAcessoUnidade } = require('../middleware/auth');
-const { unidadeDoAdmin } = require('../utils/permissoes');
+const { unidadeDoAdmin, unidadesDoAdmin } = require('../utils/permissoes');
+const { normalizarCnpj, cnpjValido, formatarCnpj, normalizarEmail, normalizarTelefone } = require('../utils/normalizacao');
+const { nomeValido, emailValido, telefoneValido, senhaValida } = require('../utils/validacao');
+const { normalizarTexto } = require('../utils/importarPlanilha');
+const { ErroNegocio, emTransacao, lerDadosUnidade, criarUnidade, vincularAdmin, cnpjsDoAdmin } = require('../utils/unidades');
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
+
+// Acrescenta uma unidade à EMPRESA do administrador logado (mesmo CNPJ das que ele já tem, por isso o
+// mesmo login alterna entre elas). Mesma ação do cadastro de CNPJ já existente, mas estando logado não
+// precisa redigitar nome/e-mail/senha. Conta sem CNPJ definido (criada por script) informa o CNPJ aqui.
+router.post('/', requireAuth, requireRole('administrador'), asyncHandler(async (req, res) => {
+  const lida = lerDadosUnidade(req.body);
+  if (lida.erro) return res.status(400).json({ erro: lida.erro });
+
+  try {
+    const meus = await cnpjsDoAdmin(pool, req.user.id);
+    let cnpj;
+    if (meus.length === 0) {
+      cnpj = normalizarCnpj(req.body.cnpj);
+      if (!cnpjValido(cnpj)) return res.status(400).json({ erro: 'Informe o CNPJ da empresa (14 dígitos válidos).' });
+      const { rows: donos } = await pool.query(
+        `select 1 from unidades u join administrador_unidades au on au.unidade_id = u.id
+         where regexp_replace(u.cnpj, '\\D', '', 'g') = $1 and au.administrador_id <> $2`, [cnpj, req.user.id]);
+      if (donos.length > 0) return res.status(409).json({ erro: 'Este CNPJ já pertence a outra conta.' });
+    } else {
+      const pedido = normalizarCnpj(req.body.cnpj);
+      cnpj = pedido && meus.includes(pedido) ? pedido : meus[0]; // se a conta tem CNPJs diferentes (legado), vale o escolhido
+    }
+
+    const unidade = await emTransacao(async (db) => {
+      const criada = await criarUnidade(db, lida.dados, cnpj);
+      await vincularAdmin(db, req.user.id, criada.id);
+      return criada;
+    });
+    res.status(201).json({ unidade, cnpj: formatarCnpj(cnpj), unidades_slugs: await unidadesDoAdmin(req.user.id) });
+  } catch (erro) {
+    if (erro instanceof ErroNegocio) return res.status(erro.status).json({ erro: erro.message });
+    throw erro;
+  }
+}));
 
 // Dados institucionais — públicos, alimentam a home (seletor de região)
 router.get('/', asyncHandler(async (req, res) => {
@@ -43,6 +83,61 @@ router.get('/:slug/admin/equipe', requireAuth, requireAcessoUnidade('equipe'), a
   res.json(rows);
 }));
 
+// O administrador cadastra uma prestadora direto na aba Equipe (sem ela precisar se cadastrar sozinha
+// nem confirmar e-mail: quem vai usar a conta recebe o acesso do administrador). Se não vier senha, o
+// sistema gera uma provisória e a devolve UMA vez — a prestadora troca no "Meu perfil". Se a agenda já
+// tinha atendimentos com o nome dela (vindos da planilha, "prestadora sem cadastro"), eles são ligados
+// à conta nova automaticamente. É criação de login, então só administrador completo.
+router.post('/:slug/admin/equipe', requireAuth, requireRole('administrador'), requireAcessoUnidade('equipe'), asyncHandler(async (req, res) => {
+  const nome = String(req.body.nome ?? '').trim().replace(/\s+/g, ' ');
+  const email = normalizarEmail(req.body.email);
+  const telefone = normalizarTelefone(req.body.telefone);
+  if (!nomeValido(nome)) return res.status(400).json({ erro: 'Informe o nome da prestadora.' });
+  if (!email && !telefone) return res.status(400).json({ erro: 'Informe o e-mail e/ou o telefone: é com um deles que ela entra no portal.' });
+  if (email && !emailValido(email)) return res.status(400).json({ erro: 'E-mail inválido.' });
+  if (telefone && !telefoneValido(telefone)) return res.status(400).json({ erro: 'Telefone inválido — informe DDD + número.' });
+
+  const informada = String(req.body.senha ?? '');
+  if (informada && !senhaValida(informada)) return res.status(400).json({ erro: 'A senha precisa ter ao menos 8 caracteres (ou deixe em branco pra gerar uma).' });
+  const senha = informada || crypto.randomBytes(6).toString('base64url'); // 8 caracteres, aleatória
+  const senhaHash = await bcrypt.hash(senha, 10);
+
+  try {
+    const resultado = await emTransacao(async (db) => {
+      // e-mail repetido deixaria o login "por e-mail" ambíguo (várias contas com a mesma senha possível)
+      if (email) {
+        const { rows } = await db.query('select 1 from prestadoras where email = $1', [email]);
+        if (rows.length) throw new ErroNegocio(409, 'Já existe uma prestadora com esse e-mail.');
+      }
+      const { rows: [nova] } = await db.query(
+        `insert into prestadoras (nome, telefone, email, senha_hash, unidade_id)
+         values ($1, $2, $3, $4, $5) returning id, nome, telefone, email`,
+        [nome, telefone || null, email || null, senhaHash, req.unidadeId]
+      );
+
+      // atendimentos que a planilha deixou só com o NOME dela passam a apontar pra conta nova
+      const { rows: externos } = await db.query(
+        `select distinct profissional_externo as nome from atendimentos
+         where unidade_id = $1 and prestadora_id is null and profissional_externo is not null`, [req.unidadeId]);
+      let ligados = 0;
+      for (const e of externos.filter(x => normalizarTexto(x.nome) === normalizarTexto(nome))) {
+        const { rowCount } = await db.query(
+          `update atendimentos set prestadora_id = $1, profissional_externo = null,
+             status = case when status = 'pedido' then 'proposto' else status end, atualizado_em = now()
+           where unidade_id = $2 and prestadora_id is null and profissional_externo = $3`,
+          [nova.id, req.unidadeId, e.nome]);
+        ligados += rowCount;
+      }
+      return { nova, ligados };
+    });
+    res.status(201).json({ prestadora: resultado.nova, atendimentos_ligados: resultado.ligados, senha_provisoria: informada ? null : senha });
+  } catch (erro) {
+    if (erro instanceof ErroNegocio) return res.status(erro.status).json({ erro: erro.message });
+    if (erro.code === '23505') return res.status(409).json({ erro: 'Já existe uma prestadora com esse telefone.' });
+    throw erro;
+  }
+}));
+
 // Quanto a franquia paga a esta prestadora por atendimento. Vazio/null remove a
 // tarifa. Só vale pros próximos aceites — o que já foi aceito mantém o valor
 // combinado na hora (atendimentos.valor_prestadora). É dinheiro: só administrador
@@ -74,6 +169,32 @@ router.get('/:slug/admin/clientes', requireAuth, requireAcessoUnidade('clientes'
     [req.unidadeId]
   );
   res.json(rows);
+}));
+
+// Layout do painel inicial (Visão geral) DESTA unidade: quais atalhos aparecem e em que ordem, e quais
+// cartões de resumo ficam visíveis. Vale pra todo mundo que abre o painel da unidade; só o administrador
+// completo altera. Sem nada salvo, vale o padrão (tudo visível, na ordem de sempre).
+const MODULOS_PAINEL = ['agenda', 'equipe', 'clientes', 'avaliacoes', 'financeiro', 'relatorios'];
+const BLOCOS_PAINEL = ['atend', 'prof', 'fat', 'nps', 'agenda-hoje'];
+
+router.get('/:slug/admin/painel', requireAuth, requireAcessoUnidade('dashboard'), asyncHandler(async (req, res) => {
+  const { rows: [u] } = await pool.query('select painel_config from unidades where id = $1', [req.unidadeId]);
+  const c = u?.painel_config || {};
+  // atalhos novos (que não existiam quando a configuração foi salva) entram no fim, em vez de sumirem
+  const ordem = [...(c.ordem || []).filter(m => MODULOS_PAINEL.includes(m)), ...MODULOS_PAINEL.filter(m => !(c.ordem || []).includes(m))];
+  res.json({ ordem, ocultos: (c.ocultos || []).filter(o => MODULOS_PAINEL.includes(o) || BLOCOS_PAINEL.includes(o)), modulos: MODULOS_PAINEL, blocos: BLOCOS_PAINEL });
+}));
+
+router.put('/:slug/admin/painel', requireAuth, requireRole('administrador'), requireAcessoUnidade('dashboard'), asyncHandler(async (req, res) => {
+  const { ordem, ocultos } = req.body;
+  if (!Array.isArray(ordem) || !Array.isArray(ocultos)) return res.status(400).json({ erro: 'ordem e ocultos são listas' });
+  if (ordem.some(m => !MODULOS_PAINEL.includes(m)) || new Set(ordem).size !== ordem.length) {
+    return res.status(400).json({ erro: 'ordem com atalho inválido ou repetido' });
+  }
+  if (ocultos.some(o => !MODULOS_PAINEL.includes(o) && !BLOCOS_PAINEL.includes(o))) return res.status(400).json({ erro: 'item oculto inválido' });
+  const config = { ordem, ocultos: [...new Set(ocultos)] };
+  await pool.query('update unidades set painel_config = $1 where id = $2', [config, req.unidadeId]);
+  res.json({ ...config, modulos: MODULOS_PAINEL, blocos: BLOCOS_PAINEL });
 }));
 
 // Telefone (WhatsApp) da unidade — configuração da franquia, não é um módulo

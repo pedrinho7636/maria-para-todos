@@ -395,3 +395,6 @@ create index idx_sub_administradores_unidade on sub_administradores(unidade_id);
 -- ============================================================================
 -- FIM
 -- ============================================================================
+
+-- Layout do painel inicial da unidade (quais cartões aparecem e a ordem dos atalhos); editável pelo administrador.
+alter table unidades add column painel_config jsonb;

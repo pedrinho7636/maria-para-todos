@@ -7,6 +7,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { lerAtendimentos, normalizarTexto } = require('../utils/importarPlanilha');
 const { garantirPrestadoras, SENHA_PADRAO } = require('../utils/prestadorasImportadas');
 const { gerarOcorrencias } = require('../utils/recorrencia');
+const { gerarModeloImportacao } = require('../utils/modeloPlanilha');
 
 const router = express.Router();
 
@@ -52,10 +53,12 @@ async function comValorPago(atendimento) {
 
 // Pedido de orçamento pela home — público, entra como 'pedido' na agenda da unidade
 router.post('/', limitePedidoPublico, asyncHandler(async (req, res) => {
-  const { unidade_slug, tipo_servico, area, data_atendimento, hora_atendimento, origem } = req.body;
+  const { unidade_slug, tipo_servico, area, data_atendimento, hora_atendimento, origem, cliente_nome, cliente_telefone } = req.body;
   if (!unidade_slug || !tipo_servico || !data_atendimento) {
     return res.status(400).json({ erro: 'unidade_slug, tipo_servico e data_atendimento são obrigatórios' });
   }
+  const nomePedido = String(cliente_nome ?? '').trim().slice(0, 120);
+  const telefonePedido = String(cliente_telefone ?? '').trim().slice(0, 30);
   // Rota pública, sem autenticação — limite de tamanho reduz a superfície de
   // abuso em campos de texto livre (também escapados no frontend antes de exibir).
   if (tipo_servico.length > 200 || (area && area.length > 500)) {
@@ -65,10 +68,13 @@ router.post('/', limitePedidoPublico, asyncHandler(async (req, res) => {
   const { rows: [unidade] } = await pool.query('select id from unidades where slug = $1', [unidade_slug]);
   if (!unidade) return res.status(400).json({ erro: 'Unidade não encontrada' });
 
+  // Quem pediu entra como cliente avulso (sem login) da unidade — antes o nome e o telefone digitados no
+  // site se perdiam e a unidade não tinha como retornar. Reaproveita o cliente de mesmo nome.
+  const clienteId = nomePedido ? await acharOuCriarCliente(pool, unidade.id, nomePedido, telefonePedido) : null;
   const { rows: [atendimento] } = await pool.query(
-    `insert into atendimentos (unidade_id, tipo_servico, area, data_atendimento, hora_atendimento, origem, status)
-     values ($1, $2, $3, $4, $5, $6, 'pedido') returning *`,
-    [unidade.id, tipo_servico, area || null, data_atendimento, hora_atendimento || null, origem === 'whatsapp' ? 'whatsapp' : 'site']
+    `insert into atendimentos (unidade_id, cliente_id, tipo_servico, area, data_atendimento, hora_atendimento, origem, status)
+     values ($1, $2, $3, $4, $5, $6, $7, 'pedido') returning *`,
+    [unidade.id, clienteId, tipo_servico, area || null, data_atendimento, hora_atendimento || null, origem === 'whatsapp' ? 'whatsapp' : 'site']
   );
   res.status(201).json(atendimento);
 }));
@@ -278,6 +284,16 @@ router.post('/admin/:slug', requireAuth, requireAcessoUnidade('agenda'), asyncHa
   }
 }));
 
+// Modelo (.xlsx) da planilha de importação: colunas, linhas de exemplo e uma aba explicando cada campo.
+router.get('/admin/:slug/modelo-importacao', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
+  const buffer = await gerarModeloImportacao();
+  res.set({
+    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'Content-Disposition': 'attachment; filename="modelo-importacao-atendimentos.xlsx"',
+  });
+  res.send(Buffer.from(buffer));
+}));
+
 // Importa a planilha de atendimentos (.xlsx do sistema da franquia, enviada em
 // base64). A coluna "Número" é a chave: o que já foi importado antes é ignorado,
 // então dá pra importar o mesmo arquivo (ou um export mais novo) quantas vezes
@@ -335,6 +351,8 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
     // (e-mail nome@gmail.com, senha padrão) e já liga os atendimentos a ela
     profissionais_sem_cadastro: [...semCadastro].map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd),
     senha_padrao: SENHA_PADRAO,
+    com_valor: novas.filter(l => l.valor !== null).length,   // linhas novas que trouxeram Valor / Custo
+    com_custo: novas.filter(l => l.custo !== null).length,
     periodo: datas.length ? { de: datas[0], ate: datas[datas.length - 1] } : null,
   };
 
@@ -371,13 +389,16 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
       const r = await client.query(
         `insert into atendimentos
            (unidade_id, cliente_id, prestadora_id, tipo_servico, data_atendimento, hora_atendimento, duracao_horas,
-            status, origem, codigo_externo, orcamento_externo, profissional_externo, valor_prestadora)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, 'importacao', $9, $10, $11, $12)
+            status, origem, codigo_externo, orcamento_externo, profissional_externo, valor_prestadora, valor)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, 'importacao', $9, $10, $11, $12, $13)
          on conflict (unidade_id, codigo_externo) where codigo_externo is not null do nothing`,
         [req.unidadeId, clienteId, prestadoraId, l.tipo_servico, l.data, l.hora, l.duracao_horas, status,
          l.codigo, l.orcamento, l.profissional && !prestadoraId ? l.profissional : null,
-         // já realizado/aceito: trava a tarifa de hoje; ainda não aceito: fica nulo até o aceite
-         prestadoraId && (status === 'concluido' || status === 'aceito') ? tarifaPrestadora.get(prestadoraId) ?? null : null]
+         // custo vindo na planilha vale como o repasse combinado; sem ele, já realizado/aceito trava a
+         // tarifa de hoje e ainda não aceito fica nulo até o aceite
+         prestadoraId && l.custo !== null ? l.custo
+           : prestadoraId && (status === 'concluido' || status === 'aceito') ? tarifaPrestadora.get(prestadoraId) ?? null : null,
+         l.valor]
       );
       importados += r.rowCount;
     }
@@ -401,12 +422,28 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
 // sem tabela de regra, mesmo princípio de antes, só que agora com várias
 // entradas por semana em vez de uma só.
 router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
-  const { data_inicio, horizonte_meses, semanas_alternadas, itens } = req.body;
+  const { data_inicio, horizonte_meses, semanas_alternadas, itens, valor_mensal_total, cliente_novo } = req.body;
 
   if (!data_inicio || !Array.isArray(itens) || itens.length === 0) {
     return res.status(400).json({ erro: 'data_inicio e itens (ao menos um) são obrigatórios' });
   }
+  // valor do MÊS da série inteira (todos os dias da semana juntos): dividido entre todas as ocorrências do mês
+  let valorMensalTotal = null;
+  if (valor_mensal_total !== undefined && valor_mensal_total !== null && String(valor_mensal_total).trim() !== '') {
+    valorMensalTotal = Number(String(valor_mensal_total).replace(',', '.'));
+    if (!Number.isFinite(valorMensalTotal) || valorMensalTotal < 0 || valorMensalTotal >= 1e8) return res.status(400).json({ erro: 'Valor do mês inválido' });
+    valorMensalTotal = Math.round(valorMensalTotal * 100) / 100;
+  }
+  const nomeNovo = String(cliente_novo?.nome ?? '').trim().slice(0, 200);
   for (const item of itens) {
+    // duração do atendimento (opcional); sem ela a agenda mostra um bloco de 1 hora
+    if (item.duracao_horas === undefined || item.duracao_horas === null || item.duracao_horas === '') item.duracao_horas = null;
+    else {
+      item.duracao_horas = Number(item.duracao_horas);
+      if (!Number.isFinite(item.duracao_horas) || item.duracao_horas < 0.5 || item.duracao_horas > 24) {
+        return res.status(400).json({ erro: 'Duração deve estar entre 0,5 e 24 horas' });
+      }
+    }
     const dia = Number(item.dia_semana);
     if (!Number.isInteger(dia) || dia < 0 || dia > 6 || !item.hora_atendimento || !item.tipo_servico) {
       return res.status(400).json({ erro: 'cada item precisa de dia_semana (0-6), hora_atendimento e tipo_servico' });
@@ -433,6 +470,7 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
     linhas = gerarOcorrencias({
       dataInicio: data_inicio, horizonteMeses: horizonte_meses, alternadas: !!semanas_alternadas,
       itens: itens.map(i => ({ dia_semana: Number(i.dia_semana), valor_mensal: i.valor_mensal })),
+      valorMensalTotal,
     });
   } catch (erro) {
     return res.status(400).json({ erro: erro.message });
@@ -443,6 +481,8 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // cliente novo da série (sem cadastro ainda): criado/achado UMA vez e usado nos itens sem cliente próprio
+    const clienteNovoId = nomeNovo ? await acharOuCriarCliente(client, req.unidadeId, nomeNovo, String(cliente_novo?.telefone ?? '').trim().slice(0, 50)) : null;
     const inseridos = [];
     for (const { data, item: indice, valor, valor_mensal: valorMensal } of linhas) {
       const item = itens[indice];
@@ -450,11 +490,11 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
       const { rows: [linha] } = await client.query(
         `insert into atendimentos
            (unidade_id, cliente_id, prestadora_id, tipo_servico, area, data_atendimento,
-            hora_atendimento, valor, valor_mensal, status, origem, serie_id)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'manual', $11)
+            hora_atendimento, duracao_horas, valor, valor_mensal, status, origem, serie_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'manual', $12)
          returning *`,
-        [req.unidadeId, item.cliente_id || null, item.prestadora_id || null, item.tipo_servico, item.area || null,
-         data, item.hora_atendimento, valor, valorMensal, status, serieId]
+        [req.unidadeId, item.cliente_id || clienteNovoId || null, item.prestadora_id || null, item.tipo_servico, item.area || null,
+         data, item.hora_atendimento, item.duracao_horas, valor, valorMensal, status, serieId]
       );
       inseridos.push(linha);
     }

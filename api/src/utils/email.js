@@ -11,14 +11,48 @@ const nodemailer = require('nodemailer');
 
 const REMETENTE_RESEND_PADRAO = 'Portal da Maria <onboarding@resend.dev>';
 
+// Valores colados num painel (Render, .env) chegam com sujeira que o Gmail recusa como "senha
+// errada": aspas em volta, espaço ou quebra de linha no fim, e a senha de app do Gmail aparece na
+// tela em 4 blocos separados por espaço ("abcd efgh ijkl mnop") — a senha de verdade tem 16 letras
+// seguidas. Limpa tudo isso aqui, em um lugar só.
+const semAspas = (v) => String(v ?? '').trim().replace(/^["']+|["']+$/g, '').trim();
+const smtpHost = () => semAspas(process.env.SMTP_HOST);
+const smtpUser = () => semAspas(process.env.SMTP_USER);
+const smtpPass = () => semAspas(process.env.SMTP_PASS).replace(/\s+/g, '');
+const resendKey = () => semAspas(process.env.RESEND_API_KEY);
+
 function smtpConfigurado() {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  return !!(smtpHost() && smtpUser() && smtpPass());
 }
 function resendConfigurado() {
-  return !!process.env.RESEND_API_KEY;
+  return !!resendKey();
 }
 function configurado() {
   return smtpConfigurado() || resendConfigurado();
+}
+
+// "rotherpedro00@gmail.com" -> "ro***@gmail.com" (pro log dizer QUAL conta sem expô-la inteira)
+function mascarar(email) {
+  const [local, dominio] = String(email).split('@');
+  return dominio ? `${local.slice(0, 2)}***@${dominio}` : '***';
+}
+
+// Resumo (sem segredos) do que está configurado — vai pro log ao subir a API, pra quem opera o
+// site conferir se o Render recebeu o que se esperava: qual provedor vale, qual conta envia e
+// quantos caracteres tem a senha (a senha de app do Gmail tem exatamente 16).
+function descreverConfiguracao() {
+  const linhas = [];
+  if (smtpConfigurado()) {
+    const tamanho = smtpPass().length;
+    linhas.push(`SMTP ${smtpHost()}:${process.env.SMTP_PORT || 587} · conta ${mascarar(smtpUser())} · senha com ${tamanho} caracteres`);
+    if (/gmail/i.test(smtpHost()) && tamanho !== 16) linhas.push(`  ⚠ a senha de app do Gmail tem 16 caracteres; esta tem ${tamanho} — provavelmente NÃO é a senha de app (gere outra em myaccount.google.com/apppasswords).`);
+    if (String(process.env.SMTP_PASS ?? '') !== smtpPass()) linhas.push('  (a senha chegou com espaços/aspas e foi limpa automaticamente)');
+  } else {
+    linhas.push('SMTP não configurado');
+  }
+  linhas.push(resendConfigurado() ? 'Resend configurado' + (smtpConfigurado() ? ' (usado se o SMTP falhar)' : '') : 'Resend não configurado');
+  if (!configurado()) linhas.push('  ⚠ nenhum provedor de e-mail: os códigos só aparecem aqui no log.');
+  return linhas;
 }
 
 let transporteSmtp = null;
@@ -26,10 +60,10 @@ function transporte() {
   if (!transporteSmtp) {
     const porta = Number(process.env.SMTP_PORT || 587);
     transporteSmtp = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
+      host: smtpHost(),
       port: porta,
       secure: porta === 465, // 465 = TLS direto; 587 = STARTTLS
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      auth: { user: smtpUser(), pass: smtpPass() },
       connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 20000,
@@ -51,15 +85,15 @@ function logSimulado(to, subject, html, motivo) {
 async function enviarPorSmtp({ to, subject, html }) {
   // O Gmail só aceita remetente igual à conta autenticada (ou alias dela) —
   // por isso o EMAIL_FROM da Resend não vale aqui.
-  const from = process.env.SMTP_FROM || `Portal da Maria <${process.env.SMTP_USER}>`;
+  const from = semAspas(process.env.SMTP_FROM) || `Portal da Maria <${smtpUser()}>`;
   await transporte().sendMail({ from, to, subject, html, text: textoSimples(html) });
 }
 
 async function enviarPorResend({ to, subject, html }) {
   const resp = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: process.env.EMAIL_FROM || REMETENTE_RESEND_PADRAO, to, subject, html }),
+    headers: { Authorization: `Bearer ${resendKey()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: semAspas(process.env.EMAIL_FROM) || REMETENTE_RESEND_PADRAO, to, subject, html }),
   });
   if (!resp.ok) {
     const corpo = await resp.text().catch(() => '');
@@ -69,24 +103,32 @@ async function enviarPorResend({ to, subject, html }) {
   }
 }
 
+// Tenta os provedores configurados em ordem (SMTP, depois Resend): se o SMTP falhar mas a Resend
+// estiver configurada, ela ainda tenta — o e-mail só é dado como "não saiu" quando TODOS falham, e
+// aí o motivo devolvido é o do primeiro (o principal), que é o que a pessoa precisa consertar.
 async function enviarEmail({ to, subject, html }) {
-  const via = smtpConfigurado() ? 'smtp' : resendConfigurado() ? 'resend' : null;
-  if (!via) {
+  const provedores = [];
+  if (smtpConfigurado()) provedores.push(['smtp', enviarPorSmtp]);
+  if (resendConfigurado()) provedores.push(['resend', enviarPorResend]);
+  if (provedores.length === 0) {
     logSimulado(to, subject, html, 'nenhum provedor configurado');
     return { enviado: false, motivo: 'nao-configurado' };
   }
 
-  try {
-    if (via === 'smtp') await enviarPorSmtp({ to, subject, html });
-    else await enviarPorResend({ to, subject, html });
-    return { enviado: true, via };
-  } catch (erro) {
-    console.error(`[email] falha ao enviar pra ${to} via ${via}:`, erro.message);
-    logSimulado(to, subject, html, `falha no envio via ${via}`);
-    return { enviado: false, via, motivo: classificarErro(erro) };
+  let primeiroErro = null, primeiraVia = null;
+  for (const [via, enviar] of provedores) {
+    try {
+      await enviar({ to, subject, html });
+      if (primeiroErro) console.log(`[email] ${primeiraVia} falhou, mas o envio por ${via} funcionou.`);
+      return { enviado: true, via };
+    } catch (erro) {
+      console.error(`[email] falha ao enviar pra ${to} via ${via}:`, erro.message);
+      if (!primeiroErro) { primeiroErro = erro; primeiraVia = via; }
+    }
   }
+  logSimulado(to, subject, html, `falha no envio via ${primeiraVia}`);
+  return { enviado: false, via: primeiraVia, motivo: classificarErro(primeiroErro) };
 }
-
 // Diz à tela (sem vazar nenhum segredo) QUAL foi o tipo de falha, pra quem opera o site
 // saber o que consertar sem precisar abrir os logs: senha recusada é um problema, porta
 // bloqueada ou servidor inalcançável é outro, bem diferente.
@@ -106,4 +148,4 @@ function htmlCodigo(codigo, motivo) {
   </div>`;
 }
 
-module.exports = { enviarEmail, classificarErro, configurado, smtpConfigurado, resendConfigurado, htmlCodigo };
+module.exports = { enviarEmail, classificarErro, descreverConfiguracao, configurado, smtpConfigurado, resendConfigurado, htmlCodigo };

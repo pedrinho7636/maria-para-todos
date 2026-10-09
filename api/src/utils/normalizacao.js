@@ -43,6 +43,15 @@ function formatarCnpj(cnpj) {
   return d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : d;
 }
 
+// "São José do Ouro" -> "sao-jose-do-ouro" (endereço/identificador curto da unidade)
+function slugificar(texto) {
+  return String(texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/g, '');
+}
+
+const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
+const ufValida = (uf) => UFS.includes(String(uf ?? '').trim().toUpperCase());
+
 // E-mail institucional exigido de administrador/sub-administrador: domínio
 // fixo da franquia + prefixo com o nome (slug) da unidade que a pessoa
 // administra — evita que qualquer e-mail pessoal seja usado pra uma conta
@@ -56,4 +65,4 @@ function emailInstitucionalValido(email, slugsPermitidos) {
   return (slugsPermitidos || []).some(slug => local.startsWith(String(slug).toLowerCase()));
 }
 
-module.exports = { normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido, formatarCnpj, emailInstitucionalValido, DOMINIO_INSTITUCIONAL };
+module.exports = { normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido, formatarCnpj, slugificar, ufValida, UFS, emailInstitucionalValido, DOMINIO_INSTITUCIONAL };

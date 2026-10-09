@@ -1,7 +1,7 @@
 // Leitura da planilha de atendimentos exportada do sistema da franquia
 // (.xlsx com: Orçamento | Número | Data | Horário | Período | Serviço | Tipo |
-// Horas | Cliente | Profissionais | Situação | Recorrente). Só lê e valida —
-// quem grava no banco é a rota.
+// Horas | Cliente | Profissionais | Situação | Recorrente — e, opcionais, Valor | Custo).
+// Só lê e valida — quem grava no banco é a rota.
 const read = require('read-excel-file/node');
 
 const MAX_LINHAS = 5000;
@@ -24,6 +24,10 @@ const COLUNAS = {
   cliente: ['cliente'],
   profissionais: ['profissionais', 'profissional', 'prestadora'],
   situacao: ['situacao', 'status'],
+  // opcionais: se o sistema da franquia exportar valores, entram junto (valor = o que o cliente paga;
+  // custo = o que a franquia paga à prestadora)
+  valor: ['valor', 'valor cobrado', 'preco'],
+  custo: ['custo', 'repasse', 'valor prestadora', 'valor da prestadora', 'valor pago'],
 };
 const OBRIGATORIAS = ['numero', 'data', 'horario', 'servico'];
 
@@ -102,6 +106,22 @@ function mapearServico(servico, tipo) {
   return [String(servico ?? '').trim(), String(tipo ?? '').trim().toLowerCase()].filter(Boolean).join(' ');
 }
 
+// Dinheiro vindo da planilha: número do Excel, ou texto como "R$ 1.234,56" / "150,5" / "150.50".
+// Vazio, negativo, absurdo ou ilegível = sem valor (a linha não é recusada por causa disso).
+function parseValor(v) {
+  if (v === null || v === undefined || v === '') return null;
+  let n;
+  if (typeof v === 'number') n = v;
+  else {
+    let t = String(v).trim().replace(/^R\$\s*/i, '').replace(/\s/g, '');
+    if (!t) return null;
+    if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); // 1.234,56 -> 1234.56
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, ''); // 1.000 (ponto de milhar, sem decimais) -> 1000
+    n = Number(t);
+  }
+  return Number.isFinite(n) && n >= 0 && n < 1e8 ? Math.round(n * 100) / 100 : null;
+}
+
 function mapearSituacao(v) {
   const s = normalizarTexto(v);
   if (s.startsWith('conclu')) return 'concluido';
@@ -135,10 +155,12 @@ async function lerAtendimentos(buffer) {
   const invalidos = [];
   const vistos = new Set();
   let repetidasNoArquivo = 0;
+  let exemplosIgnorados = 0;
 
   corpo.forEach((linha, i) => {
     const numeroLinha = cab.indice + 2 + i; // número da linha como o Excel mostra (1-based)
     const codigo = String(celula(linha, 'numero') ?? '').trim();
+    if (/^exemplo/i.test(codigo)) { exemplosIgnorados++; return; } // linhas de exemplo do modelo: nunca viram atendimento
     const data = parseData(celula(linha, 'data'));
     const hora = parseHora(celula(linha, 'horario'));
     const servico = mapearServico(celula(linha, 'servico'), celula(linha, 'tipo'));
@@ -165,10 +187,12 @@ async function lerAtendimentos(buffer) {
       cliente: parseCliente(celula(linha, 'cliente')),
       profissional: String(celula(linha, 'profissionais') ?? '').trim().slice(0, 200),
       situacao: mapearSituacao(celula(linha, 'situacao')),
+      valor: parseValor(celula(linha, 'valor')),
+      custo: parseValor(celula(linha, 'custo')),
     });
   });
 
-  return { linhas, invalidos, repetidasNoArquivo, totalLidas: corpo.length };
+  return { linhas, invalidos, repetidasNoArquivo, exemplosIgnorados, totalLidas: corpo.length };
 }
 
-module.exports = { lerAtendimentos, normalizarTexto };
+module.exports = { lerAtendimentos, normalizarTexto, parseValor, COLUNAS, OBRIGATORIAS };

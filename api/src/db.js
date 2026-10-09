@@ -133,6 +133,9 @@ const MIGRACOES = [
      (select round(avg(av.nota), 1) from avaliacoes av where av.prestadora_id = p.id and av.status = 'aprovada') as nota_media
    from prestadoras p`,
 
+  // layout do painel inicial de cada unidade (cartões visíveis e ordem dos atalhos), editável pelo administrador
+  `alter table unidades add column if not exists painel_config jsonb`,
+
   // índices que a sincronização entre usuários consulta a cada poucos segundos
   `create index if not exists idx_atendimentos_unidade_atualizado on atendimentos(unidade_id, atualizado_em)`,
   `create index if not exists idx_atendimentos_cliente on atendimentos(cliente_id)`,

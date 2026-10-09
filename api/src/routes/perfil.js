@@ -54,8 +54,19 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
 
   const unidadesSlugs = await slugsPermitidosPara(req.user.perfil, cfg.tabela, req.user.id);
 
+  // Administrador: a "empresa" dele (CNPJ) e as unidades que ela tem — a tela do perfil mostra isso
+  // e oferece "Adicionar unidade".
+  let empresa = null;
+  if (req.user.perfil === 'administrador') {
+    const { rows } = await pool.query(
+      `select u.slug, u.nome, u.uf, u.cnpj from unidades u
+       join administrador_unidades au on au.unidade_id = u.id where au.administrador_id = $1 order by u.nome`, [req.user.id]);
+    empresa = { cnpj: rows.find(u => u.cnpj)?.cnpj ?? null, unidades: rows.map(({ slug, nome, uf }) => ({ slug, nome, uf })) };
+  }
+
   res.json({
     ...dados,
+    empresa,
     perfil: req.user.perfil,
     temSobrenome: cfg.temSobrenome,
     temTelefone: cfg.temTelefone,

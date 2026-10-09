@@ -15,6 +15,7 @@ const subadministradoresRoutes = require('./routes/subadministradores');
 const perfilRoutes = require('./routes/perfil');
 const financeiroRoutes = require('./routes/financeiro');
 const { iniciarConclusaoAutomatica } = require('./utils/conclusao');
+const { descreverConfiguracao } = require('./utils/email');
 
 // Fail-fast: subir com o segredo de exemplo (ou um segredo curto) deixaria
 // qualquer token assinável por quem lesse este repositório — o valor do
@@ -72,7 +73,8 @@ const limiteLoginConta = rateLimit({
 const limiteLoginIp = rateLimit({ ...base, max: 60, skipSuccessfulRequests: true });
 // cada pedido de cadastro dispara e-mail de verdade, então tem teto — mas folgado
 // o bastante pra um cadastro (pedir código, reenviar, confirmar) sem travar
-const limiteCadastro = rateLimit({ ...base, max: 30 });
+// (LIMITE_CADASTRO existe só pra suíte de testes, que faz dezenas de cadastros do mesmo IP)
+const limiteCadastro = rateLimit({ ...base, max: Number(process.env.LIMITE_CADASTRO) || 30 });
 // Recuperação de senha. A chave é só o identificador (sem o IP): quem quer lotar a
 // caixa de e-mail de alguém, ou chutar o código de 6 dígitos, troca de IP à vontade —
 // o limite tem que ser por conta. Chutes: 8 erros / 15 min contra 1 milhão de códigos
@@ -83,6 +85,14 @@ const limiteRecuperarConfirmar = rateLimit({ ...base, max: 8, skipSuccessfulRequ
 const limiteRecuperarIp = rateLimit({ ...base, max: 40 });
 app.post('/api/auth/recuperar-senha', limiteRecuperarIp, limiteRecuperarPedido);
 app.post('/api/auth/recuperar-senha/confirmar', limiteRecuperarIp, limiteRecuperarConfirmar);
+// Cadastro de administrador com um CNPJ que JÁ existe confere nome + e-mail + SENHA do dono da empresa:
+// é um jeito de chutar senha, então vale a mesma regra do login — só as tentativas ERRADAS contam,
+// por e-mail + IP (um cadastro que dá certo, ou que só manda o código, não gasta o limite).
+const limiteCadastroAdminConta = rateLimit({
+  ...base, max: 10, skipSuccessfulRequests: true,
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}|${String(req.body?.email ?? '').trim().toLowerCase()}`,
+});
+app.post('/api/auth/cadastro/admin', limiteCadastroAdminConta);
 app.use('/api/auth/login', limiteLoginIp, limiteLoginConta);
 app.use('/api/auth/cadastro', limiteCadastro);
 
@@ -134,6 +144,7 @@ prepararBanco()
   .then(() => new Promise((resolve, reject) => {
     const servidor = app.listen(PORT, () => {
       console.log(`API do Portal da Maria rodando em http://localhost:${PORT}`);
+      descreverConfiguracao().forEach(l => console.log('[email] ' + l)); // qual provedor/conta vale (sem segredos)
       iniciarConclusaoAutomatica();
       resolve(servidor);
     });

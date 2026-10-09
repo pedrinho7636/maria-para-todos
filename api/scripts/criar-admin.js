@@ -2,9 +2,14 @@
 // num banco novo sem depender de e-mail. Roda no seu computador, contra o banco do .env ou da
 // DATABASE_URL (Neon).
 //
-//   npm run admin:criar -- --email voce@exemplo.com --nome Maria --sobrenome Silva --unidades carazinho,panambi
-//   (opcional)  --cnpj 00.000.000/0001-00   define o CNPJ das unidades que ainda não têm CNPJ
-//   (opcional)  --telefone "(54) 9 9999-9999"   define o WhatsApp das unidades que ainda não têm telefone
+//   npm run admin:criar -- --email voce@exemplo.com --nome Maria --sobrenome Silva \
+//        --cnpj 00.000.000/0001-00 --unidades "Carazinho/RS,Panambi/RS" --telefone "(54) 9 9999-9999"
+//
+// --unidades: lista de "Cidade/UF" (UF opcional; padrão RS). Cada uma é CRIADA se ainda não existir
+//   (e então o --cnpj é obrigatório) ou, se já existir, apenas vinculada ao administrador. Todas as
+//   unidades de um administrador pertencem à mesma empresa (mesmo CNPJ): é isso que deixa ele alternar
+//   entre elas no painel.
+// --telefone: WhatsApp das unidades criadas agora (opcional).
 //
 // A senha NÃO vai na linha de comando (ficaria no histórico do terminal): o script pergunta
 // (a digitação fica oculta) ou lê a variável ADMIN_SENHA. Mínimo 8 caracteres.
@@ -12,7 +17,8 @@
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { pool } = require('../src/db');
-const { cnpjValido, formatarCnpj } = require('../src/utils/normalizacao');
+const { cnpjValido, normalizarCnpj, slugificar, ufValida, formatarCnpj } = require('../src/utils/normalizacao');
+const { criarUnidade, vincularAdmin } = require('../src/utils/unidades');
 
 function argumento(nome) {
   const i = process.argv.indexOf('--' + nome);
@@ -46,7 +52,7 @@ function perguntarSenha(texto) {
 
 (async () => {
   if (process.argv.includes('--help') || !argumento('email')) {
-    console.log('Uso: npm run admin:criar -- --email x@y.com --nome Maria --sobrenome Silva --unidades carazinho,panambi [--redefinir]');
+    console.log('Uso: npm run admin:criar -- --email x@y.com --nome Maria --sobrenome Silva --cnpj 00.000.000/0001-00 --unidades "Carazinho/RS,Panambi/RS" [--telefone "(54) 9 9999-9999"] [--redefinir]');
     return process.exit(argumento('email') ? 0 : 1);
   }
   const email = argumento('email').trim().toLowerCase();
@@ -68,28 +74,42 @@ function perguntarSenha(texto) {
       return;
     }
 
-    const cnpj = argumento('cnpj');
+    const cnpj = normalizarCnpj(argumento('cnpj'));
+    if (argumento('cnpj') && !cnpjValido(cnpj)) throw new Error('CNPJ inválido — confira os 14 dígitos.');
     const telefone = argumento('telefone');
-    if (cnpj && !cnpjValido(cnpj)) throw new Error('CNPJ inválido — confira os 14 dígitos.');
-    const slugs = argumento('unidades').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    const { rows: unidades } = await pool.query('select id, slug from unidades where slug = any($1::text[])', [slugs]);
-    const faltando = slugs.filter(s => !unidades.some(u => u.slug === s));
-    if (faltando.length) throw new Error(`Unidade(s) inexistente(s): ${faltando.join(', ')}. As cadastradas são: carazinho, panambi.`);
+    const pedidas = argumento('unidades').split(',').map(s => s.trim()).filter(Boolean).map((s) => {
+      const [nome, uf] = s.split('/').map(p => p.trim());
+      return { nome, uf: (uf || 'RS').toUpperCase() };
+    });
+    for (const p of pedidas) if (!p.nome || !ufValida(p.uf)) throw new Error(`Unidade inválida: "${p.nome}/${p.uf}". Use "Cidade/UF", ex.: Carazinho/RS.`);
 
     const cliente = await pool.connect();
+    const resumo = [];
     try {
       await cliente.query('begin');
       const { rows: [novo] } = await cliente.query(
         'insert into administradores (nome, sobrenome, email, senha_hash) values ($1, $2, $3, $4) returning id',
         [argumento('nome').trim(), argumento('sobrenome').trim(), email, hash]
       );
-      for (const u of unidades) await cliente.query('insert into administrador_unidades (administrador_id, unidade_id) values ($1, $2)', [novo.id, u.id]);
-      // CNPJ/telefone só entram nas unidades que ainda não têm (nunca sobrescreve o de uma unidade já configurada)
-      if (cnpj) await cliente.query('update unidades set cnpj = $1 where id = any($2::uuid[]) and cnpj is null', [formatarCnpj(cnpj), unidades.map(u => u.id)]);
-      if (telefone) await cliente.query('update unidades set telefone = $1 where id = any($2::uuid[]) and telefone is null', [telefone, unidades.map(u => u.id)]);
+      for (const p of pedidas) {
+        const { rows: [ja] } = await cliente.query('select id, slug, cnpj from unidades where slug = $1', [slugificar(p.nome)]);
+        if (ja) {
+          // unidade que já existe: só vincula (e completa CNPJ/telefone se ela ainda não tinha)
+          if (cnpj && ja.cnpj && normalizarCnpj(ja.cnpj) !== cnpj) throw new Error(`A unidade ${ja.slug} já tem outro CNPJ (${ja.cnpj}).`);
+          if (cnpj) await cliente.query('update unidades set cnpj = coalesce(cnpj, $1) where id = $2', [formatarCnpj(cnpj), ja.id]);
+          if (telefone) await cliente.query('update unidades set telefone = coalesce(telefone, $1) where id = $2', [telefone, ja.id]);
+          await vincularAdmin(cliente, novo.id, ja.id);
+          resumo.push(`${ja.slug} (já existia)`);
+        } else {
+          if (!cnpj) throw new Error(`Pra CRIAR a unidade "${p.nome}" informe o --cnpj da empresa.`);
+          const criada = await criarUnidade(cliente, { nome: p.nome, uf: p.uf, telefone: telefone || null, endereco: null, endereco_curto: null }, cnpj);
+          await vincularAdmin(cliente, novo.id, criada.id);
+          resumo.push(`${criada.slug} (criada)`);
+        }
+      }
       await cliente.query('commit');
     } catch (erro) { await cliente.query('rollback').catch(() => {}); throw erro; } finally { cliente.release(); }
-    console.log(`Administrador criado: ${email} (unidades: ${unidades.map(u => u.slug).join(', ')}). Já dá pra entrar no portal.`);
+    console.log(`Administrador criado: ${email} (unidades: ${resumo.join(', ')}). Já dá pra entrar no portal.`);
   } catch (erro) {
     console.error('Erro:', erro.message);
     process.exitCode = 1;
