@@ -1,7 +1,7 @@
 // Cadastro de unidades (franquias) e a regra de "empresa": todas as unidades de uma mesma conta de
 // administrador têm o MESMO CNPJ — é isso que permite alternar entre elas no painel. Outro CNPJ,
 // outra empresa: conta nova.
-const { normalizarTelefone, formatarCnpj, slugificar, ufValida } = require('./normalizacao');
+const { normalizarTelefone, formatarCnpj, slugificar, ufValida, capitalizarNome } = require('./normalizacao');
 const { telefoneValido } = require('./validacao');
 const { normalizarTexto } = require('./importarPlanilha');
 
@@ -31,8 +31,8 @@ class ErroNegocio extends Error {
 // Lê e valida os dados de uma unidade vindos de um formulário.
 // Devolve { dados } ou { erro }.
 function lerDadosUnidade(corpo) {
-  const nome = String(corpo?.nome ?? '').trim().replace(/\s+/g, ' ');
-  const uf = String(corpo?.uf ?? '').trim().toUpperCase();
+  const nome = capitalizarNome(corpo?.nome); // "passo fundo" vira "Passo Fundo"
+  const uf =String(corpo?.uf ?? '').trim().toUpperCase();
   const telefone = String(corpo?.telefone ?? '').trim();
   const endereco = String(corpo?.endereco ?? '').trim();
   const enderecoCurto = String(corpo?.endereco_curto ?? '').trim();
@@ -55,7 +55,8 @@ async function slugLivre(db, nome) {
 }
 
 // Cria a unidade com o CNPJ (só dígitos) da empresa, recusando nome repetido DENTRO da mesma empresa.
-async function criarUnidade(db, dados, cnpjDigitos) {
+async function criarUnidade(db, dadosBrutos, cnpjDigitos) {
+  const dados = { ...dadosBrutos, nome: capitalizarNome(dadosBrutos.nome) }; // vale também pra quem chega por script (admin:criar)
   // Trava por empresa até o fim da transação: dois pedidos simultâneos (duplo clique, duas abas) não
   // passam os dois pela checagem de nome repetido e criam a mesma unidade duas vezes.
   await db.query('select pg_advisory_xact_lock(hashtext($1))', ['empresa:' + cnpjDigitos]);

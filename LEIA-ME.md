@@ -225,21 +225,46 @@ só administrador completo, nunca funcionário). **Deixando em branco, o campo s
   valor informado, centavo a centavo. Mês só parcialmente coberto (a série começa ou termina no meio dele) recebe a
   parte proporcional às ocorrências que de fato entram. Cada atendimento guarda o seu valor (`atendimentos.valor`)
   e o mensal original (`valor_mensal`) — é daí que os dashboards vão somar o faturamento.
-- Planilha importada: não traz coluna de valor, então esses atendimentos ficam sem valor até alguém preenchê-lo.
+- Planilha importada: a exportação da franquia traz a coluna **Valor (R$)** (o que o cliente paga) e o portal a lê.
+  O **Custo** (repasse) é opcional: acrescente uma coluna "Custo (R$)" se o cliente conseguir exportá-lo.
+  O modelo baixado em "Importar planilha" tem as mesmas colunas, na mesma ordem, da planilha real
+  (Orçamento, Número, Data, Horário, Período, Serviço, Tipo, Horas, Cliente, Profissionais, Situação, Recorrente, Valor (R$));
+  *Período* e *Recorrente* não são lidos.
 - Não confundir com o **valor pago à prestadora** (tela Equipe), que é o repasse.
 
 **Prestadoras vindas da planilha:** ao importar, as profissionais que ainda não existem como prestadoras são
 **cadastradas automaticamente** e os atendimentos já ficam ligados a elas. Como a planilha só traz o nome, a conta
-nasce assim: e-mail = nome sem espaços/acentos + `@gmail.com` (ex.: `clarisseiracemarother@gmail.com`; homônimas
-ganham um número), **senha padrão `senha123`**, sem telefone (o login é pelo e-mail). A prestadora ou o admin troca
-e-mail e senha no "Meu perfil". Atenção: o e-mail é presumido, então códigos de recuperação de senha vão pra esse
-endereço — troque pelo e-mail real. Os atendimentos já importados antes disso foram ligados com
-`npm run importadas:vincular -- --aplicar` (sem o `--aplicar` ele só simula e mostra o que faria).
+nasce assim: e-mail presumido = nome sem espaços/acentos + `@gmail.com` (ex.: `clarisseiracemarother@gmail.com`;
+homônimas ganham um número), **senha padrão `senha123`**, sem telefone, e **marcada como "primeiro acesso pendente"**.
+Os atendimentos já importados antes disso foram ligados com `npm run importadas:vincular -- --aplicar` (sem o
+`--aplicar` ele só simula e mostra o que faria).
+
+**Primeiro acesso obrigatório (contas criadas pela planilha):**
+1. O administrador preenche o telefone dela em **Equipe → Contato** (o botão também manda o acesso por WhatsApp:
+   link + "login: seu nome completo" + senha padrão). A linha dela na Equipe mostra "primeiro acesso pendente".
+2. Ela entra em **Prestadora** com o **nome completo** (como na planilha; maiúscula/acento não importam) e a senha
+   `senha123`. Se houver duas com o mesmo nome e a mesma senha padrão, o sistema pede o e-mail em vez de adivinhar.
+3. O portal abre direto a tela **"Bem-vinda"**, que não dá pra fechar: ela informa o **e-mail dela**, o telefone
+   (opcional) e uma **senha nova** (diferente da padrão), recebe um **código de 6 dígitos** nesse e-mail e confirma.
+4. Só então a área dela abre. Até lá a API responde 403 `PRIMEIRO_ACESSO` em tudo que é dela (convites, agenda, resumo,
+   avaliações, sync). Depois de concluir, o login pelo nome deixa de existir (vale e-mail ou telefone).
+- A "recuperar senha" **não** manda código pro e-mail presumido de uma conta pendente (podia ser de um estranho).
+- Contas importadas antes dessa regra e ainda com `senha123`: `npm run importadas:primeiro-acesso` lista quais seriam
+  marcadas; com `-- --aplicar` ele marca (confira a lista: conta de teste sua com `senha123` também entra).
 
 **Conclusão automática:** a cada 5 minutos (e ao subir a API) o atendimento **aceito** cuja data/hora + duração já
 passou vira **concluído** (sem horário, vale o dia inteiro; convite nunca aceito não conclui). Ao concluir, trava a
 tarifa da prestadora. É o que faz o "realizado" existir: libera a avaliação pelo cliente, alimenta o total de
 atendimentos da Equipe e é a base do Financeiro.
+
+**Situação do atendimento (programado · concluído · cancelado):** na agenda, clique no atendimento → o campo
+**Situação** do balão troca entre os três (`POST /atendimentos/admin/:slug/:id/situacao`).
+- **Só programados e concluídos entram nas contagens** (visão geral, pontinhos do calendário, "no total" do dia,
+  Equipe, Financeiro, resumo da prestadora). O **cancelado** fica registrado — aparece riscado na agenda do dia —
+  mas sai de todas as contas, e não aceita mais edição de valor/local/prestadora até ser reativado.
+- *Concluído* manual: trava a tarifa da prestadora (se houver) como no aceite.
+- *Programado* (reativar): volta a "aceito" se já tem prestadora, senão a "pedido". Fica marcado como escolha manual
+  (`situacao_manual`): se a data já passou, a conclusão automática **não** o conclui de novo.
 
 **Financeiro (menu *Financeiro*; administrador, ou funcionário com a permissão "Financeiro" marcada em Acessos):**
 tela por mês (setas ‹ ›) com

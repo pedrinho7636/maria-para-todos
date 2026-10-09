@@ -136,6 +136,14 @@ const MIGRACOES = [
   // layout do painel inicial de cada unidade (cartões visíveis e ordem dos atalhos), editável pelo administrador
   `alter table unidades add column if not exists painel_config jsonb`,
 
+  // o administrador marcou o atendimento como PROGRAMADO à mão (mesmo com a data já passada): a conclusão
+  // automática não mexe nele
+  `alter table atendimentos add column if not exists situacao_manual boolean not null default false`,
+
+  // conta criada automaticamente (planilha) com senha padrão: no primeiro acesso a prestadora é obrigada a
+  // confirmar o e-mail dela e trocar a senha — até lá, a API só deixa ela usar essa etapa
+  `alter table prestadoras add column if not exists primeiro_acesso_pendente boolean not null default false`,
+
   // índices que a sincronização entre usuários consulta a cada poucos segundos
   `create index if not exists idx_atendimentos_unidade_atualizado on atendimentos(unidade_id, atualizado_em)`,
   `create index if not exists idx_atendimentos_cliente on atendimentos(cliente_id)`,

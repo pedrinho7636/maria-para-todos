@@ -1,6 +1,8 @@
 // Leitura da planilha de atendimentos exportada do sistema da franquia
 // (.xlsx com: Orçamento | Número | Data | Horário | Período | Serviço | Tipo |
-// Horas | Cliente | Profissionais | Situação | Recorrente — e, opcionais, Valor | Custo).
+// Horas | Cliente | Profissionais | Situação | Recorrente | Valor (R$) — e, opcional, Custo).
+// "Período" e "Recorrente" vêm na planilha mas não são lidos (o período sai do Horário; o que repete
+// toda semana é cadastrado pelo formulário de atendimento recorrente).
 // Só lê e valida — quem grava no banco é a rota.
 const read = require('read-excel-file/node');
 
@@ -26,8 +28,8 @@ const COLUNAS = {
   situacao: ['situacao', 'status'],
   // opcionais: se o sistema da franquia exportar valores, entram junto (valor = o que o cliente paga;
   // custo = o que a franquia paga à prestadora)
-  valor: ['valor', 'valor cobrado', 'preco'],
-  custo: ['custo', 'repasse', 'valor prestadora', 'valor da prestadora', 'valor pago'],
+  valor: ['valor', 'valor (r$)', 'valor r$', 'valor cobrado', 'preco'],
+  custo: ['custo', 'custo (r$)', 'repasse', 'valor prestadora', 'valor da prestadora', 'valor pago'],
 };
 const OBRIGATORIAS = ['numero', 'data', 'horario', 'servico'];
 

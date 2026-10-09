@@ -56,8 +56,8 @@ async function garantirPrestadoras(db, unidadeId, nomes) {
     senhaHash = senhaHash || await bcrypt.hash(SENHA_PADRAO, SALT_ROUNDS);
     const nome = nomeBonito(bruto);
     const { rows: [nova] } = await db.query(
-      `insert into prestadoras (nome, telefone, email, senha_hash, unidade_id)
-       values ($1, null, $2, $3, $4) returning id`,
+      `insert into prestadoras (nome, telefone, email, senha_hash, unidade_id, primeiro_acesso_pendente)
+       values ($1, null, $2, $3, $4, true) returning id`,
       [nome, email, senhaHash, unidadeId]
     );
     ids.set(chave, nova.id);

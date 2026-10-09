@@ -369,7 +369,25 @@ router.post('/login', async (req, res) => {
     }[perfil];
     if (!config) return res.status(400).json({ erro: 'Perfil inválido' });
 
-    const usuario = await buscarEValidar(config.tabela, config.campo, identificador, senha);
+    // Primeiro acesso das contas criadas pela planilha: a prestadora ainda não tem e-mail dela, então entra
+    // com o NOME (como aparece na planilha) e a senha padrão. Vale só enquanto o primeiro acesso está pendente.
+    const comoNome = perfil === 'prestadora' && !String(identificador).includes('@') && /[a-zà-ÿ]/i.test(String(identificador));
+    let usuario;
+    if (comoNome) {
+      const alvo = normalizarTexto(identificador);
+      const { rows: pendentes } = await pool.query('select * from prestadoras where primeiro_acesso_pendente = true');
+      const achadas = [];
+      for (const p of pendentes.filter(p => normalizarTexto(p.nome) === alvo)) {
+        const ok = await conferirSenha(p, senha);
+        if (ok) achadas.push(ok);
+      }
+      if (achadas.length > 1) {
+        return res.status(409).json({ erro: 'Há mais de uma prestadora com esse nome. Entre com o e-mail que o administrador passou pra você.' });
+      }
+      usuario = achadas[0] || null;
+    } else {
+      usuario = await buscarEValidar(config.tabela, config.campo, identificador, senha);
+    }
     if (!usuario) return res.status(401).json({ erro: 'Credenciais inválidas' });
 
     delete usuario.senha_hash;
@@ -406,8 +424,11 @@ async function acharContasParaRecuperar(perfil, identificador) {
 
   for (const [tabela, campo] of candidatas) { // nomes de tabela/coluna são literais acima
     const valor = campo === 'telefone' ? normalizarTelefone(id) : normalizarEmail(id);
+    // Conta de prestadora em primeiro acesso tem e-mail PRESUMIDO (nome@gmail.com, que pode ser de outra pessoa):
+    // mandar o código pra lá deixaria um estranho tomar a conta. Ela entra com a senha padrão e define o e-mail real.
+    const semPendentes = tabela === 'prestadoras' ? 'and not primeiro_acesso_pendente' : '';
     const { rows } = await pool.query(
-      `select id, email from ${tabela} where ${campo} = $1 and senha_hash is not null and email is not null`, [valor]
+      `select id, email from ${tabela} where ${campo} = $1 and senha_hash is not null and email is not null ${semPendentes}`, [valor]
     );
     if (rows.length > 0) {
       const email = normalizarEmail(rows[0].email);

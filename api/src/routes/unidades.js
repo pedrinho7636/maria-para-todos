@@ -75,7 +75,7 @@ router.get('/:slug/admin/dashboard', requireAuth, requireAcessoUnidade('dashboar
 
 router.get('/:slug/admin/equipe', requireAuth, requireAcessoUnidade('equipe'), asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `select v.*, p.valor_por_atendimento
+    `select v.*, p.valor_por_atendimento, p.telefone, p.email, p.primeiro_acesso_pendente
      from vw_equipe_unidade v join prestadoras p on p.id = v.prestadora_id
      where v.unidade_id = $1 order by v.nome`,
     [req.unidadeId]
@@ -142,25 +142,53 @@ router.post('/:slug/admin/equipe', requireAuth, requireRole('administrador'), re
 // tarifa. Só vale pros próximos aceites — o que já foi aceito mantém o valor
 // combinado na hora (atendimentos.valor_prestadora). É dinheiro: só administrador
 // completo altera (funcionário com módulo "Equipe" enxerga, mas não muda).
+//
+// O mesmo PATCH corrige o TELEFONE de contato dela (a conta criada pela planilha nasce sem telefone). Cada
+// campo só muda se vier no corpo: mandar só o telefone não apaga a tarifa, e vice-versa.
 router.patch('/:slug/admin/equipe/:prestadoraId', requireAuth, requireRole('administrador'), requireAcessoUnidade('equipe'), asyncHandler(async (req, res) => {
-  const bruto = req.body.valor_por_atendimento;
-  let valor = null;
-  if (bruto !== null && bruto !== undefined && String(bruto).trim() !== '') {
-    valor = Number(String(bruto).trim().replace(',', '.'));
-    if (!Number.isFinite(valor) || valor < 0 || valor >= 100000) {
-      return res.status(400).json({ erro: 'Valor inválido — informe um número entre 0 e 99.999,99' });
+  const sets = [];
+  const vals = [];
+
+  if ('valor_por_atendimento' in req.body) {
+    const bruto = req.body.valor_por_atendimento;
+    let valor = null;
+    if (bruto !== null && bruto !== undefined && String(bruto).trim() !== '') {
+      valor = Number(String(bruto).trim().replace(',', '.'));
+      if (!Number.isFinite(valor) || valor < 0 || valor >= 100000) {
+        return res.status(400).json({ erro: 'Valor inválido — informe um número entre 0 e 99.999,99' });
+      }
+      valor = Math.round(valor * 100) / 100;
     }
-    valor = Math.round(valor * 100) / 100;
+    vals.push(valor); sets.push(`valor_por_atendimento = $${vals.length}`);
   }
 
-  const { rows: [prestadora] } = await pool.query(
-    `update prestadoras set valor_por_atendimento = $1, atualizado_em = now()
-     where id = $2 and unidade_id = $3
-     returning id, nome, valor_por_atendimento`,
-    [valor, req.params.prestadoraId, req.unidadeId]
-  );
-  if (!prestadora) return res.status(404).json({ erro: 'Prestadora não encontrada nesta unidade' });
-  res.json(prestadora);
+  if ('telefone' in req.body) {
+    const telefone = normalizarTelefone(req.body.telefone);
+    if (telefone && !telefoneValido(telefone)) return res.status(400).json({ erro: 'Telefone inválido — informe DDD + número.' });
+    vals.push(telefone || null); sets.push(`telefone = $${vals.length}`);
+  }
+  if (sets.length === 0) return res.status(400).json({ erro: 'Nada para atualizar — informe valor_por_atendimento e/ou telefone.' });
+
+  const { rows: [atual] } = await pool.query('select email from prestadoras where id = $1 and unidade_id = $2', [req.params.prestadoraId, req.unidadeId]);
+  if (!atual) return res.status(404).json({ erro: 'Prestadora não encontrada nesta unidade' });
+  // sem telefone e sem e-mail ela não teria como entrar
+  if ('telefone' in req.body && !normalizarTelefone(req.body.telefone) && !atual.email) {
+    return res.status(400).json({ erro: 'Esta conta não tem e-mail; sem telefone ela não teria como entrar.' });
+  }
+
+  vals.push(req.params.prestadoraId, req.unidadeId);
+  try {
+    const { rows: [prestadora] } = await pool.query(
+      `update prestadoras set ${sets.join(', ')}, atualizado_em = now()
+       where id = $${vals.length - 1} and unidade_id = $${vals.length}
+       returning id, nome, telefone, email, valor_por_atendimento, primeiro_acesso_pendente`,
+      vals
+    );
+    res.json(prestadora);
+  } catch (erro) {
+    if (erro.code === '23505') return res.status(409).json({ erro: 'Esse telefone já está cadastrado em outra conta.' });
+    throw erro;
+  }
 }));
 
 router.get('/:slug/admin/clientes', requireAuth, requireAcessoUnidade('clientes'), asyncHandler(async (req, res) => {

@@ -35,8 +35,8 @@ const ultimoCodigo = async (destino) => (await pool.query('select codigo from co
   // limpeza prévia
   await pool.query("delete from atendimentos where tipo_servico like 'qa-%'");
   await pool.query("delete from administrador_unidades where administrador_id in (select id from administradores where email like 'qa-%')");
+  await pool.query("delete from sub_administradores where email like 'qa-%'"); // antes: a FK criado_por aponta pros administradores
   await pool.query("delete from administradores where email like 'qa-%'");
-  await pool.query("delete from sub_administradores where email like 'qa-%'");
   await pool.query("delete from prestadoras where nome like 'qa-%'");
   await pool.query("delete from clientes where email like 'qa-%'");
   await pool.query("delete from codigos_verificacao where destino like '%qa-%'");
@@ -427,8 +427,8 @@ const ultimoCodigo = async (destino) => (await pool.query('select codigo from co
   // limpeza
   await pool.query("delete from atendimentos where tipo_servico like 'qa-%'");
   await pool.query("delete from administrador_unidades where administrador_id in (select id from administradores where email like 'qa-%')");
+  await pool.query("delete from sub_administradores where email like 'qa-%'"); // antes: a FK criado_por aponta pros administradores
   await pool.query("delete from administradores where email like 'qa-%'");
-  await pool.query("delete from sub_administradores where email like 'qa-%'");
   await pool.query("delete from prestadoras where nome like 'qa-%'");
   await pool.query("delete from clientes where email like 'qa-%' or nome like 'qa-%'");
   await pool.query("delete from codigos_verificacao where destino like '%qa-%'");

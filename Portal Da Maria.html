@@ -2260,6 +2260,19 @@
       color: var(--muted)
     }
 
+    /* cancelado: aparece riscado e apagado, mas não entra em nenhuma contagem */
+    .tl-block.cancelado {
+      background: var(--bg);
+      border-color: var(--line);
+      border-style: dashed;
+      color: var(--muted);
+      opacity: .75
+    }
+
+    .tl-block.cancelado .tl-linha {
+      text-decoration: line-through
+    }
+
     .reatribuir-pop {
       position: absolute;
       z-index: 20;
@@ -3878,6 +3891,58 @@
     </div>
   </div>
 
+  <!-- Contato da prestadora (administrador): telefone e envio do acesso por WhatsApp -->
+  <div class="modal" id="modal-contato">
+    <div class="modal-card" style="max-width:420px">
+      <div class="modal-head"><h3>Contato da prestadora</h3>
+        <button class="modal-close" onclick="fecharContatoPrestadora()" aria-label="Fechar" title="Fechar (Esc)">×</button></div>
+      <p style="margin-bottom:12px"><b id="contato-nome"></b> · <span id="contato-email"></span></p>
+      <div class="field"><label for="contato-tel">Telefone (com DDD)</label>
+        <input id="contato-tel" type="text" inputmode="tel" autocomplete="off" placeholder="(54) 9 9999-0000"></div>
+      <div class="atd-aviso" id="contato-pendente" style="display:none"></div>
+      <div class="form-actions">
+        <button class="btn-sm ghost" id="contato-whats" onclick="enviarAcessoPendenteWhats()" style="display:none">Enviar acesso por WhatsApp</button>
+        <button class="btn-sm ghost" onclick="fecharContatoPrestadora()">Cancelar</button>
+        <button class="btn-sm" id="contato-salvar" onclick="salvarContatoPrestadora()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Primeiro acesso da prestadora (conta criada pela planilha): não fecha sem concluir -->
+  <div class="modal" id="modal-primeiro-acesso">
+    <div class="modal-card" style="max-width:440px;max-height:92vh;overflow-y:auto">
+      <div class="modal-head"><h3>Bem-vinda ao Portal da Maria!</h3></div>
+      <p style="margin-bottom:12px">Olá, <b id="pa-nome"></b>. Antes de começar, precisamos confirmar o <b>seu e-mail</b> e que você crie uma
+        <b>senha só sua</b> (a senha padrão deixa de valer).</p>
+
+      <div id="pa-passo1">
+        <div class="field"><label for="pa-email">Seu e-mail</label>
+          <input id="pa-email" type="email" autocomplete="email" placeholder="voce@exemplo.com"></div>
+        <div class="field"><label for="pa-tel">Telefone (com DDD)</label>
+          <input id="pa-tel" type="text" inputmode="tel" autocomplete="tel" placeholder="(54) 9 9999-0000"></div>
+        <div class="field"><label for="pa-senha">Nova senha</label>
+          <input id="pa-senha" type="password" autocomplete="new-password" placeholder="mínimo 8 caracteres"></div>
+        <div class="field"><label for="pa-senha2">Repita a nova senha</label>
+          <input id="pa-senha2" type="password" autocomplete="new-password"></div>
+        <div class="form-actions">
+          <button class="btn-sm ghost" onclick="sairPrimeiroAcesso()">Sair</button>
+          <button class="btn-sm" id="pa-enviar" onclick="primeiroAcessoEnviarCodigo()">Enviar código por e-mail</button>
+        </div>
+      </div>
+
+      <div id="pa-passo2" style="display:none">
+        <p id="pa-texto2" style="margin-bottom:12px"></p>
+        <div class="field"><label for="pa-codigo">Código de 6 dígitos</label>
+          <input id="pa-codigo" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"></div>
+        <div class="form-actions">
+          <button class="btn-sm ghost" onclick="primeiroAcessoVoltar()">Voltar</button>
+          <button class="btn-sm" id="pa-concluir" onclick="primeiroAcessoConcluir()">Confirmar e entrar</button>
+        </div>
+        <p style="font-size:12px;margin:12px 0 0">Não chegou? Veja o spam ou <a href="#" onclick="primeiroAcessoReenviar(event)">reenvie o código</a>.</p>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="modal-perfil">
     <div class="modal-card" style="max-width:460px;max-height:88vh;overflow-y:auto">
       <div class="modal-head"><h3>Meu perfil</h3>
@@ -4214,7 +4279,7 @@
         p.clientes ? api(`/unidades/${slug}/admin/clientes`) : Promise.resolve([]),
         p.avaliacoes ? api(`/avaliacoes/admin/${slug}`) : Promise.resolve([])
       ]);
-      equipeData[slug] = eq.map(e => ({ id: e.prestadora_id, nome: e.nome, ini: e.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), serv: Number(e.total_atendimentos), nota: Number(e.nota_media) || 0, ativa: e.ativa, tarifa: e.valor_por_atendimento === null || e.valor_por_atendimento === undefined ? null : Number(e.valor_por_atendimento) }));
+      equipeData[slug] = eq.map(e => ({ id: e.prestadora_id, nome: e.nome, ini: e.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), serv: Number(e.total_atendimentos), nota: Number(e.nota_media) || 0, ativa: e.ativa, telefone: e.telefone || '', email: e.email || '', pendente: !!e.primeiro_acesso_pendente, tarifa: e.valor_por_atendimento === null || e.valor_por_atendimento === undefined ? null : Number(e.valor_por_atendimento) }));
       clientesData[slug] = cl.map(c => ({ id: c.cliente_id, nome: c.nome, ini: c.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), ultimo: (c.ultimo_atendimento_tipo || '—') + (c.ultimo_atendimento_data ? ' · ' + c.ultimo_atendimento_data : ''), total: Number(c.total_servicos) }));
       avaliacoes = avs.map(a => ({ id: a.id, cliente: a.cliente_nome, prestadora: a.prestadora_nome, servico: a.servico || '', nota: a.nota, comentario: a.comentario, status: a.status, data: (a.criado_em || '').slice(0, 10) }));
     }
@@ -4272,7 +4337,12 @@
 
     /* navegação */
     let perfil = 'franqueado';
-    function setProfile(p) { perfil = p;['franqueado', 'prestadora', 'cliente'].forEach(x => document.getElementById('pf-' + x).classList.toggle('active', x === p)); }
+    function setProfile(p) {
+      perfil = p; ['franqueado', 'prestadora', 'cliente'].forEach(x => document.getElementById('pf-' + x).classList.toggle('active', x === p));
+      // prestadora de conta criada pela planilha entra pela primeira vez com o NOME dela
+      document.querySelector('label[for="login-user"]').textContent = p === 'prestadora' ? 'Nome, e-mail ou telefone' : 'E-mail ou telefone';
+      document.getElementById('login-user').placeholder = p === 'prestadora' ? 'Seu nome completo (1º acesso), e-mail ou telefone' : 'voce@exemplo.com';
+    }
     function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0, 0); }
     function goLogin() { show('screen-login'); }
     function goCadastro() { show('screen-cadastro'); }
@@ -4326,6 +4396,16 @@
           adminView(primeira); updateAvalBadge();
         } else if (tipoInterno === 'prestadora') {
           prestadora = { id: resp.usuario.id, nome: resp.usuario.nome, unidade: resp.usuario.unidade_slug || regiao };
+          const abrirArea = async () => {
+            try {
+              prestadora.nome = usuarioLogado.dados.nome;
+              await carregarDadosPrestadora();
+              show('screen-prestadora'); renderPrestadora(); renderCalendarioPrestadora();
+            } catch (err) { toast('Erro ao carregar seus dados: ' + err.message); }
+            iniciarSincronizacao();
+          };
+          // Conta criada pela planilha: antes de ver qualquer coisa, confirma o e-mail e troca a senha padrão
+          if (resp.usuario.primeiro_acesso_pendente) { abrirPrimeiroAcesso(resp.usuario, abrirArea); return; }
           await carregarDadosPrestadora();
           show('screen-prestadora'); renderPrestadora(); renderCalendarioPrestadora();
         } else {
@@ -4834,8 +4914,9 @@
       const d = new Date(dataISO + 'T00:00:00');
       document.getElementById('agv-dia-label').textContent = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
       try {
-        const atendimentos = await api(`/atendimentos/admin/${currentUnit}/agenda?data=${dataISO}`);
-        document.getElementById('agv-count').textContent = atendimentos.length;
+        // cancelados vêm junto (riscados) pra poderem ser reativados, mas não entram na contagem
+        const atendimentos = await api(`/atendimentos/admin/${currentUnit}/agenda?data=${dataISO}&incluir_cancelados=1`);
+        document.getElementById('agv-count').textContent = atendimentos.filter(a => a.status !== 'cancelado').length;
         renderTimelineDia(atendimentos);
       } catch (err) { toast('Erro ao carregar agenda do dia: ' + err.message); }
     }
@@ -4913,6 +4994,10 @@
     // de confirmação (>2 dias) = azul · proposto dentro da janela (<=2 dias,
     // já pode ser confirmado pela prestadora) = laranja, pra chamar atenção.
     function classificarBlocoAgenda(item) {
+      if (item.status === 'cancelado') {
+        const quem = item.prestadora_nome || item.profissional_externo || '';
+        return { cls: ' cancelado', rotulo: (quem ? escapeHtml(quem) + ' · ' : '') + 'cancelado' };
+      }
       if (item.status === 'concluido') {
         const quem = item.prestadora_nome || item.profissional_externo || '';
         const semCadastro = !item.prestadora_id && item.profissional_externo ? ' · prestadora sem cadastro no Portal da Maria' : '';
@@ -4940,6 +5025,8 @@
       fecharReatribuirPop();
       reatribuirItem = item;
       const concluido = item.status === 'concluido'; // concluído: a prestadora não troca, mas o local ainda pode ser corrigido
+      const cancelado = item.status === 'cancelado';
+      const situacaoAtual = cancelado ? 'cancelado' : concluido ? 'concluido' : 'programado';
       const rect = ev.currentTarget.getBoundingClientRect();
       const opcoes = (prestadorasAgenda[currentUnit] || [])
         .map(p => `<option value="${p.id}" ${p.id === item.prestadora_id ? 'selected' : ''}>${escapeHtml(p.nome)}</option>`).join('');
@@ -4947,8 +5034,14 @@
       pop.className = 'reatribuir-pop';
       pop.id = 'reatribuir-pop';
       pop.innerHTML = `
-        <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Prestadora${concluido ? ' <span style="font-weight:400">(atendimento concluído)</span>' : ''}</label>
-        <select id="reatribuir-select" ${concluido ? 'disabled' : ''}><option value="">Sem prestadora</option>${opcoes}</select>
+        <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Situação</label>
+        <select id="reatribuir-situacao">
+          <option value="programado" ${situacaoAtual === 'programado' ? 'selected' : ''}>Programado</option>
+          <option value="concluido" ${situacaoAtual === 'concluido' ? 'selected' : ''}>Concluído</option>
+          <option value="cancelado" ${situacaoAtual === 'cancelado' ? 'selected' : ''}>Cancelado (não conta)</option>
+        </select>
+        <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Prestadora${concluido ? ' <span style="font-weight:400">(atendimento concluído)</span>' : cancelado ? ' <span style="font-weight:400">(cancelado)</span>' : ''}</label>
+        <select id="reatribuir-select" ${concluido || cancelado ? 'disabled' : ''}><option value="">Sem prestadora</option>${opcoes}</select>
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Local / bairro</label>
         <input id="reatribuir-local" maxlength="500" value="${escapeHtml(item.area || '')}" placeholder="Sem local — deixe vazio pra ocultar">
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Valor do atendimento (R$)</label>
@@ -4989,14 +5082,19 @@
       const item = reatribuirItem;
       if (!item || item.id !== atendimentoId) { fecharReatribuirPop(); return; }
       const concluido = item.status === 'concluido';
-      const prestadoraId = concluido ? (item.prestadora_id || null) : (document.getElementById('reatribuir-select').value || null);
+      const cancelado = item.status === 'cancelado';
+      const situacaoAtual = cancelado ? 'cancelado' : concluido ? 'concluido' : 'programado';
+      const situacao = document.getElementById('reatribuir-situacao').value;
+      const mudouSituacao = situacao !== situacaoAtual;
+      const prestadoraId = concluido || cancelado ? (item.prestadora_id || null) : (document.getElementById('reatribuir-select').value || null);
       const local = document.getElementById('reatribuir-local').value.trim();
       const valor = lerReais(document.getElementById('reatribuir-valor').value);
       if (Number.isNaN(valor)) { toast('Valor inválido — use números, ex.: 150,00.'); return; }
       const mudouPrestadora = prestadoraId !== (item.prestadora_id || null);
       const mudouLocal = local !== (item.area || '');
       const mudouValor = valor !== (item.valor === null || item.valor === undefined ? null : Number(item.valor));
-      if (!mudouPrestadora && !mudouLocal && !mudouValor) { fecharReatribuirPop(); return; }
+      if (!mudouSituacao && !mudouPrestadora && !mudouLocal && !mudouValor) { fecharReatribuirPop(); return; }
+      const mudarSituacao = () => api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/situacao`, { method: 'POST', body: JSON.stringify({ situacao }) });
 
       // Abre a aba em branco ANTES do await: depois que a resposta da API chega
       // o navegador já não considera mais isso "gesto do usuário" e bloqueia o
@@ -5004,14 +5102,18 @@
       const aba = mudouPrestadora && prestadoraId ? window.open('', '_blank') : null;
       try {
         let atendimento = item;
+        // reativar (cancelado/concluído → programado) vem antes: só então prestadora e valor voltam a poder mudar
+        if (mudouSituacao && situacao === 'programado') atendimento = await mudarSituacao();
         // o local vai primeiro: o aviso de WhatsApp da nova prestadora já sai com o local certo
         if (mudouLocal) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/local`, { method: 'PATCH', body: JSON.stringify({ area: local }) });
         if (mudouValor) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/valor`, { method: 'PATCH', body: JSON.stringify({ valor }) });
         if (mudouPrestadora) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/reatribuir`, { method: 'POST', body: JSON.stringify({ prestadora_id: prestadoraId }) });
+        // concluir/cancelar vem por último, com os demais campos já salvos
+        if (mudouSituacao && situacao !== 'programado') atendimento = await mudarSituacao();
         fecharReatribuirPop();
-        const alterados = [mudouPrestadora && 'prestadora', mudouLocal && 'local', mudouValor && 'valor'].filter(Boolean);
+        const alterados = [mudouSituacao && 'situação', mudouPrestadora && 'prestadora', mudouLocal && 'local', mudouValor && 'valor'].filter(Boolean);
         toast(alterados.length === 1
-          ? { prestadora: 'Prestadora atualizada.', local: local ? 'Local atualizado.' : 'Local removido.', valor: valor === null ? 'Valor removido.' : 'Valor atualizado.' }[alterados[0]]
+          ? { 'situação': { programado: 'Atendimento reativado como programado.', concluido: 'Atendimento marcado como concluído.', cancelado: 'Atendimento cancelado — não entra mais nas contagens.' }[situacao], prestadora: 'Prestadora atualizada.', local: local ? 'Local atualizado.' : 'Local removido.', valor: valor === null ? 'Valor removido.' : 'Valor atualizado.' }[alterados[0]]
           : 'Atendimento atualizado (' + alterados.join(', ') + ').');
         if (mudouPrestadora) avisarPrestadoraPorWhatsApp(aba, (prestadorasAgenda[currentUnit] || []).find(p => p.id === prestadoraId), atendimento);
         selecionarDiaAgenda(diaSelecionadoAgenda);
@@ -5057,18 +5159,19 @@
     function fecharModalAtendimento() { document.getElementById('modal-atendimento').classList.remove('show'); }
     // Colunas que o importador lê (as mesmas do modelo .xlsx baixado pela API)
     const ATD_COLUNAS_MODELO = [
+      ['Orçamento', 'não', 'Agrupa atendimentos do mesmo orçamento'],
       ['Número', 'sim', 'Código único do atendimento — é a chave: reenviar a planilha só traz o que ainda não existe'],
       ['Data', 'sim', 'dd/mm/aaaa'],
       ['Horário', 'sim', 'hh:mm (início)'],
+      ['Período', 'não lida', 'Manhã/Tarde — o portal usa o Horário'],
       ['Serviço', 'sim', 'Ex.: Limpeza (+ Tipo: Comercial/Residencial)'],
       ['Tipo', 'não', 'Complementa o serviço'],
       ['Horas', 'não', 'Duração; define a altura do bloco na agenda'],
       ['Cliente', 'não', '"Nome | Telefone" — criado se não existir'],
       ['Profissionais', 'não', 'Prestadora — cadastrada se ainda não existir'],
       ['Situação', 'não', 'Previsto, Concluído ou Cancelado'],
-      ['Orçamento', 'não', 'Agrupa atendimentos do mesmo orçamento'],
-      ['Valor', 'opcional', 'O que o cliente paga (alimenta o Financeiro)'],
-      ['Custo', 'opcional', 'O que a franquia paga à prestadora (repasse)'],
+      ['Recorrente', 'não lida', 'Sim/Não — pra repetir toda semana use o cadastro de atendimento recorrente'],
+      ['Valor (R$)', 'opcional', 'O que o cliente paga (alimenta o Financeiro)'],
     ];
     function renderColunasModelo() {
       document.getElementById('atd-colunas-modelo').innerHTML = ATD_COLUNAS_MODELO.map(([c, o, u]) =>
@@ -5422,8 +5525,10 @@
       document.getElementById('eqv-nova').style.display = podeEditarValor ? '' : 'none'; // criar login: só administrador
       document.getElementById('eqv-list').innerHTML = arr.map(p => {
         const valor = p.tarifa === null ? '<span class="tr-meta">sem valor definido</span>' : `<span class="tr-meta">${formatarReais(p.tarifa)} / atendimento</span>`;
-        const botao = podeEditarValor ? `<button class="btn-sm ghost" onclick="abrirTarifa('${p.id}')">${p.tarifa === null ? 'Definir valor' : 'Alterar valor'}</button>` : '';
-        return `<div class="tablerow"><div class="tr-av">${escapeHtml(p.ini)}</div><div class="tr-body"><strong>${escapeHtml(p.nome)}</strong><span>${p.serv} atendimentos · nota ${p.nota.toFixed(1)} ★</span></div>${valor}${botao}<span class="chip ${p.ativa ? 'chip-on' : 'chip-off'}">${p.ativa ? 'ativa' : 'inativa'}</span></div>`;
+        const botao = podeEditarValor ? `<button class="btn-sm ghost" onclick="abrirTarifa('${p.id}')">${p.tarifa === null ? 'Definir valor' : 'Alterar valor'}</button><button class="btn-sm ghost" onclick="abrirContatoPrestadora('${p.id}')">Contato</button>` : '';
+        const contato = p.telefone ? escapeHtml(p.telefone) : '<i>sem telefone</i>';
+        const pendente = p.pendente ? ' · <b title="Ainda não confirmou o e-mail nem trocou a senha padrão">primeiro acesso pendente</b>' : '';
+        return `<div class="tablerow"><div class="tr-av">${escapeHtml(p.ini)}</div><div class="tr-body"><strong>${escapeHtml(p.nome)}</strong><span>${p.serv} atendimentos · nota ${p.nota.toFixed(1)} ★</span><span>${contato}${pendente}</span></div>${valor}${botao}<span class="chip ${p.ativa ? 'chip-on' : 'chip-off'}">${p.ativa ? 'ativa' : 'inativa'}</span></div>`;
       }).join('');
     }
 
@@ -5520,6 +5625,124 @@
       } catch (err) { toast('Erro ao salvar o valor: ' + err.message); }
       finally { tarifaOcupada = false; botao.disabled = false; }
     }
+    /* Contato da prestadora (administrador): corrigir/preencher o telefone — principalmente das contas
+       criadas pela planilha, que nascem sem telefone — e mandar o acesso pelo WhatsApp. */
+    const SENHA_PADRAO_IMPORTADAS = 'senha123';
+    let contatoPrestadoraId = null, contatoOcupado = false;
+    function abrirContatoPrestadora(prestadoraId) {
+      const p = (equipeData[currentUnit] || []).find(x => x.id === prestadoraId);
+      if (!p) return;
+      contatoPrestadoraId = prestadoraId;
+      document.getElementById('contato-nome').textContent = p.nome;
+      document.getElementById('contato-email').textContent = p.pendente ? 'e-mail ainda não confirmado' : (p.email || 'sem e-mail');
+      document.getElementById('contato-tel').value = p.telefone;
+      const aviso = document.getElementById('contato-pendente');
+      aviso.style.display = p.pendente ? 'block' : 'none';
+      aviso.innerHTML = p.pendente
+        ? `Conta criada pela planilha: <b>primeiro acesso pendente</b>. Ela entra com o <b>nome</b> (${escapeHtml(p.nome)}) e a senha padrão <b>${SENHA_PADRAO_IMPORTADAS}</b>;
+           ao entrar, o portal pede o e-mail dela (com código de confirmação) e uma senha só dela.` : '';
+      document.getElementById('contato-whats').style.display = p.pendente ? '' : 'none';
+      document.getElementById('modal-contato').classList.add('show');
+      document.getElementById('contato-tel').focus();
+    }
+    function fecharContatoPrestadora() { document.getElementById('modal-contato').classList.remove('show'); }
+    async function salvarContatoPrestadora() {
+      if (contatoOcupado || !contatoPrestadoraId) return;
+      const telefone = document.getElementById('contato-tel').value.trim();
+      contatoOcupado = true;
+      const botao = document.getElementById('contato-salvar'); botao.disabled = true;
+      try {
+        await api(`/unidades/${currentUnit}/admin/equipe/${contatoPrestadoraId}`, { method: 'PATCH', body: JSON.stringify({ telefone }) });
+        fecharContatoPrestadora();
+        await carregarEquipeClientesAvaliacoes(currentUnit);
+        renderEquipe();
+        toast(telefone ? 'Telefone atualizado.' : 'Telefone removido.');
+      } catch (err) { toast('Erro ao salvar o telefone: ' + err.message); }
+      finally { contatoOcupado = false; botao.disabled = false; }
+    }
+    // Chamado direto do clique (sem await antes): é o que o navegador exige pra deixar abrir o WhatsApp.
+    function enviarAcessoPendenteWhats() {
+      const p = (equipeData[currentUnit] || []).find(x => x.id === contatoPrestadoraId);
+      const telefone = document.getElementById('contato-tel').value.trim();
+      if (!p) return;
+      if (!telefone) { toast('Preencha o telefone dela para enviar o acesso por WhatsApp.'); return; }
+      const mensagem = `Olá, ${p.nome}! Seu acesso ao Portal da Maria (${(cidades[currentUnit] || {}).nome || ''}) foi criado.\n`
+        + `Entre em: ${linkAcessoPrestadora()}\nLogin: seu nome completo (${p.nome})\nSenha provisória: ${SENHA_PADRAO_IMPORTADAS}\n\n`
+        + `No primeiro acesso o portal pede o seu e-mail (você recebe um código para confirmar) e uma senha nova, só sua.`;
+      window.open(linkWhatsApp(telefone, mensagem), '_blank');
+    }
+
+    /* Primeiro acesso da prestadora (conta criada pela planilha): entra com o nome + senha padrão e, antes de
+       qualquer coisa, informa o e-mail DELA, confirma o código recebido e troca a senha. O servidor também barra
+       o resto da área dela enquanto isso não termina (403 PRIMEIRO_ACESSO). */
+    let paOcupado = false, paEmail = '', paContinuar = null;
+    function abrirPrimeiroAcesso(usuario, continuar) {
+      paContinuar = continuar;
+      document.getElementById('pa-nome').textContent = usuario.nome;
+      document.getElementById('pa-email').value = '';
+      document.getElementById('pa-tel').value = usuario.telefone || '';
+      ['pa-senha', 'pa-senha2', 'pa-codigo'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('pa-passo1').style.display = 'block';
+      document.getElementById('pa-passo2').style.display = 'none';
+      document.getElementById('modal-primeiro-acesso').classList.add('show');
+      document.getElementById('pa-email').focus();
+    }
+    function sairPrimeiroAcesso() { document.getElementById('modal-primeiro-acesso').classList.remove('show'); logout(); }
+    function primeiroAcessoVoltar() {
+      document.getElementById('pa-passo1').style.display = 'block';
+      document.getElementById('pa-passo2').style.display = 'none';
+    }
+    async function primeiroAcessoPedirCodigo() {
+      const email = document.getElementById('pa-email').value.trim();
+      const senha = document.getElementById('pa-senha').value;
+      if (!/^\S+@\S+\.\S+$/.test(email)) { toast('Informe o seu e-mail.'); return false; }
+      if (senha.length < 8) { toast('A nova senha precisa ter ao menos 8 caracteres.'); return false; }
+      if (senha === SENHA_PADRAO_IMPORTADAS) { toast('Escolha uma senha diferente da senha padrão.'); return false; }
+      if (senha !== document.getElementById('pa-senha2').value) { toast('As duas senhas não são iguais.'); return false; }
+      try {
+        const resp = await api('/primeiro-acesso/solicitar', { method: 'POST', body: JSON.stringify({ email }) });
+        paEmail = email;
+        toast(mensagemEnvioEmail(resp.emailEnviado, email, resp.motivoEmail));
+        return true;
+      } catch (err) { toast(err.message); return false; }
+    }
+    async function primeiroAcessoEnviarCodigo() {
+      if (paOcupado) return;
+      paOcupado = true;
+      const botao = document.getElementById('pa-enviar'); botao.disabled = true;
+      try {
+        if (!await primeiroAcessoPedirCodigo()) return;
+        document.getElementById('pa-texto2').innerHTML = `Digite o código de 6 dígitos que enviamos para <b>${escapeHtml(paEmail)}</b> (vale por 15 minutos).`;
+        document.getElementById('pa-passo1').style.display = 'none';
+        document.getElementById('pa-passo2').style.display = 'block';
+        document.getElementById('pa-codigo').focus();
+      } finally { paOcupado = false; botao.disabled = false; }
+    }
+    async function primeiroAcessoReenviar(ev) {
+      if (ev) ev.preventDefault();
+      if (paOcupado) return;
+      paOcupado = true;
+      try { await primeiroAcessoPedirCodigo(); } finally { paOcupado = false; }
+    }
+    async function primeiroAcessoConcluir() {
+      if (paOcupado) return;
+      const codigo = document.getElementById('pa-codigo').value.trim();
+      if (!/^\d{6}$/.test(codigo)) { toast('Digite o código de 6 dígitos.'); return; }
+      paOcupado = true;
+      const botao = document.getElementById('pa-concluir'); botao.disabled = true;
+      try {
+        const r = await api('/primeiro-acesso/concluir', { method: 'POST', body: JSON.stringify({
+          email: paEmail, codigo, senha_nova: document.getElementById('pa-senha').value, telefone: document.getElementById('pa-tel').value.trim(),
+        }) });
+        document.getElementById('modal-primeiro-acesso').classList.remove('show');
+        usuarioLogado.dados = { ...usuarioLogado.dados, ...r.usuario };
+        toast('Tudo certo! Seu e-mail foi confirmado e sua senha foi trocada.');
+        const continuar = paContinuar; paContinuar = null;
+        if (continuar) await continuar();
+      } catch (err) { toast(err.message); }
+      finally { paOcupado = false; botao.disabled = false; }
+    }
+
     function renderClientes() {
       const arr = clientesData[currentUnit] || [];
       document.getElementById('clv-unit').textContent = unidades[currentUnit].nome;
@@ -6115,6 +6338,8 @@
       else if (document.getElementById('modal-nova-prestadora').classList.contains('show')) fecharNovaPrestadora();
       else if (document.getElementById('modal-recuperar').classList.contains('show')) fecharRecuperar();
       else if (document.getElementById('modal-tarifa').classList.contains('show')) fecharTarifa();
+      else if (document.getElementById('modal-contato').classList.contains('show')) fecharContatoPrestadora();
+      else if (document.getElementById('modal-primeiro-acesso').classList.contains('show')) return; // não dá pra pular o primeiro acesso
       else if (document.getElementById('modal-perfil').classList.contains('show')) fecharPerfil();
       else if (document.getElementById('modal-atendimento').classList.contains('show')) fecharModalAtendimento();
       else if (document.getElementById('reatribuir-pop')) fecharReatribuirPop();
@@ -6129,7 +6354,7 @@
     });
 
     // Enter nos modais de recuperar senha e de valor por atendimento também confirma.
-    [['rec-ident', recuperarEnviarCodigo], ['rec-codigo', recuperarConfirmar], ['rec-senha', recuperarConfirmar], ['rec-senha2', recuperarConfirmar], ['tarifa-valor', salvarTarifa]].forEach(([id, acao]) => {
+    [['rec-ident', recuperarEnviarCodigo], ['rec-codigo', recuperarConfirmar], ['rec-senha', recuperarConfirmar], ['rec-senha2', recuperarConfirmar], ['tarifa-valor', salvarTarifa], ['contato-tel', salvarContatoPrestadora], ['pa-codigo', primeiroAcessoConcluir], ['pa-senha2', primeiroAcessoEnviarCodigo]].forEach(([id, acao]) => {
       document.getElementById(id).addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); acao(); }
       });

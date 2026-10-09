@@ -15,6 +15,8 @@ const { pool } = require('../src/db');
 
 const BASE = (process.env.API_URL || 'http://localhost:3001') + '/api';
 const id = Date.now().toString(36);
+// nome de unidade vira "Inicial Maiúscula" em cada palavra: o sufixo dos nomes de teste já vai assim, pra comparar com o que é gravado
+const idU = id.charAt(0).toUpperCase() + id.slice(1);
 const emailQa = (nome) => `qa-${nome}-${id}@qa.invalid`;
 const telefoneQa = (n) => '5499' + String(Date.now()).slice(-6) + n; // 54 + 99 + 6 dígitos + 1 = 11 dígitos
 
@@ -56,7 +58,7 @@ async function codigoDe(email) {
   const formatar = (d) => `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
   const base = String(Date.now()).slice(-8).padStart(8, '1');
   const cnpjEmpresa = formatar(gerarCnpj(base + '0001')), cnpjOutra = formatar(gerarCnpj(base + '0002'));
-  const nomeUnA = `QA Cidade ${id}`;
+  const nomeUnA = `QA Cidade ${idU}`;
   const adm = {
     nome: 'QA', sobrenome: 'Admin', email: emailQa('admin'), senha: 'senha-qa-123',
     cnpj: cnpjEmpresa.replace(/\D/g, ''), // só dígitos: a pontuação é opcional
@@ -98,7 +100,7 @@ async function codigoDe(email) {
 
   // ---------- ADMINISTRADOR: CNPJ QUE JÁ EXISTE (só o dono acrescenta unidade) ----------
   console.log('\nAdministrador — CNPJ que já existe: só o dono (nome + e-mail + senha) acrescenta unidade');
-  const nomeUnB = `QA Filial ${id}`;
+  const nomeUnB = `QA Filial ${idU}`;
   const comoOutro = (extra) => ({ ...adm, unidade: { nome: nomeUnB, uf: 'RS' }, ...extra });
   const msgs = new Set();
   for (const [rotulo, corpo] of [
@@ -133,23 +135,25 @@ async function codigoDe(email) {
   ok(pA.status === 200 && pB.status === 200, 'o mesmo login abre o painel das duas unidades');
 
   // adicionar unidade estando logado (Meu perfil → Adicionar unidade)
-  const nomeUnC = `QA Terceira ${id}`;
+  const nomeUnC = `QA Terceira ${idU}`;
   const add1 = await http('POST', '/unidades', { nome: nomeUnC, uf: 'sc', telefone: '(49) 9 9999-0003' }, tokenAdm);
   ok(add1.status === 201 && add1.json.unidade?.uf === 'SC' && add1.json.cnpj === cnpjEmpresa && add1.json.unidades_slugs.length === 3, 'logado, "Adicionar unidade" usa o CNPJ da própria empresa (UF maiúscula) e devolve as unidades', JSON.stringify(add1.json).slice(0, 160));
   const add2 = await http('POST', '/unidades', { nome: nomeUnC, uf: 'SC' }, tokenAdm);
   ok(add2.status === 409, 'adicionar unidade com nome repetido: 409');
+  const addMin = await http('POST', '/unidades', { nome: `  qa passo   fundo da serra ${id}`, uf: 'RS' }, tokenAdm);
+  ok(addMin.status === 201 && addMin.json.unidade?.nome === `Qa Passo Fundo da Serra ${idU}`, 'nome de cidade digitado em minúscula é gravado com inicial maiúscula (ligações como "da" ficam minúsculas)', `("${addMin.json.unidade?.nome}")`);
   const add3 = await http('POST', '/unidades', { nome: 'Sem UF' }, tokenAdm);
   ok(add3.status === 400, 'adicionar unidade sem UF: 400');
   const addSemLogin = await http('POST', '/unidades', { nome: 'X', uf: 'RS' });
   ok(addSemLogin.status === 401, 'adicionar unidade sem estar logado: 401');
   const perfilAdm = await http('GET', '/perfil', null, tokenAdm);
-  ok(perfilAdm.json.empresa?.cnpj === cnpjEmpresa && perfilAdm.json.empresa.unidades.length === 3, 'o perfil mostra o CNPJ da empresa e as 3 unidades');
-  const corrAdd = await Promise.all([1, 2, 3].map(() => http('POST', '/unidades', { nome: `QA Corrida ${id}`, uf: 'RS' }, tokenAdm)));
+  ok(perfilAdm.json.empresa?.cnpj === cnpjEmpresa && perfilAdm.json.empresa.unidades.length === 4, 'o perfil mostra o CNPJ da empresa e as 4 unidades');
+  const corrAdd = await Promise.all([1, 2, 3].map(() => http('POST', '/unidades', { nome: `QA Corrida ${idU}`, uf: 'RS' }, tokenAdm)));
   const resAdd = corrAdd.map(r => r.status).sort();
   ok(resAdd.filter(s => s === 201).length === 1 && resAdd.filter(s => s === 409).length === 2, 'três pedidos simultâneos da mesma unidade: só um cria (sem duplicar nome)', `(${resAdd.join(', ')})`);
 
   // outra empresa = outro login, sem acesso às unidades desta
-  const empresaB = { nome: 'QA', sobrenome: 'Outra', email: emailQa('outra'), senha: 'senha-qa-123', cnpj: cnpjOutra, unidade: { nome: `QA Outra ${id}`, uf: 'PR' } };
+  const empresaB = { nome: 'QA', sobrenome: 'Outra', email: emailQa('outra'), senha: 'senha-qa-123', cnpj: cnpjOutra, unidade: { nome: `QA Outra ${idU}`, uf: 'PR' } };
   criados.emails.push(empresaB.email);
   await http('POST', '/auth/cadastro/admin', empresaB);
   const o2 = await http('POST', '/auth/cadastro/admin/confirmar', { ...empresaB, codigo: await codigoDe(empresaB.email) });
@@ -157,12 +161,12 @@ async function codigoDe(email) {
   if (o2.json.administrador) criados.admins.push(o2.json.administrador.id);
   const oPainelA = await http('GET', `/unidades/${slugA}/admin/dashboard`, null, o2.json.token);
   ok(oPainelA.status === 403, 'o login da outra empresa NÃO abre as unidades desta');
-  const oAdd = await http('POST', '/unidades', { nome: `QA Outra Filial ${id}`, uf: 'PR' }, o2.json.token);
+  const oAdd = await http('POST', '/unidades', { nome: `QA Outra Filial ${idU}`, uf: 'PR' }, o2.json.token);
   ok(oAdd.status === 201 && oAdd.json.cnpj === cnpjOutra, 'e "Adicionar unidade" dela usa o CNPJ dela, não o da primeira');
 
   // corrida no cadastro: dois cadastros simultâneos com o MESMO CNPJ novo — só um cria a empresa
   const cnpjCorr = formatar(gerarCnpj(base + '0003'));
-  const corr1 = { nome: 'QA', sobrenome: 'Corr1', email: emailQa('corr1'), senha: 'senha-qa-123', cnpj: cnpjCorr, unidade: { nome: `QA Corr ${id}`, uf: 'RS' } };
+  const corr1 = { nome: 'QA', sobrenome: 'Corr1', email: emailQa('corr1'), senha: 'senha-qa-123', cnpj: cnpjCorr, unidade: { nome: `QA Corr ${idU}`, uf: 'RS' } };
   const corr2 = { ...corr1, sobrenome: 'Corr2', email: emailQa('corr2') };
   criados.emails.push(corr1.email, corr2.email);
   await Promise.all([http('POST', '/auth/cadastro/admin', corr1), http('POST', '/auth/cadastro/admin', corr2)]);
@@ -302,6 +306,58 @@ async function codigoDe(email) {
   ok(srDur.status === 400, 'duração absurda: 400');
   await pool.query(`delete from atendimentos where tipo_servico = 'QA Serie' and unidade_id = $1`, [uQa.id]);
 
+  // ---------- SITUAÇÃO DO ATENDIMENTO (programado / concluído / cancelado) ----------
+  console.log('\nSituação do atendimento na agenda');
+  const { rows: [{ hoje: hojeBr }] } = await pool.query(`select (now() at time zone 'America/Sao_Paulo')::date::text as hoje`);
+  const novoAtd = (extra = {}) => http('POST', `/atendimentos/admin/${slugA}`, { tipo_servico: 'QA Situacao', data_atendimento: hojeBr, hora_atendimento: '23:00', valor: 100, ...extra }, tokenAdm);
+  const doDia = async (extra = '') => (await http('GET', `/atendimentos/admin/${slugA}/agenda?data=${hojeBr}${extra}`, null, tokenAdm)).json.filter(a => a.tipo_servico === 'QA Situacao');
+  const hojeNoPainel = async () => Number((await http('GET', `/unidades/${slugA}/admin/dashboard`, null, tokenAdm)).json.atendimentos_hoje);
+  const noMes = async () => ((await http('GET', `/atendimentos/admin/${slugA}/agenda/resumo-mensal?mes=${hojeBr.slice(0, 7)}`, null, tokenAdm)).json.find(d => d.data === hojeBr)?.total) || 0;
+  const antesPainel = await hojeNoPainel(), antesMes = await noMes();
+  const sa = await novoAtd();
+  ok(sa.status === 201, 'cria um atendimento de hoje (programado)', `(HTTP ${sa.status} ${sa.json.erro || ''})`);
+  const idSit = sa.json.id;
+  ok(await hojeNoPainel() === antesPainel + 1 && await noMes() === antesMes + 1, 'programado conta no painel e no calendário');
+  const sit = (situacao, token = tokenAdm, id = idSit) => http('POST', `/atendimentos/admin/${slugA}/${id}/situacao`, { situacao }, token);
+  const sCan = await sit('cancelado');
+  ok(sCan.status === 200 && sCan.json.status === 'cancelado', 'marcar como cancelado funciona');
+  ok(await hojeNoPainel() === antesPainel && await noMes() === antesMes, 'cancelado NÃO conta no painel nem no calendário');
+  ok((await doDia()).length === 0 && (await doDia('&incluir_cancelados=1')).some(a => a.id === idSit && a.status === 'cancelado'), 'a agenda esconde o cancelado por padrão, mas ele vem com ?incluir_cancelados=1 (pra poder reativar)');
+  const sValorCan = await http('PATCH', `/atendimentos/admin/${slugA}/${idSit}/valor`, { valor: '5' }, tokenAdm);
+  ok(sValorCan.status === 404, 'cancelado não aceita mais edição de valor (404)');
+  const sProg = await sit('programado');
+  ok(sProg.status === 200 && sProg.json.status === 'pedido' && sProg.json.situacao_manual === true, 'reativar como programado (sem prestadora) volta a "pedido"', JSON.stringify(sProg.json).slice(0, 120));
+  ok(await hojeNoPainel() === antesPainel + 1, 'reativado, volta a contar');
+  const sConc = await sit('concluido');
+  ok(sConc.status === 200 && sConc.json.status === 'concluido' && sConc.json.situacao_manual === false, 'marcar como concluído funciona');
+  ok(await hojeNoPainel() === antesPainel + 1 && await noMes() === antesMes + 1, 'concluído também conta');
+  // com prestadora: programado vira "aceito" e a conclusão automática respeita a escolha manual
+  const sb = await novoAtd({ prestadora_id: p2.json.prestadora.id, hora_atendimento: '00:30', duracao_horas: 0.5 });
+  const idPass = sb.json.id;
+  ok(sb.status === 201, 'cria um atendimento de hoje que já passou do horário, com prestadora');
+  await pool.query(`update atendimentos set status = 'aceito' where id = $1`, [idPass]);
+  const { concluirAtendimentosRealizados } = require('../src/utils/conclusao');
+  await concluirAtendimentosRealizados();
+  const { rows: [pass1] } = await pool.query('select status from atendimentos where id = $1', [idPass]);
+  ok(pass1.status === 'concluido', 'sem escolha manual, a conclusão automática conclui o aceito cujo horário passou');
+  const sReab = await sit('programado', tokenAdm, idPass);
+  ok(sReab.json.status === 'aceito' && sReab.json.situacao_manual === true, 'reabrir como programado (com prestadora) volta a "aceito"');
+  await concluirAtendimentosRealizados();
+  const { rows: [pass2] } = await pool.query('select status from atendimentos where id = $1', [idPass]);
+  ok(pass2.status === 'aceito', 'e a conclusão automática NÃO o conclui de novo (o administrador disse que está programado)');
+  // erros e permissões
+  const sRuim = await sit('feito');
+  ok(sRuim.status === 400, 'situação desconhecida: 400');
+  const sNaoHa = await sit('cancelado', tokenAdm, '00000000-0000-0000-0000-000000000000');
+  ok(sNaoHa.status === 404, 'atendimento inexistente: 404');
+  const sPrest = await sit('cancelado', pLogin.json.token);
+  ok(sPrest.status === 403 || sPrest.status === 401, 'prestadora não altera a situação', `(HTTP ${sPrest.status})`);
+  const sOutraUn = await http('POST', `/atendimentos/admin/${slugB}/${idSit}/situacao`, { situacao: 'cancelado' }, tokenAdm);
+  ok(sOutraUn.status === 404, 'o id de uma unidade não vale em outra (404)');
+  const sOutroAdm = await sit('cancelado', o2.json.token);
+  ok(sOutroAdm.status === 403, 'administrador de OUTRA empresa não altera (403)');
+  await pool.query(`delete from atendimentos where tipo_servico = 'QA Situacao' and unidade_id = $1`, [uQa.id]);
+
   // ---------- PAINEL INICIAL POR UNIDADE ----------
   console.log('\nLayout do painel inicial (por unidade)');
   const pn0 = await http('GET', `/unidades/${slugA}/admin/painel`, null, tokenAdm);
@@ -352,6 +408,111 @@ async function codigoDe(email) {
   if (prestImp[0]) criados.prestadoras.push(prestImp[0].id);
   const imp2 = await importar({ arquivo_base64: arq, confirmar: true });
   ok(imp2.json.importados === 0 && imp2.json.ja_existentes === 2, 'reimportar o mesmo arquivo não duplica nada');
+
+  // ---------- PRIMEIRO ACESSO DA PRESTADORA CRIADA PELA PLANILHA ----------
+  console.log('\nPrimeiro acesso da prestadora criada pela planilha');
+  const idImp = prestImp[0].id, emailImp = prestImp[0].email;
+  const { rows: [flag] } = await pool.query('select primeiro_acesso_pendente as p from prestadoras where id = $1', [idImp]);
+  ok(flag.p === true, 'a conta nasce com o primeiro acesso pendente');
+  const lNomeErrada = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: nomeImp, senha: 'senha-errada-1' });
+  ok(lNomeErrada.status === 401, 'nome + senha errada: 401');
+  const lNome = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: nomeImp.toUpperCase(), senha: 'senha123' });
+  ok(lNome.status === 200 && lNome.json.usuario.primeiro_acesso_pendente === true, 'entra com o NOME (maiúscula/minúscula não importa) + senha padrão e vem marcado como primeiro acesso', `(HTTP ${lNome.status})`);
+  const lNomeOutra = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: prest.nome, senha: prest.senha });
+  ok(lNomeOutra.status === 401, 'prestadora comum (primeiro acesso já feito) NÃO entra pelo nome');
+  const lEmailImp = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: emailImp, senha: 'senha123' });
+  ok(lEmailImp.status === 200 && lEmailImp.json.usuario.primeiro_acesso_pendente === true, 'o e-mail presumido + senha padrão também entra (e cai no mesmo primeiro acesso)');
+  const tokenPA = lNome.json.token;
+  const gConvites = await http('GET', '/atendimentos/prestadora/me/convites', null, tokenPA);
+  const gSync = await http('GET', '/sync', null, tokenPA);
+  const gResumo = await http('GET', '/atendimentos/prestadora/me/resumo', null, tokenPA);
+  const gAval = await http('GET', '/avaliacoes/prestadora/me', null, tokenPA);
+  ok([gConvites, gSync, gResumo, gAval].every(r => r.status === 403 && r.json.codigo === 'PRIMEIRO_ACESSO'), 'enquanto pendente, a área dela (convites, resumo, avaliações, sync) responde 403 PRIMEIRO_ACESSO');
+  await http('POST', '/auth/recuperar-senha', { perfil: 'prestadora', identificador: emailImp });
+  const { rows: [codRec] } = await pool.query('select count(*)::int as n from codigos_verificacao where destino = $1', [`recuperar:prestadora:${emailImp}`]);
+  ok(codRec.n === 0, 'recuperar senha NÃO manda código pro e-mail presumido (poderia ser de um estranho)');
+
+  // o administrador corrige o telefone dela
+  const eq0 = await http('GET', `/unidades/${slugA}/admin/equipe`, null, tokenAdm);
+  const linhaEq = eq0.json.find(p => p.prestadora_id === idImp);
+  ok(linhaEq && linhaEq.primeiro_acesso_pendente === true && linhaEq.telefone === null && linhaEq.email === emailImp, 'a Equipe mostra a conta com primeiro acesso pendente, sem telefone, com o e-mail presumido');
+  const telImp = telefoneQa(8);
+  await http('PATCH', `/unidades/${slugA}/admin/equipe/${idImp}`, { valor_por_atendimento: '80,00' }, tokenAdm);
+  const t1 = await http('PATCH', `/unidades/${slugA}/admin/equipe/${idImp}`, { telefone: `(${telImp.slice(0, 2)}) ${telImp.slice(2, 7)}-${telImp.slice(7)}` }, tokenAdm);
+  ok(t1.status === 200 && t1.json.telefone === telImp, 'administrador preenche o telefone dela (a máscara é normalizada)', JSON.stringify(t1.json).slice(0, 120));
+  ok(Number(t1.json.valor_por_atendimento) === 80, 'mexer só no telefone NÃO apaga o valor por atendimento');
+  const t2 = await http('PATCH', `/unidades/${slugA}/admin/equipe/${idImp}`, { valor_por_atendimento: '90' }, tokenAdm);
+  ok(t2.status === 200 && t2.json.telefone === telImp && Number(t2.json.valor_por_atendimento) === 90, 'e mexer só no valor não apaga o telefone');
+  const t3 = await http('PATCH', `/unidades/${slugA}/admin/equipe/${idImp}`, { telefone: '123' }, tokenAdm);
+  ok(t3.status === 400, 'telefone inválido: 400');
+  const t4 = await http('PATCH', `/unidades/${slugA}/admin/equipe/${idImp}`, { telefone: tel }, tokenAdm);
+  ok(t4.status === 409, 'telefone que já é de outra conta: 409');
+  const t5 = await http('PATCH', `/unidades/${slugA}/admin/equipe/${idImp}`, {}, tokenAdm);
+  ok(t5.status === 400, 'PATCH sem nada pra atualizar: 400');
+  const t6 = await http('PATCH', `/unidades/${slugA}/admin/equipe/${idImp}`, { telefone: telImp }, sLogin.json.token);
+  ok(t6.status === 403, 'funcionário não altera o telefone da prestadora (403)');
+  const t7 = await http('PATCH', `/unidades/${slugA}/admin/equipe/${idImp}`, { telefone: telImp }, o2.json.token);
+  ok(t7.status === 403, 'administrador de OUTRA empresa não altera (403)');
+  const t8 = await http('PATCH', `/unidades/${slugB}/admin/equipe/${idImp}`, { telefone: telImp }, tokenAdm);
+  ok(t8.status === 404, 'prestadora de outra unidade: 404');
+  const tLogin = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: telImp, senha: 'senha123' });
+  ok(tLogin.status === 200 && tLogin.json.usuario.primeiro_acesso_pendente === true, 'com o telefone preenchido ela também entra por ele (e cai no primeiro acesso)');
+
+  // conclusão do primeiro acesso: e-mail dela confirmado por código + senha nova
+  const emailReal = emailQa('imp-real'), senhaNovaImp = 'minha-senha-nova-1';
+  criados.emails.push(emailReal);
+  const pa0 = await http('POST', '/primeiro-acesso/solicitar', { email: 'isto-nao-e-email' }, tokenPA);
+  ok(pa0.status === 400, 'e-mail inválido no primeiro acesso: 400');
+  const paUsado = await http('POST', '/primeiro-acesso/solicitar', { email: prest.email }, tokenPA);
+  ok(paUsado.status === 409, 'e-mail que já é de outra prestadora: 409');
+  const paSemLogin = await http('POST', '/primeiro-acesso/solicitar', { email: emailReal });
+  ok(paSemLogin.status === 401, 'sem login: 401');
+  const paOutroPerfil = await http('POST', '/primeiro-acesso/solicitar', { email: emailReal }, tokenAdm);
+  ok(paOutroPerfil.status === 403, 'só prestadora usa o primeiro acesso (403 pro administrador)');
+  const pa1 = await http('POST', '/primeiro-acesso/solicitar', { email: emailReal }, tokenPA);
+  ok(pa1.status === 200 && pa1.json.aguardandoConfirmacao, 'pede o código pro e-mail real dela');
+  const chavePA = `primeiro-acesso:${idImp}:${emailReal}`;
+  const codPA = await codigoDe(chavePA);
+  ok(!!codPA, 'o código fica guardado sob uma chave só dessa conta e desse e-mail');
+  const pcErrado = await http('POST', '/primeiro-acesso/concluir', { email: emailReal, codigo: '000000', senha_nova: senhaNovaImp }, tokenPA);
+  ok(pcErrado.status === 400, 'código errado: 400');
+  const pcPadrao = await http('POST', '/primeiro-acesso/concluir', { email: emailReal, codigo: codPA, senha_nova: 'senha123' }, tokenPA);
+  ok(pcPadrao.status === 400, 'continuar com a senha padrão não vale: 400');
+  const pcCurta = await http('POST', '/primeiro-acesso/concluir', { email: emailReal, codigo: codPA, senha_nova: 'curta' }, tokenPA);
+  ok(pcCurta.status === 400, 'senha curta: 400');
+  const pcOutroEmail = await http('POST', '/primeiro-acesso/concluir', { email: emailQa('outro-email'), codigo: codPA, senha_nova: senhaNovaImp }, tokenPA);
+  ok(pcOutroEmail.status === 400, 'o código só vale pro e-mail que o recebeu: 400');
+  const { rows: [aindaPend] } = await pool.query('select primeiro_acesso_pendente as p from prestadoras where id = $1', [idImp]);
+  ok(aindaPend.p === true, 'nenhuma dessas tentativas concluiu o primeiro acesso');
+  const pc = await http('POST', '/primeiro-acesso/concluir', { email: emailReal, codigo: codPA, senha_nova: senhaNovaImp }, tokenPA);
+  ok(pc.status === 200 && pc.json.usuario.primeiro_acesso_pendente === false && pc.json.usuario.email === emailReal && !pc.json.usuario.senha_hash, 'código certo + senha nova: primeiro acesso concluído (e o hash da senha não vaza)', JSON.stringify(pc.json).slice(0, 120));
+  ok(pc.json.usuario.telefone === telImp, 'o telefone que o administrador preencheu continua lá');
+  const lAntiga = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: emailReal, senha: 'senha123' });
+  const lNovaSenha = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: emailReal, senha: senhaNovaImp });
+  ok(lAntiga.status === 401 && lNovaSenha.status === 200 && lNovaSenha.json.usuario.primeiro_acesso_pendente === false, 'a senha padrão deixa de valer; entra com o e-mail dela e a senha nova');
+  const lNomeDepois = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: nomeImp, senha: senhaNovaImp });
+  ok(lNomeDepois.status === 401, 'depois do primeiro acesso, o login pelo nome deixa de existir');
+  const liberada = await http('GET', '/atendimentos/prestadora/me/convites', null, tokenPA);
+  ok(liberada.status === 200, 'a área dela abre (mesmo com o token de antes da conclusão)');
+  const paRepete = await http('POST', '/primeiro-acesso/solicitar', { email: emailReal }, tokenPA);
+  // (400 = recusado pela regra; 429 = o limite de 10 pedidos/15 min por IP já tinha estourado nesta bateria — nos dois casos não refaz)
+  ok(paRepete.status === 400 || paRepete.status === 429, 'não dá pra refazer o primeiro acesso depois de concluído', `(HTTP ${paRepete.status})`);
+  const { rows: [aindaOk] } = await pool.query('select email, primeiro_acesso_pendente as p from prestadoras where id = $1', [idImp]);
+  ok(aindaOk.p === false && aindaOk.email === emailReal, 'e o e-mail confirmado continua o mesmo');
+  await pool.query(`delete from codigos_verificacao where destino like $1`, [`primeiro-acesso:${idImp}:%`]);
+
+  // homônimas em primeiro acesso: o nome sozinho não identifica
+  const nomeDup = `QA Homonima ${id}`;
+  const hash123 = await require('bcrypt').hash('senha123', 4);
+  const { rows: duas } = await pool.query(
+    `insert into prestadoras (nome, email, senha_hash, unidade_id, primeiro_acesso_pendente)
+     values ($1, $2, $4, $5, true), ($1, $3, $4, $6, true) returning id`,
+    [nomeDup, `qa-hom1-${id}@qa.invalid`, `qa-hom2-${id}@qa.invalid`, hash123, uQa.id, (await pool.query(`select id from unidades where slug = $1`, [slugB])).rows[0].id]);
+  duas.forEach(d => criados.prestadoras.push(d.id));
+  const lHom = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: nomeDup, senha: 'senha123' });
+  ok(lHom.status === 409 && /mais de uma/.test(lHom.json.erro), 'duas prestadoras com o mesmo nome e a mesma senha padrão: pede o e-mail em vez de adivinhar', JSON.stringify(lHom.json));
+  const lHomEmail = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: `qa-hom1-${id}@qa.invalid`, senha: 'senha123' });
+  ok(lHomEmail.status === 200, 'pelo e-mail ela entra normalmente');
   await pool.query(`delete from atendimentos where unidade_id = $1 and codigo_externo like $2`, [uQa.id, `QA-${id}-%`]);
   await pool.query(`delete from clientes where unidade_id = $1 and nome like $2`, [uQa.id, `QA Empresa ${id}%`]);
 

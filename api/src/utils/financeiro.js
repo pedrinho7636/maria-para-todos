@@ -36,7 +36,7 @@ function totais(linhas) {
 function resumir(linhas, hoje) {
   const l = linhas.map(x => ({ ...x, valor: centavos(x.valor), custo: centavos(x.custo) }));
   const realizados = l.filter(x => x.status === 'concluido');
-  const futuros = l.filter(x => x.status !== 'concluido' && x.dia >= hoje && ['pedido', 'proposto', 'aceito'].includes(x.status));
+  const futuros = l.filter(x => x.status !== 'concluido' && x.dia >= hoje && ['pedido', 'proposto', 'aceito', 'recusado'].includes(x.status));
 
   const agrupar = (lista, chave, extra = () => ({})) => {
     const mapa = new Map();

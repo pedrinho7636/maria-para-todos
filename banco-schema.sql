@@ -398,3 +398,9 @@ create index idx_sub_administradores_unidade on sub_administradores(unidade_id);
 
 -- Layout do painel inicial da unidade (quais cartões aparecem e a ordem dos atalhos); editável pelo administrador.
 alter table unidades add column painel_config jsonb;
+
+-- O administrador marcou o atendimento como programado à mão: a conclusão automática (aceito + data passada) não mexe nele.
+alter table atendimentos add column situacao_manual boolean not null default false;
+
+-- Prestadora criada automaticamente (planilha) com senha padrão: no primeiro acesso confirma o e-mail e troca a senha.
+alter table prestadoras add column primeiro_acesso_pendente boolean not null default false;

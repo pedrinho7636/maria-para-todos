@@ -1,6 +1,6 @@
 const express = require('express');
 const { pool } = require('../db');
-const { requireAuth, requireRole, requireAcessoUnidade } = require('../middleware/auth');
+const { requireAuth, requireRole, requireAcessoUnidade, requirePrimeiroAcessoConcluido } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
@@ -31,7 +31,7 @@ router.post('/', requireAuth, requireRole('cliente'), asyncHandler(async (req, r
 }));
 
 // Avaliações aprovadas da prestadora logada (nota média + histórico)
-router.get('/prestadora/me', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
+router.get('/prestadora/me', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `select av.*, at.tipo_servico as servico, c.nome as cliente_nome
      from avaliacoes av

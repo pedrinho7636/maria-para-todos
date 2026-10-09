@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { pool } = require('../db');
-const { requireAuth, requireRole, requireAcessoUnidade } = require('../middleware/auth');
+const { requireAuth, requireRole, requireAcessoUnidade, requirePrimeiroAcessoConcluido } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 const { lerAtendimentos, normalizarTexto } = require('../utils/importarPlanilha');
 const { garantirPrestadoras, SENHA_PADRAO } = require('../utils/prestadorasImportadas');
@@ -79,20 +79,56 @@ router.post('/', limitePedidoPublico, asyncHandler(async (req, res) => {
   res.status(201).json(atendimento);
 }));
 
-// Agenda de um dia da unidade — admin (?data=YYYY-MM-DD, default hoje)
+// Agenda de um dia da unidade — admin (?data=YYYY-MM-DD, default hoje).
+// Cancelados NÃO entram nas contagens (só programado e concluído contam): por padrão ficam de fora;
+// a tela da agenda pede ?incluir_cancelados=1 pra mostrá-los (riscados) e poder reativá-los.
 router.get('/admin/:slug/agenda', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
   const { data } = req.query;
+  const comCancelados = req.query.incluir_cancelados === '1';
   const { rows } = await pool.query(
     `select a.*, p.nome as prestadora_nome, c.nome as cliente_nome
      from atendimentos a
      left join prestadoras p on p.id = a.prestadora_id
      left join clientes c on c.id = a.cliente_id
      where a.unidade_id = $1 and a.data_atendimento = coalesce($2::date, (now() at time zone 'America/Sao_Paulo')::date)
-       and a.status <> 'cancelado'
+       and ($3::boolean or a.status <> 'cancelado')
      order by a.hora_atendimento nulls last`,
-    [req.unidadeId, data || null]
+    [req.unidadeId, data || null, comCancelados]
   );
   res.json(rows);
+}));
+
+// Situação do atendimento na agenda: PROGRAMADO, CONCLUÍDO ou CANCELADO. Só os programados e os
+// concluídos entram nas contagens (dashboard, calendário, equipe, financeiro); o cancelado fica
+// registrado, mas fora de tudo — e dá pra voltar atrás.
+//  • concluido: vira concluído (e trava a tarifa da prestadora, se houver, como no aceite)
+//  • cancelado: vira cancelado (mantém prestadora e valores, só sai das contas)
+//  • programado: volta a ser um atendimento por acontecer — "aceito" se já tem prestadora (é o
+//    administrador afirmando que está combinado), senão "pedido". Marca situacao_manual: se a data
+//    já passou, a conclusão automática NÃO o conclui de novo.
+router.post('/admin/:slug/:id/situacao', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
+  const { situacao } = req.body;
+  if (!['programado', 'concluido', 'cancelado'].includes(situacao)) {
+    return res.status(400).json({ erro: 'situacao deve ser programado, concluido ou cancelado' });
+  }
+  const { rows: [atual] } = await pool.query('select status, prestadora_id from atendimentos where id = $1 and unidade_id = $2', [req.params.id, req.unidadeId]);
+  if (!atual) return res.status(404).json({ erro: 'Atendimento não encontrado' });
+
+  const { rows: [atendimento] } = await pool.query(
+    `update atendimentos a set
+       status = case $1::text when 'concluido' then 'concluido'::status_atendimento
+                              when 'cancelado' then 'cancelado'::status_atendimento
+                              else case when a.prestadora_id is not null then 'aceito'::status_atendimento else 'pedido'::status_atendimento end end,
+       valor_prestadora = case when $1::text in ('concluido', 'programado') and a.prestadora_id is not null
+                               then coalesce(a.valor_prestadora, (select p.valor_por_atendimento from prestadoras p where p.id = a.prestadora_id))
+                               else a.valor_prestadora end,
+       situacao_manual = ($1::text = 'programado'),
+       atualizado_em = now()
+     where a.id = $2 and a.unidade_id = $3
+     returning *`,
+    [situacao, req.params.id, req.unidadeId]
+  );
+  res.json(atendimento);
 }));
 
 // Lista enxuta de prestadoras ativas da unidade — liberada por 'agenda' (não por
@@ -527,7 +563,7 @@ const COLUNAS_PRESTADORA = `a.id, a.tipo_servico, a.area, a.data_atendimento, a.
   coalesce(a.valor_prestadora, p.valor_por_atendimento) as valor_pago`;
 
 // Convites pendentes de aceite pela prestadora logada
-router.get('/prestadora/me/convites', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
+router.get('/prestadora/me/convites', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `select ${COLUNAS_PRESTADORA} from atendimentos a join prestadoras p on p.id = a.prestadora_id
      where a.prestadora_id = $1 and a.status = 'proposto' order by a.data_atendimento, a.hora_atendimento`,
@@ -537,7 +573,7 @@ router.get('/prestadora/me/convites', requireAuth, requireRole('prestadora'), as
 }));
 
 // Agenda já aceita pela prestadora logada
-router.get('/prestadora/me/agenda', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
+router.get('/prestadora/me/agenda', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `select ${COLUNAS_PRESTADORA} from atendimentos a join prestadoras p on p.id = a.prestadora_id
      where a.prestadora_id = $1 and a.status = 'aceito' order by a.data_atendimento, a.hora_atendimento`,
@@ -551,7 +587,7 @@ router.get('/prestadora/me/agenda', requireAuth, requireRole('prestadora'), asyn
 // e a conta ser uma só. "Realizado" = aceito/concluído em data que já passou (ou
 // concluído); "previsto" = aceito de hoje em diante. Semana começa no domingo,
 // igual ao painel dela.
-router.get('/prestadora/me/resumo', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
+router.get('/prestadora/me/resumo', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
   const { rows: [r] } = await pool.query(
     `with datas as (
        select (now() at time zone 'America/Sao_Paulo')::date as hoje
@@ -586,7 +622,7 @@ router.get('/prestadora/me/resumo', requireAuth, requireRole('prestadora'), asyn
 
 // Prestadora só pode confirmar (aceitar) um convite a partir de 2 dias antes
 // do atendimento — reserva de agenda muito antecipada fica só "aguardando".
-router.post('/prestadora/me/:id/aceitar', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
+router.post('/prestadora/me/:id/aceitar', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
   const { rows: [atual] } = await pool.query(
     `select * from atendimentos where id = $1 and prestadora_id = $2 and status = 'proposto'`,
     [req.params.id, req.user.id]
@@ -613,7 +649,7 @@ router.post('/prestadora/me/:id/aceitar', requireAuth, requireRole('prestadora')
   res.json(atendimento);
 }));
 
-router.post('/prestadora/me/:id/recusar', requireAuth, requireRole('prestadora'), asyncHandler(async (req, res) => {
+router.post('/prestadora/me/:id/recusar', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
   const { rows: [atendimento] } = await pool.query(
     `update atendimentos set status = 'recusado', prestadora_id = null, valor_prestadora = null, atualizado_em = now()
      where id = $1 and prestadora_id = $2 and status = 'proposto'

@@ -14,7 +14,7 @@ const SQL_CONCLUIR = `
     status = 'concluido',
     valor_prestadora = coalesce(a.valor_prestadora, (select p.valor_por_atendimento from prestadoras p where p.id = a.prestadora_id)),
     atualizado_em = now()
-  where a.status = 'aceito'
+  where a.status = 'aceito' and not a.situacao_manual
     and (case
            when a.hora_atendimento is null then (a.data_atendimento + 1)::timestamp
            else a.data_atendimento + a.hora_atendimento + coalesce(a.duracao_horas, 1)::float8 * interval '1 hour'

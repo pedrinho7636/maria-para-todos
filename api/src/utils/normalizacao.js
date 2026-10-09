@@ -65,4 +65,15 @@ function emailInstitucionalValido(email, slugsPermitidos) {
   return (slugsPermitidos || []).some(slug => local.startsWith(String(slug).toLowerCase()));
 }
 
-module.exports = { normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido, formatarCnpj, slugificar, ufValida, UFS, emailInstitucionalValido, DOMINIO_INSTITUCIONAL };
+// Nome de cidade/unidade: cada palavra começa com maiúscula ("passo fundo" -> "Passo Fundo"); ligações como
+// de/da/do/dos/das/e ficam minúsculas no meio ("Santa Maria da Boa Vista"). O resto de cada palavra é mantido como
+// foi digitado ("São Paulo", "SC", "D'Oeste" não são estragados).
+const LIGACOES = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+function capitalizarNome(nome) {
+  return String(nome ?? '').trim().replace(/\s+/g, ' ').split(' ').map((p, i) => {
+    if (i > 0 && LIGACOES.has(p.toLowerCase())) return p.toLowerCase();
+    return p.charAt(0).toLocaleUpperCase('pt-BR') + p.slice(1);
+  }).join(' ');
+}
+
+module.exports = { capitalizarNome, normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido, formatarCnpj, slugificar, ufValida, UFS, emailInstitucionalValido, DOMINIO_INSTITUCIONAL };

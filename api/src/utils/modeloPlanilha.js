@@ -4,25 +4,27 @@
 const writeExcelFile = require('write-excel-file/node').default;
 
 const COLUNAS = [
-  // [título, largura, obrigatória?, o que colocar, exemplo]
+  // [título, largura, obrigatória?, o que colocar, exemplo] — as MESMAS colunas, na mesma ordem, da planilha
+  // exportada pelo sistema da franquia (é o formato que o cliente usa no dia a dia)
   ['Orçamento', 12, 'não', 'Código do orçamento/contrato. Serve só pra agrupar atendimentos do mesmo orçamento.', '500'],
   ['Número', 10, 'SIM', 'Código ÚNICO do atendimento (texto ou número; não use nada começando com EXEMPLO). É a chave: reenviar a mesma planilha (ou uma mais nova) só traz o que ainda não existe — o que já foi importado é ignorado.', '1001'],
   ['Data', 12, 'SIM', 'Dia do atendimento, no formato dd/mm/aaaa (ou data do Excel).', '15/10/2026'],
-  ['Horário', 10, 'SIM', 'Horário de início, hh:mm.', '08:00'],
+  ['Horário', 10, 'SIM', 'Horário de início, hh:mm (ou hh:mm:ss).', '08:00:00'],
+  ['Período', 10, 'não lida', 'Manhã / Tarde. O portal NÃO lê esta coluna: o período já sai do Horário. Pode deixar como vem do sistema.', 'Manhã'],
   ['Serviço', 14, 'SIM', 'O serviço. "Limpeza" + Tipo "Comercial" vira "Limpeza empresarial"; "Limpeza" + "Residencial" vira "Limpeza residencial"; outros nomes entram como estão.', 'Limpeza'],
   ['Tipo', 14, 'não', 'Complementa o Serviço (Comercial / Residencial / pós-obra...).', 'Comercial'],
   ['Horas', 8, 'não', 'Duração em horas (aceita decimais: 2,5). Define a altura do bloco na agenda; sem ela, 1 hora.', '4'],
   ['Cliente', 34, 'não', 'Nome do cliente; se quiser o telefone, escreva "Nome | Telefone". O cliente é criado (sem login) se ainda não existir.', 'Empresa Exemplo LTDA | (54) 3333-4444'],
-  ['Profissionais', 26, 'não', 'Nome da prestadora. Se ela ainda não existir no portal, é cadastrada na hora (e-mail nome@gmail.com, senha padrão) e os atendimentos ficam ligados a ela.', 'Maria da Silva'],
+  ['Profissionais', 26, 'não', 'Nome da prestadora. Se ela ainda não existir no portal, é cadastrada na hora (e-mail nome@gmail.com, senha padrão, e no primeiro acesso ela confirma o e-mail e troca a senha) e os atendimentos ficam ligados a ela.', 'Maria da Silva'],
   ['Situação', 12, 'não', 'Previsto (ainda vai acontecer — vira convite pra prestadora), Concluído ou Cancelado. Vazio = Previsto.', 'Previsto'],
-  ['Valor', 12, 'não', 'OPCIONAL. Quanto o CLIENTE paga por este atendimento (alimenta o Financeiro). Ex.: 600,00.', '600,00'],
-  ['Custo', 12, 'não', 'OPCIONAL. Quanto a FRANQUIA paga à prestadora por este atendimento (repasse). Sem ele, vale o valor por atendimento definido na tela Equipe.', '150,00'],
+  ['Recorrente', 12, 'não lida', 'Sim / Não. O portal NÃO lê esta coluna: pra repetir um atendimento toda semana use "Cadastrar atendimento" → "Repetir toda semana".', 'Não'],
+  ['Valor (R$)', 12, 'opcional', 'Quanto o CLIENTE paga por este atendimento (alimenta o Financeiro). Ex.: 600,00.', '600,00'],
 ];
 
 const EXEMPLOS = [
-  ['500', 'EXEMPLO-1', new Date(Date.UTC(2026, 9, 15)), '08:00', 'Limpeza', 'Comercial', 4, 'Empresa Exemplo LTDA | (54) 3333-4444', 'Maria da Silva', 'Previsto', '600,00', '150,00'],
-  ['501', 'EXEMPLO-2', new Date(Date.UTC(2026, 9, 16)), '13:30', 'Limpeza', 'Residencial', 3, 'Cláudia Souza', 'Maria da Silva', 'Previsto', '240,00', ''],
-  ['502', 'EXEMPLO-3', new Date(Date.UTC(2026, 9, 1)), '09:00', 'Passadoria', '', 2.5, 'Pedro Alves | (54) 99999-0000', 'Joana Prestes', 'Concluído', '', ''],
+  ['500', 'EXEMPLO-1', '15/10/2026', '08:00:00', 'Manhã', 'Limpeza', 'Comercial', 4, 'Empresa Exemplo LTDA | (54) 3333-4444', 'Maria da Silva', 'Previsto', 'Não', 600],
+  ['501', 'EXEMPLO-2', '16/10/2026', '13:30:00', 'Tarde', 'Limpeza', 'Residencial', 3, 'Cláudia Souza', 'Maria da Silva', 'Previsto', 'Não', 240],
+  ['502', 'EXEMPLO-3', '01/10/2026', '09:00:00', 'Manhã', 'Passadoria', '', 2.5, 'Pedro Alves | (54) 99999-0000', 'Joana Prestes', 'Concluído', 'Não', 90.5],
 ];
 
 async function gerarModeloImportacao() {
@@ -38,6 +40,7 @@ async function gerarModeloImportacao() {
     [null, null, 'As 3 linhas de exemplo da aba "Atendimentos" têm Número começando com EXEMPLO: o portal as IGNORA, então não faz mal esquecê-las. Apague-as ou substitua pelos seus dados.', null],
     [null, null, 'O portal mostra uma pré-visualização (quantos são novos, quantos já existem, quais prestadoras serão cadastradas) e só grava quando você confirma.', null],
     [null, null, 'Domingos não têm agenda no portal: atendimentos nesse dia entram, mas não aparecem no calendário.', null],
+    [null, null, 'Coluna extra opcional: se quiser informar quanto a FRANQUIA paga à prestadora em cada atendimento (repasse), acrescente uma coluna chamada "Custo (R$)" ao lado de "Valor (R$)". Sem ela vale o valor por atendimento definido na tela Equipe.', null],
   ];
 
   return writeExcelFile([

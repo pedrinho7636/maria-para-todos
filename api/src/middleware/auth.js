@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('../utils/asyncHandler');
 const { acessoAdminUnidade } = require('../utils/permissoes');
+const { pool } = require('../db');
 
 function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
@@ -35,4 +36,16 @@ function requireAcessoUnidade(modulo) {
   });
 }
 
-module.exports = { requireAuth, requireRole, requireAcessoUnidade };
+// Prestadora com conta criada pela planilha (senha padrão) só pode usar a etapa de "primeiro acesso"
+// (confirmar o e-mail e trocar a senha) até concluí-la; o resto da área dela responde 403 com
+// codigo PRIMEIRO_ACESSO. Perfis que não são prestadora passam direto.
+const requirePrimeiroAcessoConcluido = asyncHandler(async (req, res, next) => {
+  if (req.user.perfil !== 'prestadora') return next();
+  const { rows: [p] } = await pool.query('select primeiro_acesso_pendente from prestadoras where id = $1', [req.user.id]);
+  if (p?.primeiro_acesso_pendente) {
+    return res.status(403).json({ erro: 'Conclua o seu primeiro acesso (confirmar o e-mail e criar uma senha) para usar o portal.', codigo: 'PRIMEIRO_ACESSO' });
+  }
+  next();
+});
+
+module.exports = { requireAuth, requireRole, requireAcessoUnidade, requirePrimeiroAcessoConcluido };
