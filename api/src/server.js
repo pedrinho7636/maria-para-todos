@@ -1,5 +1,6 @@
 require('dotenv').config();
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
@@ -58,6 +59,13 @@ app.use(express.json());
 // Dado de API nunca deve vir de cache do navegador: uma resposta velha em cache
 // é exatamente o "mudei e não apareceu" que ninguém consegue explicar.
 app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+
+// Versão do site = carimbo de modificação do HTML (muda a cada deploy). Toda resposta da API leva essa versão no
+// cabeçalho X-App-Versao e o HTML guarda a que foi entregue a ele: quem deixou a aba aberta durante uma atualização
+// vê o aviso "versão nova — atualizar" em vez de ficar com a tela velha conversando com a API nova (campos/máscaras
+// antigos, mensagens que não batem...).
+const versaoDoSite = () => { try { return String(Math.round(fs.statSync(ARQUIVO_SITE).mtimeMs)); } catch { return '0'; } };
+app.use('/api', (req, res, next) => { res.set('X-App-Versao', versaoDoSite()); next(); });
 
 // Limite de tentativas em rotas sensíveis a força bruta / spam. No login só as
 // tentativas ERRADAS contam (skipSuccessfulRequests): contar também as certas
@@ -124,7 +132,14 @@ app.use('/api/financeiro', financeiroRoutes);
 // O próprio servidor entrega o frontend (mesma origem da API = sem CORS no site
 // publicado). Só esse arquivo — nunca a pasta inteira, que tem .env, .sql etc.
 const ARQUIVO_SITE = path.join(__dirname, '..', '..', 'Portal Da Maria.html');
-app.get('/', (req, res) => res.sendFile(ARQUIVO_SITE));
+// O HTML nunca fica em cache (no-store): abrir/recarregar a página sempre traz a versão do último deploy. A versão
+// entregue vai dentro do HTML (no lugar de __APP_VERSAO__) pra a página comparar com a da API.
+let htmlEmCache = { versao: null, texto: '' };
+app.get('/', (req, res) => {
+  const versao = versaoDoSite();
+  if (htmlEmCache.versao !== versao) htmlEmCache = { versao, texto: fs.readFileSync(ARQUIVO_SITE, 'utf8').replace('__APP_VERSAO__', versao) };
+  res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store, must-revalidate' }).send(htmlEmCache.texto);
+});
 
 app.use((req, res) => res.status(404).json({ erro: 'Rota não encontrada' }));
 

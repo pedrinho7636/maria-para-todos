@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Portal da Maria</title>
+  <meta name="app-versao" content="__APP_VERSAO__">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -4171,11 +4172,26 @@
     let authToken = null;
     try { authToken = localStorage.getItem('pm-token'); } catch (e) { }
 
+    // A API manda a versão do site em cada resposta (X-App-Versao). Se a aba foi aberta antes de uma atualização, a
+    // versão dela é outra: avisa e oferece recarregar — senão a tela velha (campos, máscaras, regras) fala com a API nova.
+    // Aberto direto do arquivo / Live Server (sem a versão no HTML) isso fica desligado.
+    const VERSAO_DA_PAGINA = document.querySelector('meta[name="app-versao"]')?.content || '';
+    function verificarVersaoDoSite(versaoServidor) {
+      if (!versaoServidor || !VERSAO_DA_PAGINA || VERSAO_DA_PAGINA === '__APP_VERSAO__' || versaoServidor === VERSAO_DA_PAGINA) return;
+      if (document.getElementById('aviso-versao')) return;
+      const faixa = document.createElement('div');
+      faixa.id = 'aviso-versao';
+      faixa.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#0E6B4F;color:#fff;padding:10px 16px;text-align:center;font:14px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25)';
+      faixa.innerHTML = 'Há uma <b>versão nova</b> do Portal da Maria. <button style="margin-left:10px;padding:5px 14px;border:0;border-radius:8px;background:#fff;color:#0A4E3A;font-weight:600;cursor:pointer" onclick="location.reload()">Atualizar agora</button>';
+      document.body.appendChild(faixa);
+    }
+
     async function api(path, opts = {}) {
       const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
       if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
       const res = await fetch(API_BASE + path, { ...opts, headers });
       const dados = await res.json().catch(() => ({}));
+      verificarVersaoDoSite(res.headers.get('x-app-versao'));
       // 401 de /auth/* é "e-mail/senha incorretos" (ou outro erro de cadastro), não
       // sessão vencida — só vale o tratamento de sessão pra quem estava logado.
       if (res.status === 401 && authToken && !path.startsWith('/auth/')) {
