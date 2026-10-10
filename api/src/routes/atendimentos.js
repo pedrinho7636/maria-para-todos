@@ -8,8 +8,56 @@ const { lerAtendimentos, normalizarTexto } = require('../utils/importarPlanilha'
 const { garantirPrestadoras, SENHA_PADRAO } = require('../utils/prestadorasImportadas');
 const { gerarOcorrencias } = require('../utils/recorrencia');
 const { gerarModeloImportacao } = require('../utils/modeloPlanilha');
+const { STATUS_QUE_OCUPAM, STATUS_CONFIRMADOS, SQL_CONFLITOS_JSON, conflitosDoHorario, conflitosDosAtendimentos, descreverConflito } = require('../utils/conflitos');
+const { avisarCancelamento } = require('../utils/avisos');
 
 const router = express.Router();
+
+const dataBR = (d) => String(d).slice(0, 10).split('-').reverse().join('/');
+
+// Antes de ATRIBUIR um atendimento a uma prestadora (convite novo, troca de prestadora, "programado" manual):
+//  • ela já RECUSOU esse atendimento antes? (o registro fica ligado ao atendimento; o administrador é avisado pra não
+//    mandar o mesmo convite de novo pra quem já disse não)
+//  • ela já tem outro atendimento que se sobrepõe a esse horário?
+// Nos dois casos o administrador pode seguir mesmo assim: a tela pergunta e reenvia com forcar_recusa / forcar_conflito.
+// Devolve null (pode seguir) ou { status, json } pronto pra responder.
+async function checarAtribuicao(db, { prestadoraId, atendimento, body = {} }) {
+  if (!prestadoraId) return null;
+  const { rows: [p] } = await db.query('select nome from prestadoras where id = $1', [prestadoraId]);
+  const nome = p?.nome || 'A prestadora';
+  if (!body.forcar_recusa && atendimento.id) {
+    const { rows: [r] } = await db.query(
+      'select recusado_em from recusas_atendimento where atendimento_id = $1 and prestadora_id = $2 order by recusado_em desc limit 1',
+      [atendimento.id, prestadoraId]);
+    if (r) {
+      return { status: 409, json: {
+        codigo: 'JA_RECUSOU', recusado_em: r.recusado_em,
+        erro: `${nome} já recusou este atendimento em ${r.recusado_em.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}. Enviar de novo mesmo assim?`,
+      } };
+    }
+  }
+  if (!body.forcar_conflito) {
+    const conflitos = await conflitosDoHorario(db, {
+      prestadoraId, data: atendimento.data, hora: atendimento.hora, duracao: atendimento.duracao_horas ?? null,
+      excluirId: atendimento.id || null, statuses: STATUS_QUE_OCUPAM,
+    });
+    if (conflitos.length) {
+      return { status: 409, json: {
+        codigo: 'CONFLITO_HORARIO', conflitos,
+        erro: `${nome} já tem atendimento nesse horário: ${conflitos.slice(0, 3).map(descreverConflito).join('; ')}${conflitos.length > 3 ? '…' : ''}. Atribuir mesmo assim?`,
+      } };
+    }
+  }
+  return null;
+}
+
+// Dados do atendimento no formato que checarAtribuicao espera (data como texto, hora HH:MM)
+async function lerParaChecar(db, id, unidadeId) {
+  const { rows: [a] } = await db.query(
+    `select id, status, prestadora_id, data_atendimento::text as data, to_char(hora_atendimento, 'HH24:MI') as hora, duracao_horas::float8 as duracao_horas
+     from atendimentos where id = $1 and unidade_id = $2`, [id, unidadeId]);
+  return a || null;
+}
 
 // Acha um cliente da unidade pelo nome (sem diferenciar acento/maiúscula) ou cria
 // um novo, sem login — mesmo tipo de cadastro avulso que o pedido público gera.
@@ -86,7 +134,10 @@ router.get('/admin/:slug/agenda', requireAuth, requireAcessoUnidade('agenda'), a
   const { data } = req.query;
   const comCancelados = req.query.incluir_cancelados === '1';
   const { rows } = await pool.query(
-    `select a.*, p.nome as prestadora_nome, c.nome as cliente_nome
+    `select a.*, p.nome as prestadora_nome, c.nome as cliente_nome,
+            -- quem já recusou este atendimento (continua valendo mesmo depois de passar pra outra prestadora)
+            (select coalesce(json_agg(json_build_object('prestadora_id', r.prestadora_id, 'nome', pr.nome, 'em', r.recusado_em) order by r.recusado_em), '[]'::json)
+               from recusas_atendimento r join prestadoras pr on pr.id = r.prestadora_id where r.atendimento_id = a.id) as recusas
      from atendimentos a
      left join prestadoras p on p.id = a.prestadora_id
      left join clientes c on c.id = a.cliente_id
@@ -111,8 +162,14 @@ router.post('/admin/:slug/:id/situacao', requireAuth, requireAcessoUnidade('agen
   if (!['programado', 'concluido', 'cancelado'].includes(situacao)) {
     return res.status(400).json({ erro: 'situacao deve ser programado, concluido ou cancelado' });
   }
-  const { rows: [atual] } = await pool.query('select status, prestadora_id from atendimentos where id = $1 and unidade_id = $2', [req.params.id, req.unidadeId]);
+  const atual = await lerParaChecar(pool, req.params.id, req.unidadeId);
   if (!atual) return res.status(404).json({ erro: 'Atendimento não encontrado' });
+
+  // voltar a "programado" com prestadora vira "aceito": ela passa a ter esse horário ocupado — avisa se conflita
+  if (situacao === 'programado' && atual.prestadora_id && atual.status !== 'aceito') {
+    const bloqueio = await checarAtribuicao(pool, { prestadoraId: atual.prestadora_id, atendimento: atual, body: { ...req.body, forcar_recusa: true } });
+    if (bloqueio) return res.status(bloqueio.status).json(bloqueio.json);
+  }
 
   const { rows: [atendimento] } = await pool.query(
     `update atendimentos a set
@@ -128,7 +185,12 @@ router.post('/admin/:slug/:id/situacao', requireAuth, requireAcessoUnidade('agen
      returning *`,
     [situacao, req.params.id, req.unidadeId]
   );
-  res.json(atendimento);
+  // cancelado pelo administrador: a prestadora responsável recebe um aviso no portal (e some da agenda dela)
+  let avisada = false;
+  if (situacao === 'cancelado' && atual.status !== 'cancelado' && atual.prestadora_id) {
+    avisada = (await avisarCancelamento(pool, [atendimento.id])) > 0;
+  }
+  res.json({ ...atendimento, prestadora_avisada: avisada });
 }));
 
 // Lista enxuta de prestadoras ativas da unidade — liberada por 'agenda' (não por
@@ -166,6 +228,9 @@ router.post('/admin/:slug/:id/propor', requireAuth, requireAcessoUnidade('agenda
   if (!await pertenceAUnidade('prestadoras', prestadora_id, req.unidadeId)) {
     return res.status(400).json({ erro: 'prestadora_id não pertence a esta unidade' });
   }
+  const paraChecar = await lerParaChecar(pool, req.params.id, req.unidadeId);
+  const bloqueio = paraChecar && await checarAtribuicao(pool, { prestadoraId: prestadora_id, atendimento: paraChecar, body: req.body });
+  if (bloqueio) return res.status(bloqueio.status).json(bloqueio.json);
 
   const { rows: [atendimento] } = await pool.query(
     `update atendimentos set prestadora_id = $1, status = 'proposto', profissional_externo = null, valor_prestadora = null, atualizado_em = now()
@@ -183,6 +248,14 @@ router.post('/admin/:slug/:id/reatribuir', requireAuth, requireAcessoUnidade('ag
   const prestadoraId = req.body.prestadora_id || null;
   if (prestadoraId && !await pertenceAUnidade('prestadoras', prestadoraId, req.unidadeId)) {
     return res.status(400).json({ erro: 'prestadora_id não pertence a esta unidade' });
+  }
+  // trocar pra OUTRA prestadora (ou convidar uma nova): avisa se ela já recusou este atendimento ou se tem horário em conflito
+  if (prestadoraId) {
+    const paraChecar = await lerParaChecar(pool, req.params.id, req.unidadeId);
+    if (paraChecar && !['concluido', 'cancelado'].includes(paraChecar.status) && paraChecar.prestadora_id !== prestadoraId) {
+      const bloqueio = await checarAtribuicao(pool, { prestadoraId, atendimento: paraChecar, body: req.body });
+      if (bloqueio) return res.status(bloqueio.status).json(bloqueio.json);
+    }
   }
 
   const { rows: [atendimento] } = await pool.query(
@@ -310,6 +383,17 @@ router.post('/admin/:slug', requireAuth, requireAcessoUnidade('agenda'), asyncHa
       [req.unidadeId, clienteId, prestadora_id || null, servico, area ? String(area).trim() : null, dataStr,
        hora_atendimento, duracao, valorNum, prestadora_id ? 'proposto' : 'pedido']
     );
+    // convite pra uma prestadora que já tem outro atendimento nesse horário: avisa (o administrador pode confirmar mesmo assim)
+    if (prestadora_id && !req.body.forcar_conflito) {
+      const conflitos = await conflitosDosAtendimentos(client, [atendimento.id]);
+      if (conflitos.length) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          codigo: 'CONFLITO_HORARIO', conflitos,
+          erro: `Essa prestadora já tem atendimento nesse horário: ${conflitos.slice(0, 3).map(descreverConflito).join('; ')}${conflitos.length > 3 ? '…' : ''}. Atribuir mesmo assim?`,
+        });
+      }
+    }
     await client.query('COMMIT');
     res.status(201).json(await comValorPago(atendimento));
   } catch (erro) {
@@ -534,6 +618,19 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
       );
       inseridos.push(linha);
     }
+    // série com prestadora: confere se alguma ocorrência cai num horário em que ela já tem outro atendimento
+    // (inclusive entre as da própria série); o administrador pode confirmar mesmo assim (forcar_conflito)
+    if (!req.body.forcar_conflito) {
+      const conflitos = await conflitosDosAtendimentos(client, inseridos.filter(i => i.prestadora_id).map(i => i.id));
+      if (conflitos.length) {
+        await client.query('ROLLBACK');
+        const afetados = new Set(conflitos.map(c => c.atendimento_id)).size;
+        return res.status(409).json({
+          codigo: 'CONFLITO_HORARIO', conflitos: conflitos.slice(0, 10), atendimentos_em_conflito: afetados,
+          erro: `${afetados === 1 ? '1 atendimento da série cai' : afetados + ' atendimentos da série caem'} num horário em que a prestadora já tem outro serviço (ex.: ${descreverConflito(conflitos[0])}). Criar mesmo assim?`,
+        });
+      }
+    }
     await client.query('COMMIT');
     res.status(201).json({ serie_id: serieId, quantidade_gerada: inseridos.length, atendimentos: inseridos });
   } catch (erro) {
@@ -553,19 +650,27 @@ router.post('/admin/:slug/serie/:serieId/cancelar', requireAuth, requireAcessoUn
      returning id`,
     [req.params.serieId, req.unidadeId]
   );
-  res.json({ cancelados: rows.length });
+  // cada prestadora que tinha ocorrências da série é avisada de cada cancelamento
+  const avisadas = await avisarCancelamento(pool, rows.map(r => r.id));
+  res.json({ cancelados: rows.length, avisos_enviados: avisadas });
 }));
 
 // A prestadora enxerga só o que a FRANQUIA paga a ela por atendimento (valor_pago),
 // nunca o preço cobrado do cliente. Já aceito: o valor travado no aceite; ainda
 // convite (ou aceito antes da tarifa existir): a tarifa atual dela.
+// Além disso cada linha traz o cliente, o horário de término e os `conflitos`: outros atendimentos DELA que se
+// sobrepõem a este (a tela marca em vermelho — e o aceite é barrado quando o conflito é com um já confirmado).
 const COLUNAS_PRESTADORA = `a.id, a.tipo_servico, a.area, a.data_atendimento, a.hora_atendimento, a.duracao_horas, a.status,
-  coalesce(a.valor_prestadora, p.valor_por_atendimento) as valor_pago`;
+  to_char(a.hora_atendimento + (coalesce(a.duracao_horas, 1)::float8 * interval '1 hour'), 'HH24:MI') as hora_fim,
+  a.data_atendimento::text as dia, cl.nome as cliente_nome,
+  coalesce(a.valor_prestadora, p.valor_por_atendimento) as valor_pago,
+  ${SQL_CONFLITOS_JSON('a')} as conflitos`;
+const DE_PRESTADORA = `from atendimentos a join prestadoras p on p.id = a.prestadora_id left join clientes cl on cl.id = a.cliente_id`;
 
 // Convites pendentes de aceite pela prestadora logada
 router.get('/prestadora/me/convites', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `select ${COLUNAS_PRESTADORA} from atendimentos a join prestadoras p on p.id = a.prestadora_id
+    `select ${COLUNAS_PRESTADORA} ${DE_PRESTADORA}
      where a.prestadora_id = $1 and a.status = 'proposto' order by a.data_atendimento, a.hora_atendimento`,
     [req.user.id]
   );
@@ -575,11 +680,44 @@ router.get('/prestadora/me/convites', requireAuth, requireRole('prestadora'), re
 // Agenda já aceita pela prestadora logada
 router.get('/prestadora/me/agenda', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `select ${COLUNAS_PRESTADORA} from atendimentos a join prestadoras p on p.id = a.prestadora_id
+    `select ${COLUNAS_PRESTADORA} ${DE_PRESTADORA}
      where a.prestadora_id = $1 and a.status = 'aceito' order by a.data_atendimento, a.hora_atendimento`,
     [req.user.id]
   );
   res.json(rows);
+}));
+
+// Calendário da prestadora: TUDO que é dela no mês (convites, confirmados, concluídos e cancelados), com cliente,
+// início/término, serviço, status e conflitos. Só enxerga os atendimentos ligados a ela (prestadora_id = quem está logada).
+router.get('/prestadora/me/calendario', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
+  const mes = String(req.query.mes ?? '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) return res.status(400).json({ erro: 'mes inválido — use AAAA-MM' });
+  const { rows } = await pool.query(
+    `select ${COLUNAS_PRESTADORA} ${DE_PRESTADORA}
+     where a.prestadora_id = $1 and a.status in ('proposto', 'aceito', 'concluido', 'cancelado')
+       and a.data_atendimento >= ($2 || '-01')::date and a.data_atendimento < (($2 || '-01')::date + interval '1 month')
+     order by a.data_atendimento, a.hora_atendimento`,
+    [req.user.id, mes]
+  );
+  res.json(rows);
+}));
+
+// Avisos não lidos da prestadora (hoje: cancelamentos feitos pelo administrador)
+router.get('/prestadora/me/avisos', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `select id, tipo, dados, criado_em from avisos_prestadora where prestadora_id = $1 and lido_em is null order by criado_em desc limit 50`,
+    [req.user.id]
+  );
+  res.json(rows);
+}));
+router.post('/prestadora/me/avisos/lidas', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
+  const { rowCount } = await pool.query('update avisos_prestadora set lido_em = now() where prestadora_id = $1 and lido_em is null', [req.user.id]);
+  res.json({ lidos: rowCount });
+}));
+router.post('/prestadora/me/avisos/:id/lida', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ erro: 'aviso inválido' });
+  const { rowCount } = await pool.query('update avisos_prestadora set lido_em = now() where id = $1 and prestadora_id = $2 and lido_em is null', [req.params.id, req.user.id]);
+  res.json({ lidos: rowCount });
 }));
 
 // Quanto ela tem a receber: tarifa por atendimento × atendimentos aceitos/concluídos.
@@ -639,6 +777,18 @@ router.post('/prestadora/me/:id/aceitar', requireAuth, requireRole('prestadora')
     return res.status(400).json({ erro: `Só é possível confirmar a partir de 2 dias antes do atendimento (faltam ${diasRestantes} dias)` });
   }
 
+  // uma prestadora não faz dois serviços ao mesmo tempo: não confirma se já tem outro (confirmado ou concluído) sobreposto
+  const emConflito = await conflitosDoHorario(pool, {
+    prestadoraId: req.user.id, data: dataISO, hora: atual.hora_atendimento ? String(atual.hora_atendimento).slice(0, 5) : null,
+    duracao: atual.duracao_horas === null ? null : Number(atual.duracao_horas), excluirId: atual.id, statuses: STATUS_CONFIRMADOS,
+  });
+  if (emConflito.length) {
+    return res.status(409).json({
+      codigo: 'CONFLITO_HORARIO', conflitos: emConflito,
+      erro: `Você já tem um atendimento confirmado nesse horário (${emConflito.slice(0, 2).map(descreverConflito).join('; ')}). Fale com a unidade para resolver antes de aceitar.`,
+    });
+  }
+
   const { rows: [atendimento] } = await pool.query(
     // ao aceitar, trava a tarifa vigente: o que ela viu no convite é o que vale
     `update atendimentos set status = 'aceito', atualizado_em = now(),
@@ -650,14 +800,48 @@ router.post('/prestadora/me/:id/aceitar', requireAuth, requireRole('prestadora')
 }));
 
 router.post('/prestadora/me/:id/recusar', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
+  // a recusa é gravada junto (mesma instrução = tudo ou nada) e fica ligada ao atendimento pra sempre:
+  // o administrador vê quem já recusou, mesmo depois de o atendimento passar pra outra prestadora
   const { rows: [atendimento] } = await pool.query(
-    `update atendimentos set status = 'recusado', prestadora_id = null, valor_prestadora = null, atualizado_em = now()
-     where id = $1 and prestadora_id = $2 and status = 'proposto'
-     returning id, tipo_servico, area, data_atendimento, hora_atendimento, status`,
+    `with recusado as (
+       update atendimentos set status = 'recusado', prestadora_id = null, valor_prestadora = null, atualizado_em = now()
+       where id = $1 and prestadora_id = $2 and status = 'proposto'
+       returning id, tipo_servico, area, data_atendimento, hora_atendimento, status
+     ), registro as (
+       insert into recusas_atendimento (atendimento_id, prestadora_id) select id, $2 from recusado
+     )
+     select * from recusado`,
     [req.params.id, req.user.id]
   );
   if (!atendimento) return res.status(404).json({ erro: 'Convite não encontrado' });
   res.json(atendimento);
+}));
+
+// Os atendimentos do cliente logado, pra ele acompanhar: serviço, data/horário, status e QUEM é a prestadora
+// (nome + foto, pra reconhecer a profissional). A prestadora só aparece depois de CONFIRMAR (aceito/concluído):
+// enquanto é só um convite ela pode recusar, e o cliente não deve ser levado a contar com ela. A foto vem uma vez por
+// prestadora (em `prestadoras`), não repetida em cada atendimento. Cancelamento é pedido pelo WhatsApp e decidido pela
+// unidade — nada aqui altera o atendimento.
+router.get('/cliente/me/atendimentos', requireAuth, requireRole('cliente'), asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `select a.id, a.tipo_servico, a.area, a.data_atendimento::text as dia, to_char(a.hora_atendimento, 'HH24:MI') as hora,
+            to_char(a.hora_atendimento + (coalesce(a.duracao_horas, 1)::float8 * interval '1 hour'), 'HH24:MI') as hora_fim,
+            a.status, upper(left(a.id::text, 8)) as codigo,
+            case when a.status in ('aceito', 'concluido') then a.prestadora_id end as prestadora_id
+     from atendimentos a
+     where a.cliente_id = $1
+     order by a.data_atendimento desc, a.hora_atendimento desc nulls last
+     limit 300`,
+    [req.user.id]
+  );
+  const ids = [...new Set(rows.map(r => r.prestadora_id).filter(Boolean))];
+  const { rows: profissionais } = ids.length
+    ? await pool.query('select id, nome, foto from prestadoras where id = any($1::uuid[])', [ids])
+    : { rows: [] };
+  res.json({
+    atendimentos: rows,
+    prestadoras: Object.fromEntries(profissionais.map(p => [p.id, { nome: p.nome, foto: p.foto }])),
+  });
 }));
 
 // Atendimentos concluídos do cliente logado, aguardando avaliação

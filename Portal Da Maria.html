@@ -23,6 +23,8 @@
       --blue: #1C5FA8;
       --blue-soft: #E6EFF8;
       --amber: #C9842B;
+      --red: #C0392B;
+      --red-soft: #FBE3E0;
       --panel-dark: #0A4E3A;
       --bar-bg: rgba(255, 255, 255, .88);
       --toast-bg: #0B1F18;
@@ -43,6 +45,8 @@
       --blue: #6BA6E6;
       --blue-soft: #172A3C;
       --amber: #D9A24E;
+      --red: #F07167;
+      --red-soft: #3A1B1A;
       --panel-dark: #0A3F2E;
       --bar-bg: rgba(14, 24, 20, .85);
       --toast-bg: #0A3F2E;
@@ -1456,6 +1460,136 @@
     .st-new {
       background: #FBE7DC;
       color: #C25A2B
+    }
+
+    /* Prestadora: PENDENTE (ainda não aceito) e CONFLITO (horário sobreposto) usam o vermelho, mas com formas
+       diferentes pra não se confundirem — nem por cor: pendente = faixa lateral SÓLIDA + etiqueta PREENCHIDA com
+       relógio; conflito = faixa TRACEJADA + fundo LISTRADO + etiqueta só com CONTORNO e triângulo de alerta. */
+    .job.pendente, .invite.pendente {
+      border-left: 5px solid var(--red);
+      background: var(--red-soft)
+    }
+
+    .job.conflito, .invite.conflito {
+      border-left: 5px dashed var(--red);
+      background: repeating-linear-gradient(135deg, transparent 0 9px, rgba(192, 57, 43, .13) 9px 18px)
+    }
+
+    .job.cancelado-p {
+      opacity: .6
+    }
+
+    .job.cancelado-p .job-body strong {
+      text-decoration: line-through
+    }
+
+    .tag-pendente, .tag-conflito {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 9px;
+      border-radius: 20px;
+      white-space: nowrap
+    }
+
+    .tag-pendente {
+      background: var(--red);
+      color: #fff
+    }
+
+    .tag-conflito {
+      background: transparent;
+      color: var(--red);
+      border: 1.5px solid var(--red)
+    }
+
+    .tags-linha {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 5px
+    }
+
+    .cal-day.tem-pendencia::before {
+      content: '';
+      position: absolute;
+      top: 4px;
+      right: 5px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--red)
+    }
+
+    /* dia com conflito de horário: célula com CONTORNO vermelho (a pendência é o pontinho cheio) */
+    .cal-day.tem-conflito {
+      box-shadow: inset 0 0 0 1.5px var(--red)
+    }
+
+    .job.pendente.conflito, .invite.pendente.conflito {
+      border-left: 5px double var(--red);
+      background: repeating-linear-gradient(135deg, transparent 0 9px, rgba(192, 57, 43, .13) 9px 18px), var(--red-soft)
+    }
+
+    /* agenda do administrador: atendimento que a prestadora recusou (ainda sem outra) */
+    .tl-block.recusado {
+      background: var(--red-soft);
+      border-color: var(--red);
+      color: var(--red)
+    }
+
+    .aviso-cancelamento {
+      border: 1px solid var(--red);
+      background: var(--red-soft);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start
+    }
+
+    .aviso-cancelamento .aviso-corpo {
+      flex: 1;
+      font-size: 13px;
+      line-height: 1.5
+    }
+
+    .cli-card {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 14px;
+      align-items: center
+    }
+
+    .cli-card:last-child {
+      border-bottom: none
+    }
+
+    .cli-foto {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      flex: none;
+      background: var(--green-soft) center/cover no-repeat;
+      color: var(--green-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px
+    }
+
+    .cli-card.cancelado-c .cli-corpo strong {
+      text-decoration: line-through;
+      color: var(--muted)
+    }
+
+    .hora-input {
+      font-variant-numeric: tabular-nums
     }
 
     .empty {
@@ -3031,7 +3165,8 @@
           </div>
           <div class="field">
             <label>CNPJ da empresa</label>
-            <input id="cad-admin-cnpj" type="text" placeholder="00.000.000/0000-00" inputmode="numeric">
+            <input id="cad-admin-cnpj" type="text" placeholder="00.000.000/0000-00" maxlength="18" autocomplete="off" oninput="mascararCnpj(this)">
+            <p id="cad-admin-cnpj-dica" style="font-size:12px;margin:4px 0 0;min-height:16px"></p>
             <div class="warn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2">
                 <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
@@ -3501,6 +3636,7 @@
           <div class="stat-trend up"><span id="ps-mes-detalhe">—</span></div>
         </div>
       </section>
+      <div id="prest-avisos"></div>
       <div class="pcols">
         <div>
           <div class="sec-head">
@@ -3509,6 +3645,9 @@
           <div class="panel">
             <div id="invitelist"></div>
           </div>
+          <p style="font-size:12px;margin-top:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <span class="tag-pendente">⏳ Aguardando aceite</span> ainda não confirmado por você ·
+            <span class="tag-conflito">⚠ Conflito de horário</span> sobrepõe outro atendimento seu</p>
         </div>
         <div>
           <div class="sec-head">
@@ -3600,34 +3739,11 @@
           <div class="sec-head">
             <h2>Próximo atendimento</h2>
           </div>
-          <div class="panel" style="margin-bottom:24px">
-            <div class="job">
-              <div class="job-time">14:00</div>
-              <div class="job-body"><strong>Limpeza residencial</strong><span>Quarta, 24/06 · Fabiana S.</span></div>
-              <div class="job-status st-ok">confirmado</div>
-            </div>
-          </div>
+          <div class="panel" style="margin-bottom:24px" id="cli-proximo"></div>
           <div class="sec-head">
-            <h2>Histórico de pedidos</h2>
+            <h2>Meus atendimentos</h2>
           </div>
-          <div class="panel">
-            <div class="job">
-              <div class="job-time">—</div>
-              <div class="job-body"><strong>Limpeza residencial</strong><span>Solicitado hoje · aguardando
-                  confirmação</span></div>
-              <div class="job-status st-new">novo</div>
-            </div>
-            <div class="job">
-              <div class="job-time">—</div>
-              <div class="job-body"><strong>Passadoria</strong><span>10/06 · concluído</span></div>
-              <div class="job-status st-ok">concluído</div>
-            </div>
-            <div class="job">
-              <div class="job-time">—</div>
-              <div class="job-body"><strong>Limpeza pós-obra</strong><span>28/05 · concluído</span></div>
-              <div class="job-status st-ok">concluído</div>
-            </div>
-          </div>
+          <div class="panel" id="cli-historico"></div>
         </div>
         <div>
           <div class="sec-head">
@@ -3689,7 +3805,7 @@
       <div id="atd-painel-unico">
         <div class="field-row">
           <div class="field"><label id="atd-data-rotulo">Data</label><input id="atd-data" type="date" onchange="atdDataMudou(this)"></div>
-          <div class="field"><label>Horário</label><input id="atd-hora" type="time"></div>
+          <div class="field"><label>Horário (24 h)</label><input id="atd-hora" class="hora-input" type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:MM  ex.: 13:30" oninput="mascararHora(this)" onblur="completarHora(this)"></div>
         </div>
         <div class="field-row">
           <div class="field"><label>Serviço</label>
@@ -3863,6 +3979,23 @@
   </div>
 
   <!-- Contato da prestadora (administrador): telefone e envio do acesso por WhatsApp -->
+  <div class="modal" id="modal-substituir">
+    <div class="modal-card" style="max-width:480px;max-height:90vh;overflow-y:auto">
+      <div class="modal-head"><h3>Substituir perfil</h3>
+        <button class="modal-close" onclick="fecharSubstituir()" aria-label="Fechar" title="Fechar (Esc)">×</button></div>
+      <p style="margin-bottom:12px"><b id="sub-nome"></b> é um cadastro <b>provisório</b> (veio de agendamento/planilha) e já foi convidado a criar o próprio perfil.
+        Escolha abaixo o perfil que ele criou: tudo que está ligado ao provisório (<span id="sub-qtd"></span>) passa para esse perfil e o provisório deixa de aparecer como cliente.</p>
+      <div class="field"><label for="sub-destino">Perfil cadastrado pelo cliente</label><select id="sub-destino" onchange="substituirAtualizar()"></select></div>
+      <div class="atd-aviso" id="sub-aviso" style="display:none"></div>
+      <p style="font-size:12px;margin:0 0 12px">Só aparecem perfis com conta própria, desta unidade e <b>sem nenhum atendimento registrado</b>. Nada é excluído:
+        os atendimentos e avaliações são transferidos; só o cadastro provisório é removido. Não dá pra desfazer.</p>
+      <div class="form-actions">
+        <button class="btn-sm ghost" onclick="fecharSubstituir()">Cancelar</button>
+        <button class="btn-sm" id="sub-confirmar" onclick="confirmarSubstituicao()">Substituir perfil</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="modal-contato">
     <div class="modal-card" style="max-width:420px">
       <div class="modal-head"><h3>Contato da prestadora</h3>
@@ -3993,7 +4126,7 @@
           </div>
           <div class="field"><label>Telefone (WhatsApp) da unidade</label><input id="perfil-un-tel" type="tel" placeholder="(00) 0 0000-0000"></div>
           <div class="field"><label>Endereço <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><input id="perfil-un-end" placeholder="Rua, número — bairro"></div>
-          <div class="field" id="perfil-un-cnpj-wrap" style="display:none"><label>CNPJ da empresa <span style="font-weight:400;color:var(--muted)">(sua conta ainda não tem um)</span></label><input id="perfil-un-cnpj" placeholder="00.000.000/0000-00"></div>
+          <div class="field" id="perfil-un-cnpj-wrap" style="display:none"><label>CNPJ da empresa <span style="font-weight:400;color:var(--muted)">(sua conta ainda não tem um)</span></label><input id="perfil-un-cnpj" placeholder="00.000.000/0000-00" maxlength="18" autocomplete="off" oninput="mascararCnpj(this)"></div>
           <div class="form-actions">
             <button class="btn-sm" style="width:100%" id="perfil-un-botao" onclick="adicionarUnidadePerfil()">Adicionar unidade</button>
           </div>
@@ -4055,7 +4188,11 @@
         if (estavaLogado && typeof show === 'function') show('screen-home');
         throw new Error('Sessão expirada — faça login novamente.');
       }
-      if (!res.ok) throw new Error(dados.erro || ('Erro ' + res.status));
+      if (!res.ok) {
+        const erro = new Error(dados.erro || ('Erro ' + res.status));
+        erro.status = res.status; erro.codigo = dados.codigo; erro.dados = dados; // ex.: codigo CONFLITO_HORARIO / JA_RECUSOU
+        throw erro;
+      }
       return dados;
     }
   </script>
@@ -4111,6 +4248,72 @@
       return new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Sao_Paulo' });
     }
     function primeiroNome(nome) { return (nome || '').trim().split(/\s+/)[0] || ''; }
+
+    /* Horários SEMPRE em 24 h (08:00, 13:30, 22:00 — nunca AM/PM). O <input type="time"> mostra AM/PM conforme o
+       idioma do navegador e não dá pra impedir, então o horário é um campo de texto com máscara HH:MM. */
+    function mascararHora(input) {
+      const d = input.value.replace(/\D/g, '').slice(0, 4);
+      // 3º dígito: se os dois primeiros formam uma hora (≤ 23) vira HH:M…, senão a hora é de um dígito (930 → 9:30)
+      input.value = d.length < 3 ? d : (Number(d.slice(0, 2)) <= 23 ? d.slice(0, 2) + ':' + d.slice(2) : d[0] + ':' + d.slice(1));
+      input.style.borderColor = '';
+    }
+    // "9", "930", "9:30", "0930", "13:30" -> "HH:MM"; inválido ("25:00", "12:75") -> null
+    function lerHora(texto) {
+      const t = String(texto ?? '').trim();
+      let h, m;
+      if (/^\d{1,2}:\d{2}$/.test(t)) [h, m] = t.split(':').map(Number);
+      else if (/^\d{1,2}$/.test(t)) { h = Number(t); m = 0; }
+      else if (/^\d{3,4}$/.test(t)) { h = Number(t.slice(0, -2)); m = Number(t.slice(-2)); }
+      else return null;
+      return h >= 0 && h <= 23 && m >= 0 && m <= 59 ? String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') : null;
+    }
+    function completarHora(input) {
+      if (!input.value.trim()) return;
+      const h = lerHora(input.value);
+      if (h) input.value = h; else { input.style.borderColor = 'var(--red)'; toast('Horário inválido — use o formato 24 h, ex.: 08:00 ou 13:30.'); }
+    }
+    // data de um instante (timestamp do banco) no fuso de Brasília — o corte em UTC mostrava o dia seguinte à noite
+    const dataHoraBR = (instante) => new Date(instante).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const horarioFaixa = (a) => (a.hora || '--:--') + (a.fim ? '–' + a.fim : ''); // "09:00–13:00"
+
+    /* CNPJ: máscara enquanto digita (com ou sem pontuação, e aceita o CNPJ alfanumérico da Receita) e aviso se os
+       dígitos verificadores não conferem. O servidor é quem decide; aqui é só ajuda — um CNPJ que já tem conta pode ser
+       antigo/de teste e entra mesmo assim com os dados da empresa. */
+    function cnpjValidoFront(texto) {
+      const d = String(texto || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+      if (!/^[0-9A-Z]{12}[0-9]{2}$/.test(d) || /^(.)\1{13}$/.test(d)) return false;
+      const dv = (base) => { let soma = 0, peso = base.length - 7; for (const c of base) { soma += (c.charCodeAt(0) - 48) * peso--; if (peso < 2) peso = 9; } const r = soma % 11; return r < 2 ? 0 : 11 - r; };
+      return dv(d.slice(0, 12)) === Number(d[12]) && dv(d.slice(0, 13)) === Number(d[13]);
+    }
+    function mascararCnpj(input) {
+      const v = input.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 14);
+      const p = [v.slice(0, 2), v.slice(2, 5), v.slice(5, 8), v.slice(8, 12), v.slice(12, 14)];
+      input.value = p[0] + (p[1] ? '.' + p[1] : '') + (p[2] ? '.' + p[2] : '') + (p[3] ? '/' + p[3] : '') + (p[4] ? '-' + p[4] : '');
+      const dica = document.getElementById(input.id + '-dica');
+      if (!dica) return;
+      if (v.length < 14) { dica.textContent = ''; return; }
+      const ok = cnpjValidoFront(v);
+      dica.style.color = ok ? 'var(--green-strong)' : 'var(--red)';
+      dica.textContent = ok ? '✓ CNPJ válido.' : '⚠ Os dígitos verificadores não conferem — confira o número. (Vale pra empresa nova; CNPJ que já tem conta entra com os dados dela.)';
+    }
+
+    // Chama a API e, se ela avisar de CONFLITO DE HORÁRIO da prestadora ou de que ela JÁ RECUSOU o atendimento,
+    // pergunta ao administrador e, se ele confirmar, repete a chamada com o "mesmo assim" (forcar_conflito / forcar_recusa).
+    // Cancelando, lança um erro com .cancelado = true (quem chama não mostra mensagem de erro).
+    async function apiComConfirmacao(path, opts = {}) {
+      const corpo = opts.body ? JSON.parse(opts.body) : {};
+      for (let tentativa = 0; tentativa < 3; tentativa++) {
+        try { return await api(path, { ...opts, body: JSON.stringify(corpo) }); }
+        catch (err) {
+          const flag = { CONFLITO_HORARIO: 'forcar_conflito', JA_RECUSOU: 'forcar_recusa' }[err.codigo];
+          if (!flag || err.status !== 409) throw err;
+          if (!window.confirm(err.message)) { const cancelado = new Error('Operação cancelada.'); cancelado.cancelado = true; throw cancelado; }
+          corpo[flag] = true;
+        }
+      }
+      throw new Error('Não foi possível concluir (conflito persistente).');
+    }
+    let cadastroUnidadeConvite = ''; // unidade vinda do link de convite (?cadastro=cliente&unidade=...)
 
     // Qualquer texto que venha do banco e tenha se originado de um campo livre
     // digitado por cliente/prestadora (nome, tipo_servico, area, comentário...)
@@ -4219,6 +4422,7 @@
         sel.innerHTML = `<option value="">${rotulo}</option>` + opcoes;
         sel.value = atual;
       }
+      if (cadastroUnidadeConvite && cidades[cadastroUnidadeConvite]) document.getElementById('cad-cliente-regiao').value = cadastroUnidadeConvite;
     }
 
     // Dados públicos (home): lista de unidades. As demais listas ficam vazias até o login.
@@ -4274,26 +4478,38 @@
         p.avaliacoes ? api(`/avaliacoes/admin/${slug}`) : Promise.resolve([])
       ]);
       equipeData[slug] = eq.map(e => ({ id: e.prestadora_id, nome: e.nome, ini: e.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), serv: Number(e.total_atendimentos), nota: Number(e.nota_media) || 0, ativa: e.ativa, telefone: e.telefone || '', email: e.email || '', pendente: !!e.primeiro_acesso_pendente, tarifa: e.valor_por_atendimento === null || e.valor_por_atendimento === undefined ? null : Number(e.valor_por_atendimento) }));
-      clientesData[slug] = cl.map(c => ({ id: c.cliente_id, nome: c.nome, ini: c.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), ultimo: (c.ultimo_atendimento_tipo || '—') + (c.ultimo_atendimento_data ? ' · ' + c.ultimo_atendimento_data : ''), total: Number(c.total_servicos) }));
+      clientesData[slug] = cl.map(c => ({ id: c.cliente_id, nome: c.nome, ini: c.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), ultimo: (c.ultimo_atendimento_tipo || '—') + (c.ultimo_atendimento_data ? ' · ' + c.ultimo_atendimento_data : ''), total: Number(c.total_servicos), telefone: c.telefone || '', email: c.email || '', temConta: !!c.tem_conta, convite: c.convite_enviado_em || null, registrados: Number(c.total_registrados) || 0 }));
       avaliacoes = avs.map(a => ({ id: a.id, cliente: a.cliente_nome, prestadora: a.prestadora_nome, servico: a.servico || '', nota: a.nota, comentario: a.comentario, status: a.status, data: (a.criado_em || '').slice(0, 10) }));
     }
 
+    // Itens da prestadora (convite, confirmado, concluído, cancelado) já no formato da tela. Cada um traz os
+    // `conflitos`: outros atendimentos DELA que se sobrepõem a ele.
+    const reaisPrest = v => (v === null || v === undefined ? null : formatarReais(v));
+    const itemPrestadora = (a, status) => ({
+      id: a.id, hora: a.hora_atendimento?.slice(0, 5), fim: a.hora_fim || '', serv: a.tipo_servico, area: a.area, valor: reaisPrest(a.valor_pago),
+      data: String(a.dia || a.data_atendimento).slice(0, 10), cliente: a.cliente_nome || '', status: status || a.status, conflitos: a.conflitos || [],
+    });
+    let avisosPrestadora = [];
     async function carregarDadosPrestadora() {
-      const [conv, ag, avs, resumo] = await Promise.all([
+      const [conv, ag, avs, resumo, avisos] = await Promise.all([
         api('/atendimentos/prestadora/me/convites'),
         api('/atendimentos/prestadora/me/agenda'),
         api('/avaliacoes/prestadora/me'),
-        api('/atendimentos/prestadora/me/resumo')
+        api('/atendimentos/prestadora/me/resumo'),
+        api('/atendimentos/prestadora/me/avisos'),
       ]);
       resumoPrestadora = resumo;
+      avisosPrestadora = avisos;
       // valor_pago = o que a FRANQUIA paga a ela por este atendimento (null = tarifa ainda não definida)
-      const reais = v => (v === null || v === undefined ? null : formatarReais(v));
-      convites = conv.map(c => ({ id: c.id, serv: c.tipo_servico, area: c.area, data: c.data_atendimento, hora: c.hora_atendimento?.slice(0, 5), valor: reais(c.valor_pago), status: 'proposto' }));
-      agendaPrestadora = ag.map(a => ({ id: a.id, hora: a.hora_atendimento?.slice(0, 5), serv: a.tipo_servico, area: a.area, valor: reais(a.valor_pago), data: a.data_atendimento, status: 'aceito' }));
+      convites = conv.map(c => itemPrestadora(c, 'proposto'));
+      agendaPrestadora = ag.map(a => itemPrestadora(a, 'aceito'));
       avaliacoes = avs.map(a => ({ id: a.id, cliente: a.cliente_nome, prestadora: prestadora.nome, servico: a.servico || '', nota: a.nota, comentario: a.comentario, status: a.status, data: (a.criado_em || '').slice(0, 10) }));
+      await carregarCalendarioPrestadora();
     }
 
+    let clienteAtendimentos = { atendimentos: [], prestadoras: {} };
     async function carregarDadosCliente() {
+      clienteAtendimentos = await api('/atendimentos/cliente/me/atendimentos');
       const conc = await api('/atendimentos/cliente/me/pendentes-avaliacao');
       concluidos = conc.map(c => ({ id: c.id, servico: c.tipo_servico, data: c.data_atendimento, prestadora: c.prestadora_nome || '—', prestadora_id: c.prestadora_id }));
     }
@@ -4405,7 +4621,7 @@
         } else {
           await carregarDadosCliente();
           document.getElementById('cli-saudacao').textContent = 'Olá, ' + primeiroNome(resp.usuario.nome) + '.';
-          show('screen-cliente'); renderClienteAval();
+          show('screen-cliente'); renderClienteAval(); renderClienteAtendimentos();
         }
       } catch (err) {
         toast('Login ok, mas houve um erro ao carregar seus dados: ' + err.message);
@@ -4460,8 +4676,11 @@
       const tipo = usuarioLogado.tipo;
       if (tipo === 'prestadora') {
         const tinha = new Set(convites.map(c => c.id));
+        const avisosAntes = new Set(avisosPrestadora.map(a => a.id));
         await carregarDadosPrestadora();
         const novos = convites.filter(c => !tinha.has(c.id)).length;
+        const avisosNovos = avisosPrestadora.filter(a => !avisosAntes.has(a.id)).length;
+        if (avisosNovos) toast(avisosNovos === 1 ? 'Um atendimento seu foi cancelado pela unidade — veja os avisos.' : `${avisosNovos} atendimentos seus foram cancelados pela unidade — veja os avisos.`);
         renderPrestadora();
         selecionarDiaCalendarioPrestadora(diaSelecionadoCalendarioPrestadora || hojeISOBrasil()); // mantém o dia que ela estava olhando
         if (novos) toast(novos === 1 ? 'Você recebeu um novo convite de atendimento.' : `Você recebeu ${novos} novos convites de atendimento.`);
@@ -4471,6 +4690,7 @@
         document.querySelectorAll('#cli-aval textarea').forEach(t => { rascunhos[t.id] = t.value; });
         await carregarDadosCliente();
         renderClienteAval();
+        renderClienteAtendimentos();
         for (const [id, valor] of Object.entries(rascunhos)) { const el = document.getElementById(id); if (el) el.value = valor; }
         Object.keys(selRating).forEach(id => setStar(id, selRating[id]));
       } else {
@@ -4997,19 +5217,24 @@
         const semCadastro = !item.prestadora_id && item.profissional_externo ? ' · prestadora sem cadastro no Portal da Maria' : '';
         return { cls: ' concluido', rotulo: (quem ? escapeHtml(quem) + ' · ' : '') + 'concluído' + semCadastro };
       }
+      const recusaram = (item.recusas || []).map(r => r.nome);
+      const antes = recusaram.length ? ' · já recusado por ' + escapeHtml(recusaram.join(', ')) : '';
+      if (!item.prestadora_id && recusaram.length && item.status === 'recusado') {
+        return { cls: ' recusado', rotulo: '↩ recusado por ' + escapeHtml(recusaram.join(', ')) + ' — escolha outra prestadora' };
+      }
       if (!item.prestadora_id) {
         // profissional_externo = nome que veio da planilha importada e ainda não casou com uma prestadora cadastrada
         return { cls: ' sem-prestadora', rotulo: item.profissional_externo ? escapeHtml(item.profissional_externo) + ' · prestadora sem cadastro no Portal da Maria' : 'sem prestadora' };
       }
       const nomePrestadora = escapeHtml(item.prestadora_nome || '');
-      if (item.status !== 'proposto') return { cls: '', rotulo: nomePrestadora };
+      if (item.status !== 'proposto') return { cls: '', rotulo: nomePrestadora + antes };
 
       const hojeISO = hojeISOBrasil();
       const dataISO = String(item.data_atendimento).slice(0, 10);
       const diffDias = Math.round((new Date(dataISO + 'T00:00:00Z') - new Date(hojeISO + 'T00:00:00Z')) / 86400000);
       return diffDias <= 2
-        ? { cls: ' pendente-confirmacao', rotulo: nomePrestadora + ' · aguardando confirmação' }
-        : { cls: ' aguardando-janela', rotulo: nomePrestadora + ' · confirma em breve' };
+        ? { cls: ' pendente-confirmacao', rotulo: nomePrestadora + ' · aguardando confirmação' + antes }
+        : { cls: ' aguardando-janela', rotulo: nomePrestadora + ' · confirma em breve' + antes };
     }
     // Balão do atendimento: troca a prestadora e corrige o local. O campo de local
     // fica sempre aqui pro admin poder preencher/apagar; nas telas de quem lê
@@ -5022,8 +5247,10 @@
       const cancelado = item.status === 'cancelado';
       const situacaoAtual = cancelado ? 'cancelado' : concluido ? 'concluido' : 'programado';
       const rect = ev.currentTarget.getBoundingClientRect();
+      const recusasItem = item.recusas || [];
+      const jaRecusou = new Set(recusasItem.map(r => r.prestadora_id));
       const opcoes = (prestadorasAgenda[currentUnit] || [])
-        .map(p => `<option value="${p.id}" ${p.id === item.prestadora_id ? 'selected' : ''}>${escapeHtml(p.nome)}</option>`).join('');
+        .map(p => `<option value="${p.id}" ${p.id === item.prestadora_id ? 'selected' : ''}>${escapeHtml(p.nome)}${jaRecusou.has(p.id) ? ' (já recusou)' : ''}</option>`).join('');
       const pop = document.createElement('div');
       pop.className = 'reatribuir-pop';
       pop.id = 'reatribuir-pop';
@@ -5034,6 +5261,8 @@
           <option value="concluido" ${situacaoAtual === 'concluido' ? 'selected' : ''}>Concluído</option>
           <option value="cancelado" ${situacaoAtual === 'cancelado' ? 'selected' : ''}>Cancelado (não conta)</option>
         </select>
+        ${recusasItem.length ? `<div class="fin-alerta" style="font-size:12px;margin:0 0 10px">↩ <b>Já recusou(aram) este atendimento:</b> ${recusasItem.map(r => escapeHtml(r.nome) + ' (' + dataHoraBR(r.em) + ')').join(', ')}.
+          Ao escolher uma delas de novo, o sistema pergunta antes de enviar.</div>` : ''}
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Prestadora${concluido ? ' <span style="font-weight:400">(atendimento concluído)</span>' : cancelado ? ' <span style="font-weight:400">(cancelado)</span>' : ''}</label>
         <select id="reatribuir-select" ${concluido || cancelado ? 'disabled' : ''}><option value="">Sem prestadora</option>${opcoes}</select>
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Local / bairro</label>
@@ -5088,7 +5317,7 @@
       const mudouLocal = local !== (item.area || '');
       const mudouValor = valor !== (item.valor === null || item.valor === undefined ? null : Number(item.valor));
       if (!mudouSituacao && !mudouPrestadora && !mudouLocal && !mudouValor) { fecharReatribuirPop(); return; }
-      const mudarSituacao = () => api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/situacao`, { method: 'POST', body: JSON.stringify({ situacao }) });
+      const mudarSituacao = () => apiComConfirmacao(`/atendimentos/admin/${currentUnit}/${atendimentoId}/situacao`, { method: 'POST', body: JSON.stringify({ situacao }) });
 
       // Abre a aba em branco ANTES do await: depois que a resposta da API chega
       // o navegador já não considera mais isso "gesto do usuário" e bloqueia o
@@ -5101,19 +5330,19 @@
         // o local vai primeiro: o aviso de WhatsApp da nova prestadora já sai com o local certo
         if (mudouLocal) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/local`, { method: 'PATCH', body: JSON.stringify({ area: local }) });
         if (mudouValor) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/valor`, { method: 'PATCH', body: JSON.stringify({ valor }) });
-        if (mudouPrestadora) atendimento = await api(`/atendimentos/admin/${currentUnit}/${atendimentoId}/reatribuir`, { method: 'POST', body: JSON.stringify({ prestadora_id: prestadoraId }) });
+        if (mudouPrestadora) atendimento = await apiComConfirmacao(`/atendimentos/admin/${currentUnit}/${atendimentoId}/reatribuir`, { method: 'POST', body: JSON.stringify({ prestadora_id: prestadoraId }) });
         // concluir/cancelar vem por último, com os demais campos já salvos
         if (mudouSituacao && situacao !== 'programado') atendimento = await mudarSituacao();
         fecharReatribuirPop();
         const alterados = [mudouSituacao && 'situação', mudouPrestadora && 'prestadora', mudouLocal && 'local', mudouValor && 'valor'].filter(Boolean);
         toast(alterados.length === 1
-          ? { 'situação': { programado: 'Atendimento reativado como programado.', concluido: 'Atendimento marcado como concluído.', cancelado: 'Atendimento cancelado — não entra mais nas contagens.' }[situacao], prestadora: 'Prestadora atualizada.', local: local ? 'Local atualizado.' : 'Local removido.', valor: valor === null ? 'Valor removido.' : 'Valor atualizado.' }[alterados[0]]
+          ? { 'situação': { programado: 'Atendimento reativado como programado.', concluido: 'Atendimento marcado como concluído.', cancelado: 'Atendimento cancelado — não entra mais nas contagens' + (atendimento.prestadora_avisada ? ' e a prestadora foi avisada no portal.' : '.') }[situacao], prestadora: 'Prestadora atualizada.', local: local ? 'Local atualizado.' : 'Local removido.', valor: valor === null ? 'Valor removido.' : 'Valor atualizado.' }[alterados[0]]
           : 'Atendimento atualizado (' + alterados.join(', ') + ').');
         if (mudouPrestadora) avisarPrestadoraPorWhatsApp(aba, (prestadorasAgenda[currentUnit] || []).find(p => p.id === prestadoraId), atendimento);
         selecionarDiaAgenda(diaSelecionadoAgenda);
       } catch (err) {
         if (aba) aba.close();
-        toast('Erro ao salvar: ' + err.message);
+        toast(err.cancelado ? 'Nada foi alterado.' : 'Erro ao salvar: ' + err.message);
         selecionarDiaAgenda(diaSelecionadoAgenda); // se só uma das duas chamadas passou, a agenda mostra o que de fato ficou salvo
       }
     }
@@ -5222,8 +5451,8 @@
     // com o mesmo horário/duração/serviço/cliente/prestadora, e manda o valor do MÊS inteiro pra API
     // dividir entre todas as ocorrências de cada mês.
     async function salvarSerieAtendimentos() {
-      const data = atdVal('atd-data'), hora = atdVal('atd-hora'), servico = atdVal('atd-servico').trim();
-      if (!data || !hora || !servico) { toast('Preencha "a partir de", horário e serviço.'); return; }
+      const data = atdVal('atd-data'), hora = lerHora(atdVal('atd-hora')), servico = atdVal('atd-servico').trim();
+      if (!data || !hora || !servico) { toast(atdVal('atd-hora') && !hora ? 'Horário inválido — use o formato 24 h, ex.: 08:00 ou 13:30.' : 'Preencha "a partir de", horário e serviço.'); return; }
       const dias = [...document.querySelectorAll('#atd-dias input:checked')].map(c => Number(c.value));
       if (dias.length === 0) { toast('Marque ao menos um dia da semana.'); return; }
       const valorMes = lerReais(atdVal('atd-valor'));
@@ -5245,7 +5474,7 @@
 
       atdOcupado = true;
       try {
-        const resp = await api(`/atendimentos/admin/${currentUnit}/recorrente`, { method: 'POST', body: JSON.stringify(corpo) });
+        const resp = await apiComConfirmacao(`/atendimentos/admin/${currentUnit}/recorrente`, { method: 'POST', body: JSON.stringify(corpo) });
         fecharModalAtendimento();
         const comValor = resp.atendimentos.filter(a => a.valor !== null && a.valor !== undefined).length;
         toast(resp.quantidade_gerada + ' atendimentos gerados' + (comValor ? ` (valor do mês dividido entre ${comValor}).` : '.'));
@@ -5254,15 +5483,15 @@
         diaSelecionadoAgenda = data;
         mesAtualCalendario = new Date(ano, mes - 1, 1);
         await renderCalendarioMes();
-      } catch (err) { toast('Erro ao criar a repetição: ' + err.message); }
+      } catch (err) { toast(err.cancelado ? 'Nada foi criado.' : 'Erro ao criar a repetição: ' + err.message); }
       finally { atdOcupado = false; }
     }
 
     async function salvarAtendimentoUnico() {
       if (atdOcupado) return;
       if (document.getElementById('atd-repete').checked) return salvarSerieAtendimentos();
-      const data = atdVal('atd-data'), hora = atdVal('atd-hora'), servico = atdVal('atd-servico').trim();
-      if (!data || !hora || !servico) { toast('Preencha data, horário e serviço.'); return; }
+      const data = atdVal('atd-data'), hora = lerHora(atdVal('atd-hora')), servico = atdVal('atd-servico').trim();
+      if (!data || !hora || !servico) { toast(atdVal('atd-hora') && !hora ? 'Horário inválido — use o formato 24 h, ex.: 08:00 ou 13:30.' : 'Preencha data, horário e serviço.'); return; }
 
       const corpo = { tipo_servico: servico, data_atendimento: data, hora_atendimento: hora };
       if (atdVal('atd-area').trim()) corpo.area = atdVal('atd-area').trim();
@@ -5284,7 +5513,7 @@
       const aba = corpo.prestadora_id ? window.open('', '_blank') : null;
       atdOcupado = true;
       try {
-        const atendimento = await api(`/atendimentos/admin/${currentUnit}`, { method: 'POST', body: JSON.stringify(corpo) });
+        const atendimento = await apiComConfirmacao(`/atendimentos/admin/${currentUnit}`, { method: 'POST', body: JSON.stringify(corpo) });
         fecharModalAtendimento();
         toast('Atendimento cadastrado.');
         avisarPrestadoraPorWhatsApp(aba, (prestadorasAgenda[currentUnit] || []).find(p => p.id === corpo.prestadora_id), atendimento);
@@ -5295,7 +5524,7 @@
         await renderCalendarioMes();
       } catch (err) {
         if (aba) aba.close();
-        toast('Erro ao cadastrar: ' + err.message);
+        toast(err.cancelado ? 'Nada foi cadastrado.' : 'Erro ao cadastrar: ' + err.message);
       } finally { atdOcupado = false; }
     }
 
@@ -5372,28 +5601,46 @@
         ? { podeConfirmar: true, aviso: '' }
         : { podeConfirmar: false, aviso: `Você poderá confirmar a partir de 2 dias antes do atendimento (faltam ${diasRestantes} dias).` };
     }
+    // Etiquetas VERMELHAS, com formas diferentes: pendente (preenchida, ⏳) e conflito (só contorno, ⚠)
+    const STATUS_ATIVOS_PREST = ['proposto', 'aceito', 'concluido'];
+    const emConflito = (a) => a.conflitos.length > 0 && STATUS_ATIVOS_PREST.includes(a.status);
+    function tagsPrestadora(a) {
+      const tags = [];
+      if (a.status === 'proposto') tags.push('<span class="tag-pendente">⏳ Aguardando aceite</span>');
+      if (emConflito(a)) tags.push('<span class="tag-conflito">⚠ Conflito de horário</span>');
+      return tags.length ? `<div class="tags-linha">${tags.join('')}</div>` : '';
+    }
+    const detalheConflito = (a) => emConflito(a)
+      ? `<span style="color:var(--red);display:block">Conflita com: ${a.conflitos.slice(0, 2).map(c => `${escapeHtml(c.servico)} ${c.hora}–${c.hora_fim}${c.cliente ? ' (' + escapeHtml(c.cliente) + ')' : ''}`).join('; ')}${a.conflitos.length > 2 ? '…' : ''}</span>` : '';
+    const classeLinhaPrestadora = (a) => (a.status === 'proposto' ? ' pendente' : '') + (emConflito(a) ? ' conflito' : '') + (a.status === 'cancelado' ? ' cancelado-p' : '');
+
     function renderPrestadora() {
       document.getElementById('ps-saudacao').textContent = 'Olá, ' + primeiroNome(prestadora.nome) + '.';
       document.getElementById('ps-unidade').textContent = (cidades[prestadora.unidade] || {}).nome || '—';
       document.querySelector('#screen-prestadora .data-hoje').textContent = dataPorExtensoHoje();
+      renderAvisosPrestadora();
       const il = document.getElementById('invitelist');
       il.innerHTML = convites.length === 0 ? '<div class="empty">Nenhum convite no momento. Você está em dia! 🎉</div>'
         : convites.map(c => {
           const { podeConfirmar, aviso } = statusConfirmacaoConvite(c);
-          const botaoAceitar = podeConfirmar
+          // não dá pra confirmar dois atendimentos ao mesmo tempo: o servidor barra; aqui o botão já vem desabilitado
+          const jaConfirmado = c.conflitos.filter(x => x.status === 'aceito' || x.status === 'concluido');
+          const botaoAceitar = podeConfirmar && !jaConfirmado.length
             ? `<button class="btn-accept" onclick="aceitar('${c.id}')">Aceitar</button>`
             : `<button class="btn-accept" disabled style="opacity:.5;cursor:not-allowed">Aceitar</button>`;
-          // local e valor só aparecem quando existem (sem "·" sobrando nem campo vazio)
-          const meta = [`<b>${String(c.data).slice(0, 10)} · ${c.hora}</b>`, c.area ? escapeHtml(c.area) : '', c.valor ? `<b>${c.valor}</b>` : '']
+          // local, cliente e valor só aparecem quando existem (sem "·" sobrando nem campo vazio)
+          const meta = [`<b>${dataBR(c.data)} · ${horarioFaixa(c)}</b>`, c.cliente ? 'Cliente: ' + escapeHtml(c.cliente) : '', c.area ? escapeHtml(c.area) : '', c.valor ? `<b>${c.valor}</b>` : '']
             .filter(Boolean).join(' &nbsp;·&nbsp; ');
-          return `<div class="invite"><div class="invite-top"><strong>${escapeHtml(c.serv)}</strong></div><div class="invite-meta">${meta}</div>${aviso ? `<div class="warn"><span>${aviso}</span></div>` : ''}<div class="invite-actions">${botaoAceitar}<button class="btn-decline" onclick="recusar('${c.id}')">Recusar</button></div></div>`;
+          const avisoConflito = jaConfirmado.length
+            ? `<div class="warn"><span>Você já tem um atendimento <b>confirmado</b> nesse horário — não dá pra aceitar os dois. Fale com a unidade.</span></div>` : '';
+          return `<div class="invite${classeLinhaPrestadora(c)}"><div class="invite-top"><strong>${escapeHtml(c.serv)}</strong></div><div class="invite-meta">${meta}${detalheConflito(c)}</div>${tagsPrestadora(c)}${avisoConflito}${aviso && !jaConfirmado.length ? `<div class="warn"><span>${aviso}</span></div>` : ''}<div class="invite-actions">${botaoAceitar}<button class="btn-decline" onclick="recusar('${c.id}')">Recusar</button></div></div>`;
         }).join('');
       const ag = document.getElementById('prest-agenda');
       ag.innerHTML = agendaPrestadora.length === 0 ? '<div class="empty">Você ainda não aceitou atendimentos para hoje.</div>'
-        : agendaPrestadora.slice().sort((a, b) => (a.hora || '').localeCompare(b.hora || '')).map(j => `<div class="job"><div class="job-time">${j.hora}</div><div class="job-body"><strong>${escapeHtml(j.serv)}</strong>${detalheJob(j)}</div><div class="job-status st-ok">aceito</div></div>`).join('');
+        : agendaPrestadora.slice().sort((a, b) => (a.data + (a.hora || '')).localeCompare(b.data + (b.hora || ''))).map(j => `<div class="job${classeLinhaPrestadora(j)}"><div class="job-time">${j.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(j.serv)}</strong><span>${dataBR(j.data)} · ${horarioFaixa(j)}${j.cliente ? ' · Cliente: ' + escapeHtml(j.cliente) : ''}</span>${detalheJob(j)}${detalheConflito(j)}${tagsPrestadora(j)}</div><div class="job-status st-ok">aceito</div></div>`).join('');
       document.getElementById('ag-count').textContent = agendaPrestadora.length;
       const hojeISO = hojeISOBrasil();
-      document.getElementById('ps-aceitos').textContent = agendaPrestadora.filter(a => String(a.data).slice(0, 10) === hojeISO).length;
+      document.getElementById('ps-aceitos').textContent = agendaPrestadora.filter(a => a.data === hojeISO).length;
       document.getElementById('ps-pend').textContent = convites.length;
 
       // Valores vêm calculados da API: tarifa por atendimento (definida pelo admin) × atendimentos aceitos.
@@ -5408,24 +5655,52 @@
         + (r.mes.pago_total ? ` · ${formatarReais(r.mes.pago_total)} já pago` : '');
       renderPrestAval();
     }
-    /* Calendário da prestadora: visão só-leitura dos próximos atendimentos
-       (convites propostos + agenda já confirmada), por mês/dia. */
+
+    /* Avisos da unidade pra prestadora (hoje: atendimento CANCELADO pelo administrador). Ficam até ela marcar "Entendi". */
+    function renderAvisosPrestadora() {
+      const el = document.getElementById('prest-avisos');
+      if (!avisosPrestadora.length) { el.innerHTML = ''; return; }
+      el.innerHTML = `<div class="sec-head"><h2>Avisos da unidade</h2>${avisosPrestadora.length > 1 ? '<a style="cursor:pointer" onclick="marcarAvisosLidos()">Marcar todos como lidos</a>' : ''}</div>`
+        + avisosPrestadora.map(av => {
+          const d = av.dados || {};
+          return `<div class="aviso-cancelamento"><div style="font-size:22px" aria-hidden="true">🚫</div><div class="aviso-corpo"><b>Atendimento cancelado pela unidade</b><br>${escapeHtml(d.servico || '')}${d.cliente ? ' · Cliente: ' + escapeHtml(d.cliente) : ''}<br>${d.data ? dataBR(d.data) : ''}${d.hora ? ' · ' + d.hora + (d.hora_fim ? '–' + d.hora_fim : '') : ''}${d.area ? ' · ' + escapeHtml(d.area) : ''}<br><span style="color:var(--muted)">Ele saiu da sua agenda.</span></div><button class="btn-sm ghost" onclick="marcarAvisoLido('${av.id}')">Entendi</button></div>`;
+        }).join('');
+    }
+    async function marcarAvisoLido(id) {
+      try { await api(`/atendimentos/prestadora/me/avisos/${id}/lida`, { method: 'POST' }); avisosPrestadora = avisosPrestadora.filter(a => a.id !== id); renderAvisosPrestadora(); }
+      catch (err) { toast('Erro: ' + err.message); }
+    }
+    async function marcarAvisosLidos() {
+      try { await api('/atendimentos/prestadora/me/avisos/lidas', { method: 'POST' }); avisosPrestadora = []; renderAvisosPrestadora(); }
+      catch (err) { toast('Erro: ' + err.message); }
+    }
+
+    /* Calendário da prestadora: tudo que é DELA no mês (convites, confirmados, concluídos e cancelados), vindo da API
+       só dela. Ao escolher um dia, a lista mostra cliente, início–término, serviço, local, valor e status. */
     let mesAtualCalendarioPrestadora = new Date();
     let diaSelecionadoCalendarioPrestadora = null;
-    function listaAtendimentosPrestadora() { return [...convites, ...agendaPrestadora]; }
-    function renderCalendarioPrestadora() {
-      mesAtualCalendarioPrestadora = new Date();
-      selecionarDiaCalendarioPrestadora(hojeISOBrasil());
+    let calendarioPrestadora = { mes: null, itens: [] };
+    const mesISODe = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    async function carregarCalendarioPrestadora() {
+      const mes = mesISODe(mesAtualCalendarioPrestadora);
+      const itens = await api('/atendimentos/prestadora/me/calendario?mes=' + mes);
+      calendarioPrestadora = { mes, itens: itens.map(a => itemPrestadora(a)) };
     }
-    function mudarMesCalendarioPrestadora(delta) {
+    async function renderCalendarioPrestadora() {
+      mesAtualCalendarioPrestadora = new Date();
+      await selecionarDiaCalendarioPrestadora(hojeISOBrasil());
+    }
+    async function mudarMesCalendarioPrestadora(delta) {
       mesAtualCalendarioPrestadora = new Date(mesAtualCalendarioPrestadora.getFullYear(), mesAtualCalendarioPrestadora.getMonth() + delta, 1);
+      try { await carregarCalendarioPrestadora(); } catch (err) { toast('Erro ao carregar o mês: ' + err.message); }
       construirCalendarioMesPrestadora();
     }
     function construirCalendarioMesPrestadora() {
       const ano = mesAtualCalendarioPrestadora.getFullYear(), mes = mesAtualCalendarioPrestadora.getMonth();
       document.getElementById('ps-cal-mes-label').textContent = mesAtualCalendarioPrestadora.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
-      const diasComAtendimento = new Set(listaAtendimentosPrestadora().map(a => String(a.data).slice(0, 10)));
+      const porDia = {};
+      for (const a of calendarioPrestadora.itens) (porDia[a.data] = porDia[a.data] || []).push(a);
       const inicioSemana = new Date(ano, mes, 1).getDay();
       const diasNoMes = new Date(ano, mes + 1, 0).getDate();
       const hojeISO = hojeISOBrasil();
@@ -5434,30 +5709,36 @@
       for (let i = 0; i < inicioSemana; i++) html += '<div class="cal-day outro-mes"></div>';
       for (let d = 1; d <= diasNoMes; d++) {
         const dataISO = ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        const doDia = (porDia[dataISO] || []).filter(a => a.status !== 'cancelado');
         const classes = ['cal-day'];
         if (dataISO === hojeISO) classes.push('hoje');
         if (dataISO === diaSelecionadoCalendarioPrestadora) classes.push('selecionado');
-        if (diasComAtendimento.has(dataISO)) classes.push('tem-atendimento');
+        if (doDia.length) classes.push('tem-atendimento');
+        if (doDia.some(a => a.status === 'proposto')) classes.push('tem-pendencia');
+        if (doDia.some(emConflito)) classes.push('tem-conflito');
         html += `<div class="${classes.join(' ')}" onclick="selecionarDiaCalendarioPrestadora('${dataISO}')">${d}</div>`;
       }
       document.getElementById('ps-cal-grid').innerHTML = html;
     }
-    function selecionarDiaCalendarioPrestadora(dataISO) {
+    const ROTULO_STATUS_PREST = { aceito: ['confirmado', 'st-ok'], concluido: ['concluído', 'st-ok'], cancelado: ['cancelado', 'st-wait'], proposto: ['convite', 'st-new'] };
+    async function selecionarDiaCalendarioPrestadora(dataISO) {
       diaSelecionadoCalendarioPrestadora = dataISO;
+      const [a, m] = dataISO.split('-').map(Number);
+      const alvo = new Date(a, m - 1, 1);
+      if (mesISODe(alvo) !== calendarioPrestadora.mes) { // dia de outro mês: busca o mês dele
+        mesAtualCalendarioPrestadora = alvo;
+        try { await carregarCalendarioPrestadora(); } catch (err) { toast('Erro ao carregar o calendário: ' + err.message); }
+      }
       construirCalendarioMesPrestadora();
       const d = new Date(dataISO + 'T00:00:00');
       document.getElementById('ps-cal-dia-label').textContent = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
 
-      const doDia = listaAtendimentosPrestadora()
-        .filter(a => String(a.data).slice(0, 10) === dataISO)
-        .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+      const doDia = calendarioPrestadora.itens.filter(x => x.data === dataISO).sort((x, y) => (x.hora || '').localeCompare(y.hora || ''));
       document.getElementById('ps-cal-lista').innerHTML = doDia.length === 0 ? '<div class="empty">Nada agendado neste dia.</div>'
-        : doDia.map(a => {
-          if (a.status === 'aceito') return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(a.serv)}</strong>${detalheJob(a)}</div><div class="job-status st-ok">confirmado</div></div>`;
-          const { podeConfirmar } = statusConfirmacaoConvite(a);
-          const cls = podeConfirmar ? 'st-new' : 'st-route';
-          const rotulo = podeConfirmar ? 'pode confirmar' : 'aguardando janela';
-          return `<div class="job"><div class="job-time">${a.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(a.serv)}</strong>${detalheJob(a)}</div><div class="job-status ${cls}">${rotulo}</div></div>`;
+        : doDia.map(x => {
+          const [rotulo, cls] = ROTULO_STATUS_PREST[x.status] || [x.status, 'st-wait'];
+          const info = [x.cliente ? 'Cliente: ' + escapeHtml(x.cliente) : '', x.area ? escapeHtml(x.area) : '', x.valor || ''].filter(Boolean).join(' · ');
+          return `<div class="job${classeLinhaPrestadora(x)}"><div class="job-time" style="width:auto;min-width:46px">${x.hora || '--:--'}${x.fim ? '<br><span style="color:var(--muted);font-weight:400">' + x.fim + '</span>' : ''}</div><div class="job-body"><strong>${escapeHtml(x.serv)}</strong><span>${horarioFaixa(x)}${info ? ' · ' + info : ''}</span>${detalheConflito(x)}${tagsPrestadora(x)}</div><div class="job-status ${cls}">${rotulo}</div></div>`;
         }).join('');
     }
     async function aceitar(id) {
@@ -5470,12 +5751,13 @@
         const telUnidade = (cidades[prestadora.unidade] || {}).tel;
         if (aba && telUnidade && convite) {
           const mensagem = `${prestadora.nome} confirmou o atendimento: ${convite.serv}${convite.area ? ' — ' + convite.area : ''}, `
-            + `${String(convite.data).slice(0, 10)}${convite.hora ? ' às ' + convite.hora : ''}.`;
+            + `${convite.data}${convite.hora ? ' às ' + convite.hora : ''}.`;
           aba.location.href = linkWhatsApp(telUnidade, mensagem);
         } else if (aba) { aba.close(); }
       } catch (err) {
         if (aba) aba.close();
-        toast('Erro ao aceitar no banco: ' + err.message);
+        toast(err.codigo === 'CONFLITO_HORARIO' ? err.message : 'Erro ao aceitar no banco: ' + err.message);
+        if (err.codigo === 'CONFLITO_HORARIO') { try { await carregarDadosPrestadora(); renderPrestadora(); } catch (e) { } }
       }
     }
     async function recusar(id) {
@@ -5740,7 +6022,81 @@
     function renderClientes() {
       const arr = clientesData[currentUnit] || [];
       document.getElementById('clv-unit').textContent = unidades[currentUnit].nome;
-      document.getElementById('clv-list').innerHTML = arr.map(c => `<div class="tablerow"><div class="tr-av">${escapeHtml(c.ini)}</div><div class="tr-body"><strong>${escapeHtml(c.nome)}</strong><span>${escapeHtml(c.ultimo)}</span></div><span class="tr-meta">${c.total} serviços</span></div>`).join('');
+      const adminCompleto = usuarioLogado?.tipo === 'administrador'; // substituir perfil apaga um cadastro: só administrador completo
+      document.getElementById('clv-list').innerHTML = arr.map(c => {
+        const conta = c.temConta ? '<span class="chip chip-on">com conta</span>' : '<span class="chip chip-off">sem cadastro</span>';
+        let acoes = '';
+        if (!c.temConta) {
+          acoes += c.telefone
+            ? `<button class="btn-sm ghost" onclick="convidarClienteWhats('${c.id}')">${c.convite ? 'Reenviar convite' : 'Convidar por WhatsApp'}</button>`
+            : '<span class="tr-meta">sem telefone p/ convidar</span>';
+          if (c.convite && adminCompleto) acoes += `<button class="btn-sm ghost" onclick="abrirSubstituir('${c.id}')">Substituir perfil</button>`;
+        }
+        const detalhe = [c.telefone ? escapeHtml(c.telefone) : '', !c.temConta && c.convite ? 'convite enviado em ' + dataHoraBR(c.convite) : ''].filter(Boolean).join(' · ');
+        return `<div class="tablerow"><div class="tr-av">${escapeHtml(c.ini)}</div><div class="tr-body"><strong>${escapeHtml(c.nome)}</strong><span>${escapeHtml(c.ultimo)}</span>${detalhe ? `<span>${detalhe}</span>` : ''}</div>${conta}<span class="tr-meta">${c.total} serviços</span>${acoes}</div>`;
+      }).join('') || '<div class="empty">Nenhum cliente ainda.</div>';
+    }
+
+    /* Convite pra cliente SEM cadastro criar o próprio perfil (migra quem só existia nos agendamentos pra um perfil completo).
+       Abre o WhatsApp com a mensagem pronta e o link do cadastro (já na cidade da unidade) e registra o envio —
+       é o registro que libera "Substituir perfil". */
+    function convidarClienteWhats(id) {
+      const c = (clientesData[currentUnit] || []).find(x => x.id === id);
+      if (!c || !c.telefone) { toast('Este cliente não tem telefone cadastrado.'); return; }
+      const un = cidades[currentUnit] || {};
+      const link = location.origin + location.pathname + '?cadastro=cliente&unidade=' + encodeURIComponent(currentUnit);
+      const mensagem = `Olá, ${primeiroNome(c.nome)}! Aqui é a Maria Brasileira ${un.nome || ''}.\n\n`
+        + `Convidamos você a criar o seu perfil no Portal da Maria. Com ele você acompanha seus atendimentos, vê quem é a profissional que vai até você (com foto), `
+        + `confere data e horário e pode pedir novos serviços.\n\nÉ rápido, o cadastro é por aqui:\n${link}\n\nUse o mesmo nome e telefone dos nossos atendimentos para manter o seu histórico.`;
+      window.open(linkWhatsApp(c.telefone, mensagem), '_blank'); // direto do clique: o navegador só deixa abrir assim
+      api(`/unidades/${currentUnit}/admin/clientes/${id}/convite`, { method: 'POST' })
+        .then(async () => { await carregarEquipeClientesAvaliacoes(currentUnit); if (document.getElementById('av-clientes')?.style.display === 'block') renderClientes(); })
+        .catch(err => toast('O WhatsApp abriu, mas não consegui registrar o convite: ' + err.message));
+    }
+
+    let substituirOrigemId = null, substituirOcupado = false;
+    const candidatosSubstituicao = (origemId) => (clientesData[currentUnit] || []).filter(x => x.temConta && x.registrados === 0 && x.id !== origemId);
+    function abrirSubstituir(id) {
+      const c = (clientesData[currentUnit] || []).find(x => x.id === id);
+      if (!c || c.temConta || !c.convite) return;
+      const candidatos = candidatosSubstituicao(id);
+      if (!candidatos.length) {
+        toast('Ainda não há um perfil criado pelo cliente (com conta e sem nenhum atendimento) para receber a substituição. Quando ele se cadastrar, volte aqui.');
+        return;
+      }
+      substituirOrigemId = id;
+      document.getElementById('sub-nome').textContent = c.nome;
+      document.getElementById('sub-qtd').textContent = c.registrados === 0 ? 'nada ainda' : plural(c.registrados, 'atendimento', 'atendimentos') + ', com avaliações e histórico';
+      document.getElementById('sub-destino').innerHTML = '<option value="">Escolha o perfil…</option>'
+        + candidatos.map(x => `<option value="${x.id}">${escapeHtml(x.nome)}${x.email ? ' · ' + escapeHtml(x.email) : ''}</option>`).join('');
+      substituirAtualizar();
+      document.getElementById('modal-substituir').classList.add('show');
+    }
+    function substituirAtualizar() {
+      const aviso = document.getElementById('sub-aviso');
+      const d = (clientesData[currentUnit] || []).find(x => x.id === document.getElementById('sub-destino').value);
+      aviso.style.display = d ? 'block' : 'none';
+      aviso.innerHTML = d ? `O perfil <b>${escapeHtml(d.nome)}</b> (${escapeHtml(d.email || 'sem e-mail')}) não tem nenhum atendimento e vai receber tudo do provisório.` : '';
+    }
+    function fecharSubstituir() { document.getElementById('modal-substituir').classList.remove('show'); substituirOrigemId = null; }
+    async function confirmarSubstituicao() {
+      if (substituirOcupado || !substituirOrigemId) return;
+      const destinoId = document.getElementById('sub-destino').value;
+      if (!destinoId) { toast('Escolha o perfil que o cliente criou.'); return; }
+      const lista = clientesData[currentUnit] || [];
+      const origem = lista.find(x => x.id === substituirOrigemId), destino = lista.find(x => x.id === destinoId);
+      if (!window.confirm(`Substituir "${origem.nome}" (provisório) por "${destino.nome}"?\n\nTudo que está ligado ao provisório passa para o novo perfil e o provisório deixa de existir como cliente. Não dá pra desfazer.`)) return;
+      substituirOcupado = true;
+      const botao = document.getElementById('sub-confirmar'); botao.disabled = true;
+      try {
+        const r = await api(`/unidades/${currentUnit}/admin/clientes/${substituirOrigemId}/substituir`, { method: 'POST', body: JSON.stringify({ destino_id: destinoId }) });
+        fecharSubstituir();
+        await carregarEquipeClientesAvaliacoes(currentUnit);
+        renderClientes();
+        const mov = r.movidos || {};
+        toast(`Perfil substituído: ${plural(mov.atendimentos || 0, 'atendimento transferido', 'atendimentos transferidos')} para ${r.destino}.`);
+      } catch (err) { toast('Não foi possível substituir: ' + err.message); }
+      finally { substituirOcupado = false; botao.disabled = false; }
     }
     function updateAvalBadge() {
       const n = avaliacoes.filter(a => a.status === 'pendente').length;
@@ -6023,6 +6379,58 @@
     }
 
     /* cliente avalia (vai para moderação) */
+    /* Atendimentos do cliente: serviço, data/horário, status e a profissional (nome + foto) quando confirmada.
+       "Solicitar cancelamento" só abre o WhatsApp da unidade com a mensagem pronta — NÃO muda nada no atendimento:
+       quem cancela é o administrador. */
+    const STATUS_CLIENTE = {
+      pedido: ['aguardando profissional', 'st-wait'], proposto: ['aguardando profissional', 'st-wait'], recusado: ['aguardando profissional', 'st-wait'],
+      aceito: ['confirmado', 'st-ok'], concluido: ['concluído', 'st-ok'], cancelado: ['cancelado', 'st-new'],
+    };
+    const fotoSegura = (foto) => (typeof foto === 'string' && /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(foto) ? foto : null);
+    function cardAtendimentoCliente(a, hojeISO) {
+      const prest = a.prestadora_id ? clienteAtendimentos.prestadoras[a.prestadora_id] : null;
+      const foto = prest ? fotoSegura(prest.foto) : null;
+      const avatar = foto ? `<div class="cli-foto" style="background-image:url('${foto}')" role="img" aria-label="Foto de ${escapeHtml(prest.nome)}"></div>`
+        : `<div class="cli-foto" aria-hidden="true">${prest ? escapeHtml(iniciaisNome(prest.nome)) : '?'}</div>`;
+      const [rotulo, cls] = STATUS_CLIENTE[a.status] || [a.status, 'st-wait'];
+      const quando = `${dataBR(a.dia)}${a.hora ? ' · ' + a.hora + (a.hora_fim ? '–' + a.hora_fim : '') : ''}`;
+      const quem = prest ? `Profissional: <b>${escapeHtml(prest.nome)}</b>` : (a.status === 'cancelado' ? '' : 'Profissional ainda não confirmada');
+      const podePedirCancelamento = ['pedido', 'proposto', 'recusado', 'aceito'].includes(a.status) && a.dia >= hojeISO;
+      return `<div class="cli-card${a.status === 'cancelado' ? ' cancelado-c' : ''}">${avatar}
+        <div class="cli-corpo" style="flex:1;min-width:0"><strong style="display:block;font-size:14px">${escapeHtml(a.tipo_servico)}</strong>
+          <span style="font-size:12.5px;color:var(--muted);display:block">${quando}${a.area ? ' · ' + escapeHtml(a.area) : ''}</span>
+          ${quem ? `<span style="font-size:12.5px;display:block">${quem}</span>` : ''}
+          ${podePedirCancelamento ? `<a href="#" style="font-size:12px" onclick="event.preventDefault();solicitarCancelamentoWhats('${a.id}')">Solicitar cancelamento</a>` : ''}</div>
+        <div class="job-status ${cls}">${rotulo}</div></div>`;
+    }
+    function renderClienteAtendimentos() {
+      const hoje = hojeISOBrasil();
+      const todos = clienteAtendimentos.atendimentos;
+      const ativos = ['pedido', 'proposto', 'recusado', 'aceito'];
+      const futuros = todos.filter(a => ativos.includes(a.status) && a.dia >= hoje).sort((x, y) => (x.dia + (x.hora || '')).localeCompare(y.dia + (y.hora || '')));
+      const proximo = futuros[0];
+      document.getElementById('cli-proximo').innerHTML = proximo ? cardAtendimentoCliente(proximo, hoje) : '<div class="empty">Nenhum atendimento marcado. Que tal pedir um novo serviço?</div>';
+      // depois do próximo: os que ainda vão acontecer (em ordem de data) e, por fim, os passados/cancelados (mais recentes primeiro)
+      const resto = [...futuros.slice(1), ...todos.filter(a => !futuros.includes(a))];
+      document.getElementById('cli-historico').innerHTML = resto.length
+        ? resto.map(a => cardAtendimentoCliente(a, hoje)).join('') + '<p style="font-size:12px;padding:10px 18px;margin:0">O cancelamento é sempre confirmado pela unidade: "Solicitar cancelamento" só abre uma conversa no WhatsApp.</p>'
+        : '<div class="empty">Seus atendimentos vão aparecer aqui.</div>';
+    }
+    // Direto do clique (sem await): é o que o navegador exige pra abrir o WhatsApp. Não altera o atendimento.
+    function solicitarCancelamentoWhats(id) {
+      const a = clienteAtendimentos.atendimentos.find(x => x.id === id);
+      if (!a) return;
+      const slug = usuarioLogado?.dados?.unidade_slug || regiao;
+      const tel = (cidades[slug] || {}).tel;
+      if (!tel) { toast('Esta unidade ainda não tem WhatsApp cadastrado.'); return; }
+      const prest = a.prestadora_id ? clienteAtendimentos.prestadoras[a.prestadora_id] : null;
+      const mensagem = `Olá! Gostaria de *solicitar o cancelamento* do atendimento abaixo:\n`
+        + `• Serviço: ${a.tipo_servico}\n• Data: ${dataBR(a.dia)}${a.hora ? ' às ' + a.hora : ''}\n`
+        + (prest ? `• Profissional: ${prest.nome}\n` : '')
+        + `• Referência: ${a.codigo}\n• Cliente: ${usuarioLogado?.dados?.nome || ''}\n\nAguardo a confirmação do cancelamento.`;
+      window.open(linkWhatsApp(tel, mensagem), '_blank');
+    }
+
     let selRating = {};
     function renderClienteAval() {
       const box = document.getElementById('cli-aval');
@@ -6350,6 +6758,7 @@
       else if (document.getElementById('modal-nova-prestadora').classList.contains('show')) fecharNovaPrestadora();
       else if (document.getElementById('modal-recuperar').classList.contains('show')) fecharRecuperar();
       else if (document.getElementById('modal-tarifa').classList.contains('show')) fecharTarifa();
+      else if (document.getElementById('modal-substituir').classList.contains('show')) fecharSubstituir();
       else if (document.getElementById('modal-contato').classList.contains('show')) fecharContatoPrestadora();
       else if (document.getElementById('modal-primeiro-acesso').classList.contains('show')) return; // não dá pra pular o primeiro acesso
       else if (document.getElementById('modal-perfil').classList.contains('show')) fecharPerfil();
@@ -6372,6 +6781,11 @@
       });
     });
 
+    // Link de convite enviado ao cliente (WhatsApp): ?cadastro=cliente&unidade=... abre direto o cadastro de cliente.
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.get('cadastro') === 'cliente') { cadastroUnidadeConvite = p.get('unidade') || ''; setCadProfile('cliente'); show('screen-cadastro'); }
+    }
     // Link enviado à prestadora (WhatsApp): ?perfil=prestadora abre direto o login dela.
     if (new URLSearchParams(location.search).get('perfil') === 'prestadora') {
       setProfile('prestadora');

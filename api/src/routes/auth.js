@@ -59,13 +59,13 @@ function responderErroCadastro(res, erro, mensagemDuplicado) {
 //    A mesma ação existe logado, em Meu perfil → "Adicionar unidade".
 //
 // O CNPJ é comparado só pelos dígitos: "12.345.678/0001-90" e "12345678000190" são o mesmo.
-const SQL_UNIDADES_DO_CNPJ = `select id, slug, nome from unidades where regexp_replace(cnpj, '\\D', '', 'g') = $1`;
+const SQL_UNIDADES_DO_CNPJ = `select id, slug, nome from unidades where upper(regexp_replace(cnpj, '[^0-9A-Za-z]', '', 'g')) = $1`;
 const SQL_ADMINS_DO_CNPJ = `
   select distinct a.id, a.nome, a.sobrenome, a.email, a.senha_hash
   from administradores a
   join administrador_unidades au on au.administrador_id = a.id
   join unidades u on u.id = au.unidade_id
-  where regexp_replace(u.cnpj, '\\D', '', 'g') = $1`;
+  where upper(regexp_replace(u.cnpj, '[^0-9A-Za-z]', '', 'g')) = $1`;
 
 const MSG_CNPJ_JA_CADASTRADO = 'Este CNPJ já está cadastrado. Para acrescentar uma unidade, informe exatamente o nome, o e-mail e a senha da conta da empresa — ou entre nela e use Meu perfil → Adicionar unidade.';
 
@@ -119,7 +119,7 @@ router.post('/cadastro/admin', async (req, res) => {
       }
       // há unidades com esse CNPJ, mas nenhuma conta (ex.: criadas por script): segue como empresa nova
     } else if (!cnpjValido(cnpjDigitos)) {
-      return res.status(400).json({ erro: 'CNPJ inválido — confira os 14 dígitos.' });
+      return res.status(400).json({ erro: 'CNPJ inválido — os dígitos verificadores não conferem. Confira o número digitado.' });
     }
 
     // empresa nova: o e-mail precisa ser livre (login de administrador e de funcionário se confundiriam)

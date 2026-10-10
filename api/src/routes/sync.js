@@ -57,10 +57,12 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
          ${marca('atendimentos', 'atualizado_em', 'prestadora_id = $1')} as atendimentos,
          ${marca('prestadoras', 'atualizado_em', 'id = $1')} as tarifa,
          (select count(*) || ':' || coalesce(extract(epoch from max(coalesce(moderado_em, criado_em)))::text, '0')
-            from avaliacoes where prestadora_id = $1 and status = 'aprovada') as avaliacoes`,
+            from avaliacoes where prestadora_id = $1 and status = 'aprovada') as avaliacoes,
+         (select count(*) || ':' || coalesce(extract(epoch from max(criado_em))::text, '0')
+            from avisos_prestadora where prestadora_id = $1 and lido_em is null) as avisos`,
       [id]
     );
-    partes = [r.atendimentos, r.tarifa, r.avaliacoes];
+    partes = [r.atendimentos, r.tarifa, r.avaliacoes, r.avisos];
   } else if (perfil === 'cliente') {
     const { rows: [r] } = await pool.query(
       `select

@@ -144,6 +144,32 @@ const MIGRACOES = [
   // confirmar o e-mail dela e trocar a senha — até lá, a API só deixa ela usar essa etapa
   `alter table prestadoras add column if not exists primeiro_acesso_pendente boolean not null default false`,
 
+  // quem já RECUSOU cada atendimento: o registro fica ligado ao atendimento mesmo que ele passe pra outra prestadora,
+  // pra o administrador não mandar o mesmo convite de novo pra quem já disse não
+  `create table if not exists recusas_atendimento (
+     id uuid primary key default gen_random_uuid(),
+     atendimento_id uuid not null references atendimentos(id) on delete cascade,
+     prestadora_id uuid not null references prestadoras(id) on delete cascade,
+     recusado_em timestamptz not null default now()
+   )`,
+  `create index if not exists idx_recusas_atendimento on recusas_atendimento(atendimento_id)`,
+  `create index if not exists idx_recusas_prestadora on recusas_atendimento(prestadora_id)`,
+
+  // avisos pra prestadora dentro do portal (cancelamento de atendimento etc.), até ela marcar como lido
+  `create table if not exists avisos_prestadora (
+     id uuid primary key default gen_random_uuid(),
+     prestadora_id uuid not null references prestadoras(id) on delete cascade,
+     atendimento_id uuid references atendimentos(id) on delete set null,
+     tipo text not null,
+     dados jsonb not null default '{}'::jsonb,
+     criado_em timestamptz not null default now(),
+     lido_em timestamptz
+   )`,
+  `create index if not exists idx_avisos_prestadora on avisos_prestadora(prestadora_id, lido_em)`,
+
+  // quando o administrador mandou o convite (WhatsApp) pra um cliente sem cadastro criar o próprio perfil
+  `alter table clientes add column if not exists convite_enviado_em timestamptz`,
+
   // índices que a sincronização entre usuários consulta a cada poucos segundos
   `create index if not exists idx_atendimentos_unidade_atualizado on atendimentos(unidade_id, atualizado_em)`,
   `create index if not exists idx_atendimentos_cliente on atendimentos(cliente_id)`,

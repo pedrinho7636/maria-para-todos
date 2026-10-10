@@ -14,6 +14,7 @@
     "teste:recuperacao": "node scripts/testar-recuperacao-valores.js",
     "teste:recorrencia": "node scripts/testar-recorrencia.js",
     "teste:financeiro": "node scripts/testar-financeiro.js",
+    "teste:agenda": "node scripts/testar-agenda.js",
     "importadas:vincular": "node scripts/vincular-profissionais-importadas.js",
     "importadas:primeiro-acesso": "node scripts/marcar-primeiro-acesso.js",
     "unidades:capitalizar": "node scripts/capitalizar-unidades.js"

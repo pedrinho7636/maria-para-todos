@@ -404,3 +404,28 @@ alter table atendimentos add column situacao_manual boolean not null default fal
 
 -- Prestadora criada automaticamente (planilha) com senha padrão: no primeiro acesso confirma o e-mail e troca a senha.
 alter table prestadoras add column primeiro_acesso_pendente boolean not null default false;
+
+-- Quem já recusou cada atendimento (fica ligado ao atendimento mesmo que ele passe pra outra prestadora).
+create table recusas_atendimento (
+  id uuid primary key default gen_random_uuid(),
+  atendimento_id uuid not null references atendimentos(id) on delete cascade,
+  prestadora_id uuid not null references prestadoras(id) on delete cascade,
+  recusado_em timestamptz not null default now()
+);
+create index idx_recusas_atendimento on recusas_atendimento(atendimento_id);
+create index idx_recusas_prestadora on recusas_atendimento(prestadora_id);
+
+-- Avisos pra prestadora dentro do portal (cancelamento de atendimento etc.), até ela marcar como lido.
+create table avisos_prestadora (
+  id uuid primary key default gen_random_uuid(),
+  prestadora_id uuid not null references prestadoras(id) on delete cascade,
+  atendimento_id uuid references atendimentos(id) on delete set null,
+  tipo text not null,
+  dados jsonb not null default '{}'::jsonb,
+  criado_em timestamptz not null default now(),
+  lido_em timestamptz
+);
+create index idx_avisos_prestadora on avisos_prestadora(prestadora_id, lido_em);
+
+-- Quando o administrador mandou o convite (WhatsApp) pra um cliente sem cadastro criar o próprio perfil.
+alter table clientes add column convite_enviado_em timestamptz;

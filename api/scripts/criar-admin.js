@@ -75,7 +75,7 @@ function perguntarSenha(texto) {
     }
 
     const cnpj = normalizarCnpj(argumento('cnpj'));
-    if (argumento('cnpj') && !cnpjValido(cnpj)) throw new Error('CNPJ inválido — confira os 14 dígitos.');
+    if (argumento('cnpj') && !cnpjValido(cnpj)) throw new Error('CNPJ inválido — os dígitos verificadores não conferem. Confira o número digitado.');
     const telefone = argumento('telefone');
     const pedidas = argumento('unidades').split(',').map(s => s.trim()).filter(Boolean).map((s) => {
       const [nome, uf] = s.split('/').map(p => p.trim());

@@ -17,20 +17,23 @@ function normalizarTelefone(telefone) {
   return (digitos.length === 12 || digitos.length === 13) && digitos.startsWith('55') ? digitos.slice(2) : digitos;
 }
 
-// CNPJ só pelos dígitos ("12.345.678/0001-90" e "12345678000190" são o mesmo).
+// CNPJ sem pontuação: "12.345.678/0001-90" e "12345678000190" são o mesmo. Desde julho/2026 a Receita emite CNPJ
+// ALFANUMÉRICO (12 primeiros caracteres com letras e números + 2 dígitos verificadores numéricos), então as letras
+// são mantidas (em maiúsculas): só a pontuação e os espaços saem.
 function normalizarCnpj(cnpj) {
-  return String(cnpj || '').replace(/\D/g, '');
+  return String(cnpj || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
 }
 
-// CNPJ de verdade: 14 dígitos, não todos iguais, com os dois dígitos verificadores corretos
-// (módulo 11). Só é exigido pra CNPJ NOVO — o que já está cadastrado numa unidade é casado
-// como está (os de exemplo do schema não passariam, e não precisam).
+// CNPJ de verdade, pela regra oficial (módulo 11): 14 caracteres (12 numéricos ou alfanuméricos + 2 dígitos
+// verificadores), não todos iguais, com os dois dígitos verificadores corretos. Cada caractere vale o seu código
+// ASCII menos 48 ('0'=0 … '9'=9, 'A'=17 … 'Z'=42); pra CNPJ só numérico isso é o cálculo de sempre.
+// Só é exigido pra CNPJ NOVO — o que já está cadastrado numa unidade é casado como está.
 function cnpjValido(cnpj) {
   const d = normalizarCnpj(cnpj);
-  if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false;
+  if (!/^[0-9A-Z]{12}[0-9]{2}$/.test(d) || /^(.)\1{13}$/.test(d)) return false;
   const digito = (base) => {
     let soma = 0, peso = base.length - 7;
-    for (const n of base) { soma += Number(n) * peso--; if (peso < 2) peso = 9; }
+    for (const c of base) { soma += (c.charCodeAt(0) - 48) * peso--; if (peso < 2) peso = 9; }
     const resto = soma % 11;
     return resto < 2 ? 0 : 11 - resto;
   };

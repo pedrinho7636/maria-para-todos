@@ -11,6 +11,7 @@ const { ErroNegocio, emTransacao, lerDadosUnidade, criarUnidade, vincularAdmin, 
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Acrescenta uma unidade à EMPRESA do administrador logado (mesmo CNPJ das que ele já tem, por isso o
 // mesmo login alterna entre elas). Mesma ação do cadastro de CNPJ já existente, mas estando logado não
@@ -24,10 +25,10 @@ router.post('/', requireAuth, requireRole('administrador'), asyncHandler(async (
     let cnpj;
     if (meus.length === 0) {
       cnpj = normalizarCnpj(req.body.cnpj);
-      if (!cnpjValido(cnpj)) return res.status(400).json({ erro: 'Informe o CNPJ da empresa (14 dígitos válidos).' });
+      if (!cnpjValido(cnpj)) return res.status(400).json({ erro: 'CNPJ inválido — os dígitos verificadores não conferem. Confira o número digitado.' });
       const { rows: donos } = await pool.query(
         `select 1 from unidades u join administrador_unidades au on au.unidade_id = u.id
-         where regexp_replace(u.cnpj, '\\D', '', 'g') = $1 and au.administrador_id <> $2`, [cnpj, req.user.id]);
+         where upper(regexp_replace(u.cnpj, '[^0-9A-Za-z]', '', 'g')) = $1 and au.administrador_id <> $2`, [cnpj, req.user.id]);
       if (donos.length > 0) return res.status(409).json({ erro: 'Este CNPJ já pertence a outra conta.' });
     } else {
       const pedido = normalizarCnpj(req.body.cnpj);
@@ -192,11 +193,80 @@ router.patch('/:slug/admin/equipe/:prestadoraId', requireAuth, requireRole('admi
 }));
 
 router.get('/:slug/admin/clientes', requireAuth, requireAcessoUnidade('clientes'), asyncHandler(async (req, res) => {
+  // além do resumo da view: telefone, se já tem conta (login) e quando o convite pra criar perfil foi enviado.
+  // total_registrados conta TODOS os atendimentos do cliente (a view só conta os concluídos): é o que decide
+  // se um perfil novo pode receber a substituição de um provisório.
   const { rows } = await pool.query(
-    'select * from vw_clientes_unidade where unidade_id = $1 order by nome',
+    `select v.*, c.telefone, c.email, (c.senha_hash is not null) as tem_conta, c.convite_enviado_em,
+            (select count(*)::int from atendimentos a where a.cliente_id = c.id) as total_registrados
+     from vw_clientes_unidade v join clientes c on c.id = v.cliente_id
+     where v.unidade_id = $1 order by v.nome`,
     [req.unidadeId]
   );
   res.json(rows);
+}));
+
+// Marca que o convite (WhatsApp) pra criar o perfil foi enviado a um cliente que ainda não tem conta. É o que libera
+// "Substituir perfil" depois. Só vale pra cliente sem login desta unidade.
+router.post('/:slug/admin/clientes/:clienteId/convite', requireAuth, requireAcessoUnidade('clientes'), asyncHandler(async (req, res) => {
+  if (!UUID.test(req.params.clienteId)) return res.status(400).json({ erro: 'cliente inválido' });
+  const { rows: [c] } = await pool.query(
+    `update clientes set convite_enviado_em = now()
+     where id = $1 and unidade_id = $2 and senha_hash is null
+     returning id, convite_enviado_em`,
+    [req.params.clienteId, req.unidadeId]
+  );
+  if (!c) return res.status(404).json({ erro: 'Cliente sem cadastro não encontrado nesta unidade (quem já tem conta não precisa de convite).' });
+  res.json(c);
+}));
+
+// "Substituir perfil": passa tudo que está ligado a um cliente PROVISÓRIO (sem conta, já convidado) para o perfil que o
+// próprio cliente criou, e remove o provisório — consolidação de cadastro, não um cliente novo desconectado.
+// Regras (todas conferidas aqui, dentro de UMA transação, com as duas linhas travadas):
+//   • o provisório não tem login e já recebeu o convite;
+//   • o destino tem login, é da mesma unidade, é outra pessoa e NÃO tem nenhum atendimento registrado;
+//   • todas as referências ao provisório (atendimentos, avaliações e qualquer outra tabela que aponte pra clientes)
+//     passam pro destino; nada é excluído além do próprio registro provisório.
+// É uma operação que apaga um cadastro, então só o administrador completo faz.
+router.post('/:slug/admin/clientes/:clienteId/substituir', requireAuth, requireRole('administrador'), requireAcessoUnidade('clientes'), asyncHandler(async (req, res) => {
+  const origemId = req.params.clienteId, destinoId = String(req.body.destino_id ?? '');
+  if (!UUID.test(origemId) || !UUID.test(destinoId)) return res.status(400).json({ erro: 'Informe o perfil de destino.' });
+  if (origemId === destinoId) return res.status(400).json({ erro: 'O perfil de destino precisa ser diferente do provisório.' });
+
+  try {
+    const resultado = await emTransacao(async (db) => {
+      // trava as duas linhas, sempre na mesma ordem (evita travar uma na outra se duas substituições rodarem juntas)
+      const { rows } = await db.query(
+        'select id, nome, telefone, senha_hash, unidade_id, convite_enviado_em from clientes where id = any($1::uuid[]) order by id for update', [[origemId, destinoId]]);
+      const origem = rows.find(r => r.id === origemId), destino = rows.find(r => r.id === destinoId);
+      if (!origem || origem.unidade_id !== req.unidadeId) throw new ErroNegocio(404, 'Cliente provisório não encontrado nesta unidade.');
+      if (origem.senha_hash) throw new ErroNegocio(400, 'Este cliente já tem conta própria: só um cadastro provisório (sem login) pode ser substituído.');
+      if (!origem.convite_enviado_em) throw new ErroNegocio(400, 'Envie primeiro o convite de cadastro por WhatsApp a este cliente: a substituição só vale pra quem já foi convidado.');
+      if (!destino || destino.unidade_id !== req.unidadeId) throw new ErroNegocio(404, 'Perfil de destino não encontrado nesta unidade.');
+      if (!destino.senha_hash) throw new ErroNegocio(400, 'O perfil de destino precisa ser um cadastro completo (com login), criado pelo próprio cliente.');
+      const { rows: [{ n: jaTem }] } = await db.query('select count(*)::int as n from atendimentos where cliente_id = $1', [destinoId]);
+      if (jaTem > 0) throw new ErroNegocio(409, `O perfil de destino já tem ${jaTem === 1 ? '1 atendimento registrado' : jaTem + ' atendimentos registrados'}: só um perfil sem nenhum atendimento pode receber a substituição.`);
+
+      // todas as tabelas com chave estrangeira pra clientes (hoje: atendimentos e avaliações; novas entram sozinhas)
+      const { rows: refs } = await db.query(
+        `select c.conrelid::regclass::text as tabela, quote_ident(a.attname) as coluna
+         from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+         where c.contype = 'f' and c.confrelid = 'clientes'::regclass and array_length(c.conkey, 1) = 1`);
+      const movidos = {};
+      for (const { tabela, coluna } of refs) { // nomes vêm do catálogo do Postgres, não de entrada do usuário
+        const { rowCount } = await db.query(`update ${tabela} set ${coluna} = $1 where ${coluna} = $2`, [destinoId, origemId]);
+        movidos[tabela] = rowCount;
+      }
+      // o telefone que o administrador tinha do provisório passa pro perfil novo se ele não informou um
+      if (origem.telefone) await db.query('update clientes set telefone = $1 where id = $2 and (telefone is null or telefone = \'\')', [origem.telefone, destinoId]);
+      await db.query('delete from clientes where id = $1', [origemId]);
+      return { provisorio: origem.nome, destino: destino.nome, movidos };
+    });
+    res.json(resultado);
+  } catch (erro) {
+    if (erro instanceof ErroNegocio) return res.status(erro.status).json({ erro: erro.message });
+    throw erro;
+  }
 }));
 
 // Layout do painel inicial (Visão geral) DESTA unidade: quais atalhos aparecem e em que ordem, e quais

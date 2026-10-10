@@ -161,6 +161,7 @@ api/
     scripts/testar-recuperacao-valores.js — `npm run teste:recuperacao`: recuperação de senha, valores, local, endereço, planilha
     scripts/testar-recorrencia.js — `npm run teste:recorrencia`: divisão do valor mensal entre as ocorrências
     scripts/testar-financeiro.js — `npm run teste:financeiro`: cálculos do módulo Financeiro (sem API/banco)
+    scripts/testar-agenda.js — `npm run teste:agenda`: CNPJ, conflitos de horário, recusas, avisos de cancelamento, calendário/cliente, convite e substituição de perfil (precisa da API)
     scripts/vincular-profissionais-importadas.js — `npm run importadas:vincular`: liga atendimentos importados às prestadoras
       asyncHandler.js        — evita que erro numa rota derrube o processo
     routes/
@@ -266,6 +267,46 @@ atendimentos da Equipe e é a base do Financeiro.
 - *Concluído* manual: trava a tarifa da prestadora (se houver) como no aceite.
 - *Programado* (reativar): volta a "aceito" se já tem prestadora, senão a "pedido". Fica marcado como escolha manual
   (`situacao_manual`): se a data já passou, a conclusão automática **não** o conclui de novo.
+- **Cancelamento avisa a prestadora:** ao cancelar (um atendimento ou uma série), a prestadora responsável recebe um
+  **aviso no portal** ("Avisos da unidade", com serviço, cliente, data e horário) até clicar em *Entendi*, e o
+  atendimento sai da agenda dela (no calendário aparece como "cancelado"). Tabela `avisos_prestadora`.
+
+**Conflitos de horário e pendências (agenda da prestadora):** dois atendimentos da mesma prestadora se conflitam quando
+os intervalos [início, início + duração] se sobrepõem, mesmo em parte (sem duração vale 1 h; terminar às 11:00 e
+começar às 11:00 **não** conflita). Na tela dela, em vermelho e com **formas diferentes**: **⏳ Aguardando aceite**
+(etiqueta preenchida + faixa sólida) e **⚠ Conflito de horário** (etiqueta só de contorno + fundo listrado); no
+calendário, pendência = pontinho vermelho e conflito = dia com contorno vermelho.
+- O administrador é **avisado ao atribuir** (novo atendimento, troca de prestadora, série semanal, "programado")
+  e escolhe seguir ou não (`409 CONFLITO_HORARIO`; reenvia com `forcar_conflito`).
+- A prestadora **não consegue aceitar** um atendimento que se sobrepõe a outro já confirmado/concluído dela (409).
+- **Recusas ficam no atendimento** (`recusas_atendimento`): a agenda do administrador mostra "↩ recusado por X"
+  e, no balão, a lista de quem já recusou (a prestadora aparece como "já recusou" na lista). Tentar enviar de novo
+  pra quem recusou pergunta antes (`409 JA_RECUSOU`; `forcar_recusa`). Vale mesmo depois de ir pra outra prestadora.
+  Recusas anteriores a essa versão não foram registradas.
+- **Calendário da prestadora:** clicar num dia mostra os atendimentos **dela** naquele dia (cliente, início–término,
+  serviço, local, valor, status). `GET /atendimentos/prestadora/me/calendario?mes=AAAA-MM`.
+
+**Horários em 24 h:** o campo de horário do cadastro de atendimento é um texto com máscara `HH:MM` (aceita `930`,
+`0930`, `13:30`; nunca AM/PM — o `<input type="time">` mostrava AM/PM conforme o idioma do navegador). A API só aceita
+`HH:MM` de 00:00 a 23:59.
+
+**Cliente acompanha seus atendimentos:** na área do cliente, cada atendimento mostra serviço, data/horário, status
+(aguardando profissional · confirmado · concluído · cancelado) e, depois de **confirmado**, a **profissional com nome
+e foto**. Enquanto é só convite a profissional não aparece (ela ainda pode recusar). **"Solicitar cancelamento"** só
+abre o WhatsApp da unidade com a mensagem pronta (serviço, data, referência) — **não altera o atendimento**: quem cancela
+é o administrador. `GET /atendimentos/cliente/me/atendimentos`.
+
+**Convidar cliente sem cadastro e "Substituir perfil" (aba Clientes):** o cliente que só existe na agenda (veio da
+planilha/agendamento) aparece como *sem cadastro*; **Convidar por WhatsApp** abre a conversa com o convite e o link do
+cadastro (`?cadastro=cliente&unidade=…`, já na cidade certa) e registra o envio. Depois do convite, o administrador
+completo vê **Substituir perfil**: escolhe o perfil que o cliente criou e todos os vínculos do provisório (atendimentos,
+avaliações e qualquer outra tabela que aponte pra `clientes`) passam pro novo, numa única transação; o provisório é
+removido. Só vale se: o provisório não tem login e **já foi convidado**; o destino tem login, é da mesma unidade e
+**não tem nenhum atendimento**. Não dá pra desfazer. `POST /unidades/:slug/admin/clientes/:id/substituir`.
+
+**CNPJ:** vale qualquer CNPJ válido pela regra oficial (dígitos verificadores), com ou sem pontuação, **inclusive o
+alfanumérico** emitido pela Receita desde julho/2026 (ex.: `12.ABC.345/01DE-35`). O campo formata enquanto digita e avisa
+se os dígitos não conferem. (`teste:agenda` confere 2.000 CNPJs válidos sorteados e CNPJs reais.)
 
 **Financeiro (menu *Financeiro*; administrador, ou funcionário com a permissão "Financeiro" marcada em Acessos):**
 tela por mês (setas ‹ ›) com

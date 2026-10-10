@@ -61,7 +61,7 @@ async function criarUnidade(db, dadosBrutos, cnpjDigitos) {
   // passam os dois pela checagem de nome repetido e criam a mesma unidade duas vezes.
   await db.query('select pg_advisory_xact_lock(hashtext($1))', ['empresa:' + cnpjDigitos]);
   const { rows: mesmaEmpresa } = await db.query(
-    `select nome from unidades where regexp_replace(cnpj, '\\D', '', 'g') = $1`, [cnpjDigitos]);
+    `select nome from unidades where upper(regexp_replace(cnpj, '[^0-9A-Za-z]', '', 'g')) = $1`, [cnpjDigitos]);
   if (mesmaEmpresa.some(u => normalizarTexto(u.nome) === normalizarTexto(dados.nome))) {
     throw new ErroNegocio(409, `Esta empresa já tem uma unidade chamada ${dados.nome}.`);
   }
@@ -81,7 +81,7 @@ async function vincularAdmin(db, adminId, unidadeId) {
 // CNPJs (só dígitos) das unidades de um administrador — a "empresa" dele.
 async function cnpjsDoAdmin(db, adminId) {
   const { rows } = await db.query(
-    `select distinct regexp_replace(u.cnpj, '\\D', '', 'g') as d
+    `select distinct upper(regexp_replace(u.cnpj, '[^0-9A-Za-z]', '', 'g')) as d
      from unidades u join administrador_unidades au on au.unidade_id = u.id
      where au.administrador_id = $1 and u.cnpj is not null`, [adminId]);
   return rows.map(r => r.d).filter(Boolean);
