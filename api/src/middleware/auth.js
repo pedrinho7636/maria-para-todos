@@ -41,7 +41,9 @@ function requireAcessoUnidade(modulo) {
 // codigo PRIMEIRO_ACESSO. Perfis que não são prestadora passam direto.
 const requirePrimeiroAcessoConcluido = asyncHandler(async (req, res, next) => {
   if (req.user.perfil !== 'prestadora') return next();
-  const { rows: [p] } = await pool.query('select primeiro_acesso_pendente from prestadoras where id = $1', [req.user.id]);
+  const { rows: [p] } = await pool.query('select primeiro_acesso_pendente, ativa from prestadoras where id = $1', [req.user.id]);
+  // prestadora INATIVA (desativada pelo administrador na Equipe) não usa mais o portal
+  if (p && p.ativa === false) return res.status(403).json({ erro: 'Seu acesso está desativado. Fale com a sua unidade.', codigo: 'DESATIVADA' });
   if (p?.primeiro_acesso_pendente) {
     return res.status(403).json({ erro: 'Conclua o seu primeiro acesso (confirmar o e-mail e criar uma senha) para usar o portal.', codigo: 'PRIMEIRO_ACESSO' });
   }

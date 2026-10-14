@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt');
 const { pool } = require('../db');
 const { requireAuth, requireRole, requireAcessoUnidade } = require('../middleware/auth');
 const { unidadeDoAdmin, unidadesDoAdmin } = require('../utils/permissoes');
-const { normalizarCnpj, cnpjValido, formatarCnpj, normalizarEmail, normalizarTelefone } = require('../utils/normalizacao');
+const { normalizarCnpj, cnpjValido, formatarCnpj, normalizarEmail, normalizarTelefone, capitalizarPessoa } = require('../utils/normalizacao');
 const { nomeValido, emailValido, telefoneValido, senhaValida } = require('../utils/validacao');
 const { normalizarTexto } = require('../utils/importarPlanilha');
 const { ErroNegocio, emTransacao, lerDadosUnidade, criarUnidade, vincularAdmin, cnpjsDoAdmin } = require('../utils/unidades');
@@ -90,7 +90,7 @@ router.get('/:slug/admin/equipe', requireAuth, requireAcessoUnidade('equipe'), a
 // tinha atendimentos com o nome dela (vindos da planilha, "prestadora sem cadastro"), eles são ligados
 // à conta nova automaticamente. É criação de login, então só administrador completo.
 router.post('/:slug/admin/equipe', requireAuth, requireRole('administrador'), requireAcessoUnidade('equipe'), asyncHandler(async (req, res) => {
-  const nome = String(req.body.nome ?? '').trim().replace(/\s+/g, ' ');
+  const nome = capitalizarPessoa(req.body.nome);
   const email = normalizarEmail(req.body.email);
   const telefone = normalizarTelefone(req.body.telefone);
   if (!nomeValido(nome)) return res.status(400).json({ erro: 'Informe o nome da prestadora.' });
@@ -168,6 +168,11 @@ router.patch('/:slug/admin/equipe/:prestadoraId', requireAuth, requireRole('admi
     if (telefone && !telefoneValido(telefone)) return res.status(400).json({ erro: 'Telefone inválido — informe DDD + número.' });
     vals.push(telefone || null); sets.push(`telefone = $${vals.length}`);
   }
+  // ativa/inativa: inativa não recebe atendimento novo e não entra mais no portal (o histórico continua)
+  if ('ativa' in req.body) {
+    if (typeof req.body.ativa !== 'boolean') return res.status(400).json({ erro: 'ativa deve ser true ou false' });
+    vals.push(req.body.ativa); sets.push(`ativa = $${vals.length}`);
+  }
   if (sets.length === 0) return res.status(400).json({ erro: 'Nada para atualizar — informe valor_por_atendimento e/ou telefone.' });
 
   const { rows: [atual] } = await pool.query('select email from prestadoras where id = $1 and unidade_id = $2', [req.params.prestadoraId, req.unidadeId]);
@@ -182,10 +187,17 @@ router.patch('/:slug/admin/equipe/:prestadoraId', requireAuth, requireRole('admi
     const { rows: [prestadora] } = await pool.query(
       `update prestadoras set ${sets.join(', ')}, atualizado_em = now()
        where id = $${vals.length - 1} and unidade_id = $${vals.length}
-       returning id, nome, telefone, email, valor_por_atendimento, primeiro_acesso_pendente`,
+       returning id, nome, telefone, email, valor_por_atendimento, primeiro_acesso_pendente, ativa`,
       vals
     );
-    res.json(prestadora);
+    // ao desativar: quantos atendimentos futuros (convite/confirmado) ainda estão com ela — o administrador reatribui na agenda
+    let abertos = 0;
+    if (req.body.ativa === false) {
+      ({ rows: [{ n: abertos }] } = await pool.query(
+        `select count(*)::int as n from atendimentos where prestadora_id = $1 and status in ('proposto', 'aceito')
+           and data_atendimento >= (now() at time zone 'America/Sao_Paulo')::date`, [prestadora.id]));
+    }
+    res.json({ ...prestadora, atendimentos_abertos: abertos });
   } catch (erro) {
     if (erro.code === '23505') return res.status(409).json({ erro: 'Esse telefone já está cadastrado em outra conta.' });
     throw erro;

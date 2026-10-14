@@ -1589,8 +1589,21 @@
       color: var(--muted)
     }
 
-    .hora-input {
+    /* horário: dois seletores (hora 00–23 e minuto de 5 em 5), sempre em 24 h */
+    .hora-sel {
+      display: flex;
+      align-items: center;
+      gap: 6px
+    }
+
+    .hora-sel select {
+      flex: 1;
+      min-width: 0;
       font-variant-numeric: tabular-nums
+    }
+
+    .hora-sel span {
+      font-weight: 700
     }
 
     .empty {
@@ -3101,12 +3114,10 @@
             placeholder="voce@exemplo.com"></div>
         <div class="field"><label for="login-pass">Senha</label><input id="login-pass" type="password"
             placeholder="••••••••"></div>
-        <div class="row-between"><label><input type="checkbox" checked> Manter conectado</label><a href="#" onclick="abrirRecuperar(event)">Esqueci a
+        <div class="row-between"><label><input type="checkbox" id="login-manter" checked> Manter conectado</label><a href="#" onclick="abrirRecuperar(event)">Esqueci a
             senha</a></div>
         <button class="btn-primary" onclick="doLogin()">Entrar</button>
         <div class="switch-auth">Não tem conta? <a onclick="goCadastro()">Criar conta</a></div>
-        <div class="hint"><b>Demonstração:</b> os campos são ilustrativos — clique em <b>Entrar</b> e você cai no painel
-          do perfil selecionado.</div>
       </div>
     </div>
   </section>
@@ -3806,7 +3817,7 @@
       <div id="atd-painel-unico">
         <div class="field-row">
           <div class="field"><label id="atd-data-rotulo">Data</label><input id="atd-data" type="date" onchange="atdDataMudou(this)"></div>
-          <div class="field"><label>Horário (24 h)</label><input id="atd-hora" class="hora-input" type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:MM  ex.: 13:30" oninput="mascararHora(this)" onblur="completarHora(this)"></div>
+          <div class="field"><label>Horário (24 h)</label><div class="hora-sel" data-alvo="atd-hora"></div><input id="atd-hora" type="hidden"></div>
         </div>
         <div class="field-row">
           <div class="field"><label>Serviço</label>
@@ -4169,8 +4180,22 @@
     const API_BASE = (location.protocol === 'file:' || ['5000', '5500'].includes(location.port))
       ? "http://localhost:3001/api"
       : location.origin + "/api";
-    let authToken = null;
-    try { authToken = localStorage.getItem('pm-token'); } catch (e) { }
+    // A sessão (token) fica guardada no navegador: com "Manter conectado" em localStorage (sobrevive a fechar o navegador),
+    // sem ele em sessionStorage (sobrevive a recarregar a página, some ao fechar a aba). Junto vai a "visão" (qual tela do
+    // painel e qual unidade estavam abertas) pra recarregar a página voltar exatamente pro mesmo lugar.
+    function lerTokenSalvo() { try { return localStorage.getItem('pm-token') || sessionStorage.getItem('pm-token'); } catch (e) { return null; } }
+    function guardarToken(token, lembrar) {
+      try {
+        localStorage.removeItem('pm-token'); sessionStorage.removeItem('pm-token');
+        (lembrar ? localStorage : sessionStorage).setItem('pm-token', token);
+      } catch (e) { }
+    }
+    function esquecerToken() { try { ['pm-token', 'pm-visao'].forEach(k => { localStorage.removeItem(k); sessionStorage.removeItem(k); }); } catch (e) { } }
+    function guardarVisao(visao) {
+      try { (localStorage.getItem('pm-token') ? localStorage : sessionStorage).setItem('pm-visao', JSON.stringify(visao)); } catch (e) { }
+    }
+    function lerVisao() { try { return JSON.parse(localStorage.getItem('pm-visao') || sessionStorage.getItem('pm-visao') || 'null'); } catch (e) { return null; } }
+    let authToken = lerTokenSalvo();
 
     // A API manda a versão do site em cada resposta (X-App-Versao). Se a aba foi aberta antes de uma atualização, a
     // versão dela é outra: avisa e oferece recarregar — senão a tela velha (campos, máscaras, regras) fala com a API nova.
@@ -4200,7 +4225,7 @@
         // toasts de cada ação, sem entender que precisa entrar de novo.
         const estavaLogado = !!authToken;
         authToken = null; usuarioLogado = null;
-        try { localStorage.removeItem('pm-token'); } catch (e) { }
+        esquecerToken();
         if (estavaLogado && typeof show === 'function') show('screen-home');
         throw new Error('Sessão expirada — faça login novamente.');
       }
@@ -4266,13 +4291,7 @@
     function primeiroNome(nome) { return (nome || '').trim().split(/\s+/)[0] || ''; }
 
     /* Horários SEMPRE em 24 h (08:00, 13:30, 22:00 — nunca AM/PM). O <input type="time"> mostra AM/PM conforme o
-       idioma do navegador e não dá pra impedir, então o horário é um campo de texto com máscara HH:MM. */
-    function mascararHora(input) {
-      const d = input.value.replace(/\D/g, '').slice(0, 4);
-      // 3º dígito: se os dois primeiros formam uma hora (≤ 23) vira HH:M…, senão a hora é de um dígito (930 → 9:30)
-      input.value = d.length < 3 ? d : (Number(d.slice(0, 2)) <= 23 ? d.slice(0, 2) + ':' + d.slice(2) : d[0] + ':' + d.slice(1));
-      input.style.borderColor = '';
-    }
+       idioma do navegador e não dá pra impedir, então o horário é escolhido em dois seletores (hora 00–23 e minuto de 5 em 5). */
     // "9", "930", "9:30", "0930", "13:30" -> "HH:MM"; inválido ("25:00", "12:75") -> null
     function lerHora(texto) {
       const t = String(texto ?? '').trim();
@@ -4283,13 +4302,79 @@
       else return null;
       return h >= 0 && h <= 23 && m >= 0 && m <= 59 ? String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') : null;
     }
-    function completarHora(input) {
-      if (!input.value.trim()) return;
-      const h = lerHora(input.value);
-      if (h) input.value = h; else { input.style.borderColor = 'var(--red)'; toast('Horário inválido — use o formato 24 h, ex.: 08:00 ou 13:30.'); }
+    // Seletores de horário: <div class="hora-sel" data-alvo="ID"> vira  [hora] : [minuto]  e grava "HH:MM" no input escondido ID
+    function montarSeletoresHora() {
+      document.querySelectorAll('.hora-sel').forEach(caixa => {
+        const alvo = caixa.dataset.alvo;
+        const horas = ['<option value="">--</option>'], minutos = ['<option value="">--</option>'];
+        for (let h = 0; h < 24; h++) horas.push('<option value="' + String(h).padStart(2, '0') + '">' + String(h).padStart(2, '0') + '</option>');
+        for (let m = 0; m < 60; m += 5) minutos.push('<option value="' + String(m).padStart(2, '0') + '">' + String(m).padStart(2, '0') + '</option>');
+        caixa.innerHTML = '<select id="' + alvo + '-h" aria-label="Hora" onchange="horaSelecionada(\'' + alvo + '\')">' + horas.join('') + '</select><span>:</span>'
+          + '<select id="' + alvo + '-m" aria-label="Minuto" onchange="horaSelecionada(\'' + alvo + '\')">' + minutos.join('') + '</select>';
+      });
+    }
+    function horaSelecionada(alvo) {
+      const h = document.getElementById(alvo + '-h'), m = document.getElementById(alvo + '-m');
+      if (h.value && !m.value) m.value = '00'; // escolheu a hora: já vale hora cheia
+      document.getElementById(alvo).value = h.value ? h.value + ':' + (m.value || '00') : '';
+    }
+    function definirHora(alvo, valor) {
+      const [h, m] = (valor || '').split(':');
+      const sh = document.getElementById(alvo + '-h'), sm = document.getElementById(alvo + '-m');
+      if (sh) sh.value = h || '';
+      if (sm) {
+        if (m && ![...sm.options].some(o => o.value === m)) sm.add(new Option(m, m)); // minuto fora do passo de 5 (ex.: vindo de fora)
+        sm.value = m || '';
+      }
+      document.getElementById(alvo).value = valor || '';
     }
     // data de um instante (timestamp do banco) no fuso de Brasília — o corte em UTC mostrava o dia seguinte à noite
     const dataHoraBR = (instante) => new Date(instante).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    /* Telefone: formato certo enquanto digita — (54) 3333-4444 ou (54) 9 9999-0000. Aceita +55 colado; o servidor guarda só
+       os dígitos de qualquer jeito. */
+    function formatarTelefone(valor) {
+      let d = String(valor == null ? '' : valor).replace(/\D/g, '');
+      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2); // +55 digitado/colado
+      d = d.slice(0, 11);
+      if (!d) return '';
+      const ddd = d.slice(0, 2), r = d.slice(2);
+      if (d.length <= 2) return '(' + d;
+      if (r.length <= 4) return '(' + ddd + ') ' + r;
+      if (d.length <= 10) return '(' + ddd + ') ' + r.slice(0, 4) + '-' + r.slice(4);
+      return '(' + ddd + ') ' + r[0] + ' ' + r.slice(1, 5) + '-' + r.slice(5);
+    }
+    // pra EXIBIR um telefone vindo do banco (pode ser só dígitos): formata se parece telefone, senão mostra como veio
+    const exibirTelefone = (v) => (String(v == null ? '' : v).replace(/\D/g, '').length >= 10 ? formatarTelefone(v) : (v || ''));
+    function mascararTelefone(input) { input.value = formatarTelefone(input.value); }
+
+    /* Nomes: primeira letra de cada palavra em maiúscula ("ana carolina" → "Ana Carolina"; de/da/do/dos/das/e ficam
+       minúsculos no meio). Nome de PESSOA digitado todo em maiúsculas também vira "Ana Carolina". Ao sair do campo; o
+       servidor faz a mesma coisa ao gravar. */
+    function capitalizarNomeFront(texto, pessoa) {
+      let t = String(texto == null ? '' : texto).trim().replace(/\s+/g, ' ');
+      if (!t) return '';
+      if (pessoa && !/[a-zà-ÿ]/.test(t)) t = t.toLowerCase();
+      const ligacoes = ['de', 'da', 'do', 'das', 'dos', 'e'];
+      t = t.split(' ').map((p, i) => (i > 0 && ligacoes.indexOf(p.toLowerCase()) >= 0 ? p.toLowerCase() : p.charAt(0).toLocaleUpperCase('pt-BR') + p.slice(1))).join(' ');
+      return pessoa ? t.replace(/-([a-zà-ÿ])/g, (m, c) => '-' + c.toLocaleUpperCase('pt-BR')) : t;
+    }
+    function ligarFormatacaoDeCampos() {
+      ['c-tel', 'cad-admin-tel', 'prest-phone', 'cad-cliente-telefone', 'atd-cliente-tel', 'np-tel', 'contato-tel', 'pa-tel', 'perfil-telefone', 'perfil-un-edit-tel', 'perfil-un-tel'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.setAttribute('maxlength', '16'); el.setAttribute('inputmode', 'tel'); el.setAttribute('autocomplete', 'off');
+        el.addEventListener('input', () => mascararTelefone(el));
+      });
+      // pessoas: maiúsculas viram "Nome Próprio"; clientes/unidades (podem ser nome fantasia/sigla) só ganham a inicial maiúscula
+      const grupos = [[true, ['cad-admin-nome', 'cad-admin-sobrenome', 'cad-prestadora-nome', 'sa-nome', 'sa-sobrenome', 'np-nome', 'perfil-nome', 'perfil-sobrenome']],
+        [false, ['cad-cliente-nome', 'atd-cliente-nome', 'c-nome', 'cad-admin-un-nome', 'perfil-un-nome']]];
+      for (const [pessoa, ids] of grupos) {
+        ids.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.addEventListener('blur', () => { el.value = capitalizarNomeFront(el.value, pessoa); });
+        });
+      }
+    }
     const horarioFaixa = (a) => (a.hora || '--:--') + (a.fim ? '–' + a.fim : ''); // "09:00–13:00"
 
     /* CNPJ: máscara enquanto digita (com ou sem pontuação, e aceita o CNPJ alfanumérico da Receita) e aviso se os
@@ -4594,9 +4679,17 @@
       } catch (err) { toast('Não foi possível entrar: ' + err.message); return; }
 
       authToken = resp.token;
-      try { localStorage.setItem('pm-token', authToken); } catch (e) { }
+      const lembrar = document.getElementById('login-manter') ? document.getElementById('login-manter').checked : true;
+      guardarToken(authToken, lembrar || typeof identificadorDado === 'string'); // logo depois de um cadastro (entra direto) lembra sempre
+      await iniciarSessao(resp, { restaurando: false });
+    }
+
+    // Monta a área do usuário que acabou de entrar (login) ou que voltou ao recarregar a página (sessão guardada).
+    const MODULO_DA_VISAO = { visaogeral: 'dashboard', agenda: 'agenda', avaliacoes: 'avaliacoes', equipe: 'equipe', clientes: 'clientes', financeiro: 'financeiro', subadmins: 'subadmins' };
+    async function iniciarSessao(resp, opcoes) {
       // resp.perfil é o perfil resolvido pelo backend ('administrador' ou 'sub_administrador'
-      // quando tipoInterno === 'administrador' — a mesma aba de login serve para os dois).
+      // — a mesma aba de login serve para os dois).
+      const tipoInterno = resp.perfil === 'sub_administrador' ? 'administrador' : resp.perfil;
       usuarioLogado = { id: resp.usuario.id, tipo: resp.perfil || tipoInterno, dados: resp.usuario };
       aplicarFotoNoCirculo(avatarTopoAtual(), resp.usuario.foto, resp.usuario.nome);
       // Quem tem unidade fixa (funcionário, prestadora, cliente) entra na cidade
@@ -4604,9 +4697,12 @@
       if (resp.usuario.unidade_slug && cidades[resp.usuario.unidade_slug]) setRegiao(resp.usuario.unidade_slug);
       // Administrador: só as unidades dele (um admin só de Panambi não pode abrir
       // Carazinho) — o seletor de unidade esconde as que não são dele.
+      const visao = opcoes && opcoes.restaurando ? lerVisao() : null;
       if (resp.usuario.unidades_slugs) {
         const minhas = resp.usuario.unidades_slugs;
         if (minhas.length && !minhas.includes(regiao) && cidades[minhas[0]]) setRegiao(minhas[0]);
+        // recarregou a página: volta pra mesma unidade que estava aberta
+        if (visao && visao.unit && minhas.includes(visao.unit) && cidades[visao.unit]) setRegiao(visao.unit);
         // (o seletor com as unidades da empresa é montado em setUnitUI → renderSeletorUnidades)
       }
 
@@ -4619,7 +4715,9 @@
           const p = permissoesAtuais();
           const ordem = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes'], ['financeiro', 'financeiro']];
           const primeira = (ordem.find(([, modulo]) => p[modulo])?.[0]) || 'agenda';
-          adminView(primeira); updateAvalBadge();
+          // recarregou a página: volta pra mesma tela (se a permissão dela continua valendo)
+          const voltar = visao && MODULO_DA_VISAO[visao.view] && p[MODULO_DA_VISAO[visao.view]] !== false ? visao.view : primeira;
+          adminView(voltar); updateAvalBadge();
         } else if (tipoInterno === 'prestadora') {
           prestadora = { id: resp.usuario.id, nome: resp.usuario.nome, unidade: resp.usuario.unidade_slug || regiao };
           const abrirArea = async () => {
@@ -4640,14 +4738,34 @@
           show('screen-cliente'); renderClienteAval(); renderClienteAtendimentos();
         }
       } catch (err) {
-        toast('Login ok, mas houve um erro ao carregar seus dados: ' + err.message);
+        toast((opcoes && opcoes.restaurando ? 'Sessão reaberta, mas' : 'Login ok, mas') + ' houve um erro ao carregar seus dados: ' + err.message);
       }
       iniciarSincronizacao();
+    }
+
+    // Ao abrir/recarregar a página: se há sessão guardada, volta direto pra ela (sem pedir login). Link de convite
+    // (?perfil=… / ?cadastro=…) mostra a tela pedida. Token vencido ou conta desativada: esquece e fica na home.
+    async function restaurarSessao() {
+      if (!authToken) return;
+      const p = new URLSearchParams(location.search);
+      if (p.get('perfil') || p.get('cadastro')) return;
+      const veu = document.createElement('div');
+      veu.id = 'restaurando-sessao';
+      veu.style.cssText = 'position:fixed;inset:0;z-index:9998;background:var(--bg);display:flex;align-items:center;justify-content:center;font:14px sans-serif;color:var(--muted)';
+      veu.textContent = 'Entrando…';
+      document.body.appendChild(veu);
+      try {
+        const resp = await api('/auth/sessao');
+        await iniciarSessao(resp, { restaurando: true });
+      } catch (err) {
+        if (err.status === 401 || err.status === 403) { authToken = null; esquecerToken(); } // sessão vencida/conta desativada
+        // falha de rede: mantém o token; recarregar de novo tenta outra vez
+      } finally { veu.remove(); }
     }
     function logout() {
       pararSincronizacao();
       authToken = null; usuarioLogado = null;
-      try { localStorage.removeItem('pm-token'); } catch (e) { }
+      esquecerToken();
       show('screen-home');
     }
 
@@ -5051,6 +5169,8 @@
       if (document.getElementById('av-clientes')?.style.display === 'block') renderClientes();
       if (document.getElementById('av-avaliacoes')?.style.display === 'block') renderAvaliacoesAdmin();
       if (document.getElementById('av-subadmins')?.style.display === 'block') renderSubadmins();
+      const aberta = [...document.querySelectorAll('#screen-franqueado .adminview')].find(v => v.style.display === 'block');
+      if (aberta) guardarVisao({ tela: 'franqueado', view: aberta.id.replace('av-', ''), unit: key });
     }
     function setTrend(k, txt, cls) { const el = document.querySelector('[data-k="' + k + '"]'); el.textContent = txt; el.className = 'stat-trend ' + (cls === 'down' ? 'down' : 'up'); }
 
@@ -5265,7 +5385,9 @@
       const rect = ev.currentTarget.getBoundingClientRect();
       const recusasItem = item.recusas || [];
       const jaRecusou = new Set(recusasItem.map(r => r.prestadora_id));
-      const opcoes = (prestadorasAgenda[currentUnit] || [])
+      const listaPrest = (prestadorasAgenda[currentUnit] || []).slice();
+      if (item.prestadora_id && !listaPrest.some(p => p.id === item.prestadora_id)) listaPrest.push({ id: item.prestadora_id, nome: (item.prestadora_nome || 'Prestadora') + ' (inativa)' });
+      const opcoes = listaPrest
         .map(p => `<option value="${p.id}" ${p.id === item.prestadora_id ? 'selected' : ''}>${escapeHtml(p.nome)}${jaRecusou.has(p.id) ? ' (já recusou)' : ''}</option>`).join('');
       const pop = document.createElement('div');
       pop.className = 'reatribuir-pop';
@@ -5380,6 +5502,7 @@
       if (new Date(dia + 'T00:00:00').getDay() === 0) dia = '';
       document.getElementById('atd-data').value = dia;
       ['atd-hora', 'atd-servico', 'atd-area', 'atd-valor', 'atd-cliente-nome', 'atd-cliente-tel'].forEach(id => { document.getElementById(id).value = ''; });
+      definirHora('atd-hora', '');
       document.getElementById('atd-duracao').value = 4;
       document.getElementById('atd-repete').checked = false;
       document.querySelectorAll('#atd-dias input').forEach(c => { c.checked = false; });
@@ -5468,7 +5591,7 @@
     // dividir entre todas as ocorrências de cada mês.
     async function salvarSerieAtendimentos() {
       const data = atdVal('atd-data'), hora = lerHora(atdVal('atd-hora')), servico = atdVal('atd-servico').trim();
-      if (!data || !hora || !servico) { toast(atdVal('atd-hora') && !hora ? 'Horário inválido — use o formato 24 h, ex.: 08:00 ou 13:30.' : 'Preencha "a partir de", horário e serviço.'); return; }
+      if (!data || !hora || !servico) { toast('Preencha "a partir de", horário e serviço.'); return; }
       const dias = [...document.querySelectorAll('#atd-dias input:checked')].map(c => Number(c.value));
       if (dias.length === 0) { toast('Marque ao menos um dia da semana.'); return; }
       const valorMes = lerReais(atdVal('atd-valor'));
@@ -5507,7 +5630,7 @@
       if (atdOcupado) return;
       if (document.getElementById('atd-repete').checked) return salvarSerieAtendimentos();
       const data = atdVal('atd-data'), hora = lerHora(atdVal('atd-hora')), servico = atdVal('atd-servico').trim();
-      if (!data || !hora || !servico) { toast(atdVal('atd-hora') && !hora ? 'Horário inválido — use o formato 24 h, ex.: 08:00 ou 13:30.' : 'Preencha data, horário e serviço.'); return; }
+      if (!data || !hora || !servico) { toast('Preencha data, horário e serviço.'); return; }
 
       const corpo = { tipo_servico: servico, data_atendimento: data, hora_atendimento: hora };
       if (atdVal('atd-area').trim()) corpo.area = atdVal('atd-area').trim();
@@ -5808,6 +5931,7 @@
       else if (name === 'avaliacoes') renderAvaliacoesAdmin();
       else if (name === 'financeiro') renderFinanceiro();
       else if (name === 'subadmins') renderSubadmins();
+      guardarVisao({ tela: 'franqueado', view: name, unit: currentUnit });
       window.scrollTo(0, 0);
     }
     function renderEquipe() {
@@ -5817,10 +5941,10 @@
       document.getElementById('eqv-nova').style.display = podeEditarValor ? '' : 'none'; // criar login: só administrador
       document.getElementById('eqv-list').innerHTML = arr.map(p => {
         const valor = p.tarifa === null ? '<span class="tr-meta">sem valor definido</span>' : `<span class="tr-meta">${formatarReais(p.tarifa)} / atendimento</span>`;
-        const botao = podeEditarValor ? `<button class="btn-sm ghost" onclick="abrirTarifa('${p.id}')">${p.tarifa === null ? 'Definir valor' : 'Alterar valor'}</button><button class="btn-sm ghost" onclick="abrirContatoPrestadora('${p.id}')">Contato</button>` : '';
-        const contato = p.telefone ? escapeHtml(p.telefone) : '<i>sem telefone</i>';
+        const botao = podeEditarValor ? `<button class="btn-sm ghost" onclick="abrirTarifa('${p.id}')">${p.tarifa === null ? 'Definir valor' : 'Alterar valor'}</button><button class="btn-sm ghost" onclick="abrirContatoPrestadora('${p.id}')">Contato</button><button class="btn-sm ghost" onclick="alternarAtivaPrestadora('${p.id}', ${!p.ativa})">${p.ativa ? 'Desativar' : 'Reativar'}</button>` : '';
+        const contato = p.telefone ? escapeHtml(exibirTelefone(p.telefone)) : '<i>sem telefone</i>';
         const pendente = p.pendente ? ' · <b title="Ainda não confirmou o e-mail nem trocou a senha padrão">primeiro acesso pendente</b>' : '';
-        return `<div class="tablerow"><div class="tr-av">${escapeHtml(p.ini)}</div><div class="tr-body"><strong>${escapeHtml(p.nome)}</strong><span>${p.serv} atendimentos · nota ${p.nota.toFixed(1)} ★</span><span>${contato}${pendente}</span></div>${valor}${botao}<span class="chip ${p.ativa ? 'chip-on' : 'chip-off'}">${p.ativa ? 'ativa' : 'inativa'}</span></div>`;
+        return `<div class="tablerow"${p.ativa ? '' : ' style="opacity:.65"'}><div class="tr-av">${escapeHtml(p.ini)}</div><div class="tr-body"><strong>${escapeHtml(p.nome)}</strong><span>${p.serv} atendimentos · nota ${p.nota.toFixed(1)} ★</span><span>${contato}${pendente}</span></div>${valor}${botao}<span class="chip ${p.ativa ? 'chip-on' : 'chip-off'}">${p.ativa ? 'ativa' : 'inativa'}</span></div>`;
       }).join('');
     }
 
@@ -5917,6 +6041,22 @@
       } catch (err) { toast('Erro ao salvar o valor: ' + err.message); }
       finally { tarifaOcupada = false; botao.disabled = false; }
     }
+    /* Ativar/desativar prestadora (só administrador completo). Inativa: não recebe atendimento novo, some da lista de
+       atribuição e não entra mais no portal; o histórico e os atendimentos já feitos continuam. Os que ainda estão com ela
+       (convite/confirmado, de hoje em diante) o administrador reatribui na agenda. */
+    async function alternarAtivaPrestadora(id, ativa) {
+      const p = (equipeData[currentUnit] || []).find(x => x.id === id);
+      if (!p) return;
+      if (!ativa && !window.confirm('Desativar ' + p.nome + '?\n\nEla deixa de receber atendimentos e não consegue mais entrar no portal. O histórico dela continua. Você pode reativar quando quiser.')) return;
+      try {
+        const r = await api('/unidades/' + currentUnit + '/admin/equipe/' + id, { method: 'PATCH', body: JSON.stringify({ ativa }) });
+        await carregarPrestadorasAgenda(currentUnit);
+        await carregarEquipeClientesAvaliacoes(currentUnit);
+        renderEquipe();
+        toast(ativa ? p.nome + ' reativada.' : p.nome + ' desativada.' + (r.atendimentos_abertos ? ' Ainda há ' + plural(r.atendimentos_abertos, 'atendimento futuro', 'atendimentos futuros') + ' com ela: reatribua na agenda.' : ''));
+      } catch (err) { toast('Não foi possível alterar: ' + err.message); }
+    }
+
     /* Contato da prestadora (administrador): corrigir/preencher o telefone — principalmente das contas
        criadas pela planilha, que nascem sem telefone — e mandar o acesso pelo WhatsApp. */
     const SENHA_PADRAO_IMPORTADAS = 'senha123';
@@ -5927,7 +6067,7 @@
       contatoPrestadoraId = prestadoraId;
       document.getElementById('contato-nome').textContent = p.nome;
       document.getElementById('contato-email').textContent = p.pendente ? 'e-mail ainda não confirmado' : (p.email || 'sem e-mail');
-      document.getElementById('contato-tel').value = p.telefone;
+      document.getElementById('contato-tel').value = formatarTelefone(p.telefone);
       const aviso = document.getElementById('contato-pendente');
       aviso.style.display = p.pendente ? 'block' : 'none';
       aviso.innerHTML = p.pendente
@@ -5972,7 +6112,7 @@
       paContinuar = continuar;
       document.getElementById('pa-nome').textContent = usuario.nome;
       document.getElementById('pa-email').value = '';
-      document.getElementById('pa-tel').value = usuario.telefone || '';
+      document.getElementById('pa-tel').value = formatarTelefone(usuario.telefone);
       ['pa-senha', 'pa-senha2', 'pa-codigo'].forEach(id => { document.getElementById(id).value = ''; });
       document.getElementById('pa-passo1').style.display = 'block';
       document.getElementById('pa-passo2').style.display = 'none';
@@ -6048,7 +6188,7 @@
             : '<span class="tr-meta">sem telefone p/ convidar</span>';
           if (c.convite && adminCompleto) acoes += `<button class="btn-sm ghost" onclick="abrirSubstituir('${c.id}')">Substituir perfil</button>`;
         }
-        const detalhe = [c.telefone ? escapeHtml(c.telefone) : '', !c.temConta && c.convite ? 'convite enviado em ' + dataHoraBR(c.convite) : ''].filter(Boolean).join(' · ');
+        const detalhe = [c.telefone ? escapeHtml(exibirTelefone(c.telefone)) : '', !c.temConta && c.convite ? 'convite enviado em ' + dataHoraBR(c.convite) : ''].filter(Boolean).join(' · ');
         return `<div class="tablerow"><div class="tr-av">${escapeHtml(c.ini)}</div><div class="tr-body"><strong>${escapeHtml(c.nome)}</strong><span>${escapeHtml(c.ultimo)}</span>${detalhe ? `<span>${detalhe}</span>` : ''}</div>${conta}<span class="tr-meta">${c.total} serviços</span>${acoes}</div>`;
       }).join('') || '<div class="empty">Nenhum cliente ainda.</div>';
     }
@@ -6543,7 +6683,7 @@
       document.getElementById('perfil-nome').value = perfilAtual.nome || '';
       document.getElementById('perfil-sobrenome-wrap').style.display = perfilAtual.temSobrenome ? 'block' : 'none';
       document.getElementById('perfil-sobrenome').value = perfilAtual.sobrenome || '';
-      document.getElementById('perfil-telefone').value = perfilAtual.telefone || '';
+      document.getElementById('perfil-telefone').value = formatarTelefone(perfilAtual.telefone);
       // administrador: o telefone que importa é o da UNIDADE (abaixo, em "Dados da unidade"); o pessoal não é usado em lugar nenhum
       const ehAdmin = perfilAtual.perfil === 'administrador';
       document.getElementById('perfil-telefone-wrap').style.display = ehAdmin ? 'none' : '';
@@ -6589,7 +6729,7 @@
     // Dados da unidade (telefone de WhatsApp e endereço mostrado no site), editáveis pelo administrador no Meu perfil.
     function perfilCarregarUnidade() {
       const c = cidades[document.getElementById('perfil-un-sel').value] || {};
-      document.getElementById('perfil-un-edit-tel').value = c.tel || '';
+      document.getElementById('perfil-un-edit-tel').value = formatarTelefone(c.tel);
       document.getElementById('perfil-un-edit-end').value = c.end || '';
       document.getElementById('perfil-un-edit-curto').value = c.endCurto || '';
     }
@@ -6602,7 +6742,7 @@
       const telefone = document.getElementById('perfil-un-edit-tel').value.trim();
       const endereco = document.getElementById('perfil-un-edit-end').value.trim();
       const endereco_curto = document.getElementById('perfil-un-edit-curto').value.trim();
-      const mudouTel = telefone !== (c.tel || ''), mudouEnd = endereco !== (c.end || '') || endereco_curto !== (c.endCurto || '');
+      const mudouTel = telefone.replace(/\D/g, '') !== (c.tel || '').replace(/\D/g, ''), mudouEnd = endereco !== (c.end || '') || endereco_curto !== (c.endCurto || '');
       if (!mudouTel && !mudouEnd) { toast('Nada mudou.'); return; }
       if (mudouTel && !telefone) { toast('Informe o telefone da unidade (o WhatsApp do site usa esse número).'); return; }
       salvandoUnidadePerfil = true;
@@ -6808,7 +6948,10 @@
       show('screen-login');
     }
 
-    carregarDadosPublicos(); // carrega unidades (dado público) já na home; dados de admin/prestadora/cliente ficam vazios até o login
+    montarSeletoresHora();
+ligarFormatacaoDeCampos();
+// carrega unidades (dado público) já na home e, se havia sessão guardada, reabre ela (as unidades precisam estar carregadas)
+carregarDadosPublicos().then(restaurarSessao);
   </script>
 </body>
 

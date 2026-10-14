@@ -10,6 +10,7 @@ const { gerarOcorrencias } = require('../utils/recorrencia');
 const { gerarModeloImportacao } = require('../utils/modeloPlanilha');
 const { STATUS_QUE_OCUPAM, STATUS_CONFIRMADOS, SQL_CONFLITOS_JSON, conflitosDoHorario, conflitosDosAtendimentos, descreverConflito } = require('../utils/conflitos');
 const { avisarCancelamento } = require('../utils/avisos');
+const { capitalizarNome } = require('../utils/normalizacao');
 
 const router = express.Router();
 
@@ -68,7 +69,7 @@ async function acharOuCriarCliente(db, unidadeId, nome, telefone) {
   if (achado) return achado.id;
   const { rows: [novo] } = await db.query(
     'insert into clientes (nome, telefone, unidade_id) values ($1, $2, $3) returning id',
-    [nome, telefone || null, unidadeId]
+    [capitalizarNome(nome), telefone || null, unidadeId]
   );
   return novo.id;
 }
@@ -87,6 +88,14 @@ async function pertenceAUnidade(tabela, id, unidadeId) {
     [id, unidadeId]
   );
   return !!row;
+}
+
+// Prestadora INATIVA não recebe atendimento novo (continua no histórico). Devolve o motivo ou null se pode receber.
+async function motivoNaoAtribuivel(id, unidadeId, prefixo = 'prestadora_id') {
+  const { rows: [p] } = await pool.query('select ativa from prestadoras where id = $1 and unidade_id = $2', [id, unidadeId]);
+  if (!p) return `${prefixo} não pertence a esta unidade`;
+  if (!p.ativa) return 'Esta prestadora está inativa. Reative-a na aba Equipe para atribuir atendimentos a ela.';
+  return null;
 }
 
 // Anexa ao atendimento o quanto a prestadora recebe por ele (valor_pago): o valor
@@ -225,9 +234,8 @@ router.get('/admin/:slug/agenda/resumo-mensal', requireAuth, requireAcessoUnidad
 router.post('/admin/:slug/:id/propor', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
   const { prestadora_id } = req.body;
   if (!prestadora_id) return res.status(400).json({ erro: 'prestadora_id é obrigatório' });
-  if (!await pertenceAUnidade('prestadoras', prestadora_id, req.unidadeId)) {
-    return res.status(400).json({ erro: 'prestadora_id não pertence a esta unidade' });
-  }
+  const motivoPropor = await motivoNaoAtribuivel(prestadora_id, req.unidadeId);
+  if (motivoPropor) return res.status(400).json({ erro: motivoPropor });
   const paraChecar = await lerParaChecar(pool, req.params.id, req.unidadeId);
   const bloqueio = paraChecar && await checarAtribuicao(pool, { prestadoraId: prestadora_id, atendimento: paraChecar, body: req.body });
   if (bloqueio) return res.status(bloqueio.status).json(bloqueio.json);
@@ -246,9 +254,8 @@ router.post('/admin/:slug/:id/propor', requireAuth, requireAcessoUnidade('agenda
 // Generaliza /propor, que só funcionava a partir de 'pedido'.
 router.post('/admin/:slug/:id/reatribuir', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
   const prestadoraId = req.body.prestadora_id || null;
-  if (prestadoraId && !await pertenceAUnidade('prestadoras', prestadoraId, req.unidadeId)) {
-    return res.status(400).json({ erro: 'prestadora_id não pertence a esta unidade' });
-  }
+  const motivoReatribuir = prestadoraId ? await motivoNaoAtribuivel(prestadoraId, req.unidadeId) : null;
+  if (motivoReatribuir) return res.status(400).json({ erro: motivoReatribuir });
   // trocar pra OUTRA prestadora (ou convidar uma nova): avisa se ela já recusou este atendimento ou se tem horário em conflito
   if (prestadoraId) {
     const paraChecar = await lerParaChecar(pool, req.params.id, req.unidadeId);
@@ -359,9 +366,8 @@ router.post('/admin/:slug', requireAuth, requireAcessoUnidade('agenda'), asyncHa
     if (!Number.isFinite(valorNum) || valorNum < 0 || valorNum >= 1e8) return res.status(400).json({ erro: 'Valor inválido' });
   }
 
-  if (prestadora_id && !await pertenceAUnidade('prestadoras', prestadora_id, req.unidadeId)) {
-    return res.status(400).json({ erro: 'prestadora_id não pertence a esta unidade' });
-  }
+  const motivoNovo = prestadora_id ? await motivoNaoAtribuivel(prestadora_id, req.unidadeId) : null;
+  if (motivoNovo) return res.status(400).json({ erro: motivoNovo });
   if (cliente_id && !await pertenceAUnidade('clientes', cliente_id, req.unidadeId)) {
     return res.status(400).json({ erro: 'cliente_id não pertence a esta unidade' });
   }
@@ -568,9 +574,8 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
     if (!Number.isInteger(dia) || dia < 0 || dia > 6 || !item.hora_atendimento || !item.tipo_servico) {
       return res.status(400).json({ erro: 'cada item precisa de dia_semana (0-6), hora_atendimento e tipo_servico' });
     }
-    if (item.prestadora_id && !await pertenceAUnidade('prestadoras', item.prestadora_id, req.unidadeId)) {
-      return res.status(400).json({ erro: 'prestadora_id de um dos itens não pertence a esta unidade' });
-    }
+    const motivoItem = item.prestadora_id ? await motivoNaoAtribuivel(item.prestadora_id, req.unidadeId, 'prestadora_id de um dos itens') : null;
+    if (motivoItem) return res.status(400).json({ erro: motivoItem });
     if (item.cliente_id && !await pertenceAUnidade('clientes', item.cliente_id, req.unidadeId)) {
       return res.status(400).json({ erro: 'cliente_id de um dos itens não pertence a esta unidade' });
     }

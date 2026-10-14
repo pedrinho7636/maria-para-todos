@@ -5,6 +5,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { unidadeDoAdmin } = require('../utils/permissoes');
 const { normalizarEmail } = require('../utils/normalizacao');
 const { senhaValida, emailValido, nomeValido } = require('../utils/validacao');
+const { capitalizarPessoa } = require('../utils/normalizacao');
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
@@ -50,7 +51,7 @@ router.post('/:slug', asyncHandler(async (req, res) => {
       `insert into sub_administradores (nome, sobrenome, email, senha_hash, unidade_id, criado_por, ${colunas.join(', ')})
        values ($1, $2, $3, $4, $5, $6, ${placeholdersValores})
        returning id, nome, sobrenome, email, unidade_id, ativo, ${colunas.join(', ')}`,
-      [nome, sobrenome, normalizarEmail(email), senhaHash, unidadeId, req.user.id, ...valores]
+      [capitalizarPessoa(nome), capitalizarPessoa(sobrenome), normalizarEmail(email), senhaHash, unidadeId, req.user.id, ...valores]
     );
     res.status(201).json(sub);
   } catch (erro) {
@@ -85,11 +86,11 @@ router.patch('/:slug/:id', asyncHandler(async (req, res) => {
 
   if (nome) {
     if (!nomeValido(nome)) return res.status(400).json({ erro: 'Nome inválido' });
-    sets.push(`nome = $${i++}`); vals.push(nome.trim());
+    sets.push(`nome = $${i++}`); vals.push(capitalizarPessoa(nome));
   }
   if (sobrenome) {
     if (!nomeValido(sobrenome)) return res.status(400).json({ erro: 'Sobrenome inválido' });
-    sets.push(`sobrenome = $${i++}`); vals.push(sobrenome.trim());
+    sets.push(`sobrenome = $${i++}`); vals.push(capitalizarPessoa(sobrenome));
   }
   if (senha) {
     if (!senhaValida(senha)) return res.status(400).json({ erro: 'A senha precisa ter ao menos 8 caracteres' });

@@ -50,7 +50,8 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
     );
     partes = [r.atendimentos, r.prestadoras, r.clientes, r.avaliacoes, permissoes];
   } else if (perfil === 'prestadora') {
-    const { rows: [conta] } = await pool.query('select primeiro_acesso_pendente from prestadoras where id = $1', [id]);
+    const { rows: [conta] } = await pool.query('select primeiro_acesso_pendente, ativa from prestadoras where id = $1', [id]);
+    if (conta && conta.ativa === false) return res.status(403).json({ erro: 'Seu acesso foi desativado pela unidade.', codigo: 'DESATIVADA' });
     if (conta?.primeiro_acesso_pendente) return res.status(403).json({ erro: 'Conclua o seu primeiro acesso para usar o portal.', codigo: 'PRIMEIRO_ACESSO' });
     const { rows: [r] } = await pool.query(
       `select

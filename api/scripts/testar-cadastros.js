@@ -297,7 +297,7 @@ async function codigoDe(email) {
   const somaMes1 = doMes1.reduce((s, a) => s + Math.round(Number(a.valor) * 100), 0);
   ok(somaMes1 === 100000, 'o valor do MÊS (R$ 1.000) é dividido entre todas as ocorrências do mês e a soma fecha exata', `(${doMes1.length} ocorrências somam ${somaMes1 / 100})`);
   ok((sr.json.atendimentos || []).every(a => Number(a.duracao_horas) === 3), 'a duração informada vale pra todas as ocorrências (antes a recorrência não guardava duração)');
-  const { rows: cliSerie } = await pool.query(`select id from clientes where unidade_id = $1 and nome = $2`, [uQa.id, `QA Cliente Série ${id}`]);
+  const { rows: cliSerie } = await pool.query(`select id from clientes where unidade_id = $1 and nome = $2`, [uQa.id, `QA Cliente Série ${idU}`]);
   ok(cliSerie.length === 1 && (sr.json.atendimentos || []).every(a => a.cliente_id === cliSerie[0].id), 'o cliente novo foi criado UMA vez e ligado a todas as ocorrências');
   if (cliSerie[0]) criados.clientes.push(cliSerie[0].id);
   const srRuim = await http('POST', `/atendimentos/admin/${slugA}/recorrente`, { data_inicio: inicioSerie, itens: itensSerie, valor_mensal_total: 'abc' }, tokenAdm);

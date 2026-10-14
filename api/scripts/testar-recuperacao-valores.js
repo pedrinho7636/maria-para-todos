@@ -184,10 +184,12 @@ const ultimoCodigo = async (destino) => (await pool.query('select codigo from co
   check('semana tem qtd/total coerentes (total = soma dos valores travados)', resumo.semana.qtd >= 0 && (resumo.semana.qtd === 0 ? resumo.semana.total === 0 : resumo.semana.total > 0), JSON.stringify(resumo.semana));
 
   // concluído: atendimento ontem aceito conta como realizado
-  const a3 = await criar({ data_atendimento: dia(-2) });
+  // dois dias atrás — mas nunca num domingo (a agenda não aceita domingo): nesse caso, três
+  const passado = new Date(dia(-2) + 'T12:00:00Z').getUTCDay() === 0 ? dia(-3) : dia(-2);
+  const a3 = await criar({ data_atendimento: passado });
   await pool.query("update atendimentos set status = 'aceito', valor_prestadora = 100 where id = $1", [a3.j.id]);
   const resumo2 = (await http('GET', '/atendimentos/prestadora/me/resumo', null, tPrest)).j;
-  const dentroDoMes = mesIgual(dia(-2));
+  const dentroDoMes = mesIgual(passado);
   check('aceito com data passada entra como "realizado"', resumo2.mes.realizados_qtd === resumo.mes.realizados_qtd + (dentroDoMes ? 1 : 0), JSON.stringify(resumo2.mes));
 
   // reatribuir zera a trava; prestadora sem tarifa

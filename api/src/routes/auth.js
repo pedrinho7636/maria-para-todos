@@ -2,10 +2,11 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
-const { normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido } = require('../utils/normalizacao');
+const { normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido, capitalizarPessoa, capitalizarNome } = require('../utils/normalizacao');
 const { senhaValida, emailValido, nomeValido, telefoneValido } = require('../utils/validacao');
 const { enviarCodigoConfirmacao, consumirCodigo, MOTIVO_CADASTRO, MOTIVO_RECUPERACAO } = require('../utils/verificacaoEmail');
 const { unidadesDoAdmin } = require('../utils/permissoes');
+const { requireAuth } = require('../middleware/auth');
 const { ErroNegocio, lerDadosUnidade, criarUnidade, vincularAdmin } = require('../utils/unidades');
 const { normalizarTexto } = require('../utils/importarPlanilha');
 
@@ -94,7 +95,7 @@ function lerCadastroAdmin(corpo) {
   if (cnpjDigitos.length !== 14) return { status: 400, erro: 'CNPJ inválido (são 14 dígitos)' };
   const lida = lerDadosUnidade(unidade);
   if (lida.erro) return { status: 400, erro: lida.erro };
-  return { dados: { nome: nome.trim(), sobrenome: sobrenome.trim(), email: normalizarEmail(email), senha, cnpjDigitos, unidade: lida.dados } };
+  return { dados: { nome: capitalizarPessoa(nome), sobrenome: capitalizarPessoa(sobrenome), email: normalizarEmail(email), senha, cnpjDigitos, unidade: lida.dados } };
 }
 
 router.post('/cadastro/admin', async (req, res) => {
@@ -228,7 +229,7 @@ router.post('/cadastro/prestadora/confirmar', async (req, res) => {
       const { rows: [nova] } = await db.query(
         `insert into prestadoras (nome, telefone, email, senha_hash, unidade_id)
          values ($1, $2, $3, $4, $5) returning id, nome, telefone, email, unidade_id, ativa`,
-        [nome.trim(), telefoneNormalizado, emailNormalizado, senhaHash, unidade.id]
+        [capitalizarPessoa(nome), telefoneNormalizado, emailNormalizado, senhaHash, unidade.id]
       );
       return nova;
     });
@@ -290,7 +291,7 @@ router.post('/cadastro/cliente/confirmar', async (req, res) => {
       const { rows: [novo] } = await db.query(
         `insert into clientes (nome, telefone, email, senha_hash, unidade_id)
          values ($1, $2, $3, $4, $5) returning id, nome, telefone, email, unidade_id`,
-        [nome.trim(), telefone ? normalizarTelefone(telefone) : null, emailNormalizado, senhaHash, unidade.id]
+        [capitalizarNome(nome), telefone ? normalizarTelefone(telefone) : null, emailNormalizado, senhaHash, unidade.id]
       );
       return novo;
     });
@@ -390,12 +391,41 @@ router.post('/login', async (req, res) => {
     }
     if (!usuario) return res.status(401).json({ erro: 'Credenciais inválidas' });
 
+    if (perfil === 'prestadora' && usuario.ativa === false) {
+      return res.status(401).json({ erro: 'Seu acesso está desativado. Fale com a sua unidade.' });
+    }
     delete usuario.senha_hash;
     const token = assinarToken({ id: usuario.id, perfil, unidade_id: usuario.unidade_id });
     res.json({ token, perfil, usuario });
   } catch (erro) {
     console.error(erro);
     res.status(500).json({ erro: 'Erro ao fazer login' });
+  }
+});
+
+// Reabre a sessão guardada no navegador (o token) quando a página é recarregada, sem pedir login de novo:
+// devolve o mesmo formato do /login ({ perfil, usuario }). Confere que a conta ainda existe e continua ativa.
+const TABELA_DO_PERFIL = { administrador: 'administradores', sub_administrador: 'sub_administradores', prestadora: 'prestadoras', cliente: 'clientes' };
+router.get('/sessao', requireAuth, async (req, res) => {
+  try {
+    const { perfil, id } = req.user;
+    const tabela = TABELA_DO_PERFIL[perfil]; // literal do mapa acima, nunca entrada do usuário
+    if (!tabela) return res.status(401).json({ erro: 'Sessão inválida' });
+    const { rows: [usuario] } = await pool.query(`select * from ${tabela} where id = $1`, [id]);
+    if (!usuario) return res.status(401).json({ erro: 'Sessão inválida' });
+    if ((perfil === 'sub_administrador' && !usuario.ativo) || (perfil === 'prestadora' && usuario.ativa === false)) {
+      return res.status(401).json({ erro: 'Seu acesso está desativado. Fale com a sua unidade.' });
+    }
+    delete usuario.senha_hash;
+    if (usuario.unidade_id) {
+      const { rows: [unidade] } = await pool.query('select slug from unidades where id = $1', [usuario.unidade_id]);
+      if (unidade) usuario.unidade_slug = unidade.slug;
+    }
+    if (perfil === 'administrador') usuario.unidades_slugs = await unidadesDoAdmin(usuario.id);
+    res.json({ perfil, usuario });
+  } catch (erro) {
+    console.error(erro);
+    res.status(500).json({ erro: 'Erro ao reabrir a sessão' });
   }
 });
 

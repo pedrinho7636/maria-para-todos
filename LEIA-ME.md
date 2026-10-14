@@ -286,9 +286,25 @@ calendário, pendência = pontinho vermelho e conflito = dia com contorno vermel
 - **Calendário da prestadora:** clicar num dia mostra os atendimentos **dela** naquele dia (cliente, início–término,
   serviço, local, valor, status). `GET /atendimentos/prestadora/me/calendario?mes=AAAA-MM`.
 
-**Horários em 24 h:** o campo de horário do cadastro de atendimento é um texto com máscara `HH:MM` (aceita `930`,
-`0930`, `13:30`; nunca AM/PM — o `<input type="time">` mostrava AM/PM conforme o idioma do navegador). A API só aceita
-`HH:MM` de 00:00 a 23:59.
+**Horários em 24 h:** o horário do cadastro de atendimento é escolhido em **dois seletores** (hora 00–23 e minuto de 5 em 5),
+sempre em 24 h — nunca AM/PM (o `<input type="time">` mostrava AM/PM conforme o idioma do navegador e não dava pra
+impedir). Escolher a hora já preenche ":00". A API só aceita `HH:MM` de 00:00 a 23:59.
+
+**Telefones e nomes no cadastro:** todo campo de telefone formata enquanto digita — `(54) 3333-4444` (fixo) ou
+`(54) 9 9999-0000` (celular); aceita `+55` colado e o servidor guarda só os dígitos. Todo nome é ajustado ao sair do campo
+e de novo no servidor, pra qualquer tipo de usuário (administrador, funcionário, prestadora, cliente, cliente criado na agenda,
+meu perfil): "ana carolina" → "Ana Carolina"; "de/da/do/dos/das/e" ficam minúsculos no meio; nome de **pessoa** digitado todo em
+maiúsculas ("ANA CAROLINA") também vira "Ana Carolina" (nome de cliente, que pode ser sigla/empresa, só ganha a inicial maiúscula).
+
+**Continua logado ao recarregar:** a sessão (token) fica guardada no navegador — com "Manter conectado" marcado sobrevive a
+fechar o navegador; desmarcado, sobrevive a recarregar a página e some ao fechar a aba. Junto vai a "visão" (qual tela do painel
+e qual unidade estavam abertas): atualizar a página volta pro mesmo lugar, sem novo login. `GET /auth/sessao` reabre a sessão
+(token vencido ou conta desativada → volta pra home). Os links de convite (`?perfil=…`, `?cadastro=…`) mostram a tela pedida.
+
+**Prestadora ativa/inativa (Equipe → Desativar / Reativar, só administrador completo):** inativa **não recebe atendimento novo**
+(some da lista de atribuição; a API recusa em novo atendimento, troca, convite e série), **não entra mais no portal** (login
+recusado e quem estava logada é barrada na hora) e o histórico continua. Ao desativar, o sistema avisa quantos atendimentos futuros
+ainda estão com ela — reatribua na agenda (no balão ela aparece como "(inativa)"). Reativar devolve tudo.
 
 **Cliente acompanha seus atendimentos:** na área do cliente, cada atendimento mostra serviço, data/horário, status
 (aguardando profissional · confirmado · concluído · cancelado) e, depois de **confirmado**, a **profissional com nome

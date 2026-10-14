@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt');
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { unidadesDoAdmin } = require('../utils/permissoes');
-const { normalizarEmail, normalizarTelefone, emailInstitucionalValido, DOMINIO_INSTITUCIONAL } = require('../utils/normalizacao');
+const { normalizarEmail, normalizarTelefone, emailInstitucionalValido, DOMINIO_INSTITUCIONAL, capitalizarPessoa, capitalizarNome } = require('../utils/normalizacao');
 const { senhaValida, emailValido, telefoneValido } = require('../utils/validacao');
 const { enviarCodigoConfirmacao, confirmarCodigo, MOTIVO_TROCA_EMAIL } = require('../utils/verificacaoEmail');
 const asyncHandler = require('../utils/asyncHandler');
@@ -89,11 +89,11 @@ router.patch('/', requireAuth, asyncHandler(async (req, res) => {
 
   if (nome !== undefined) {
     if (!nome || !nome.trim()) return res.status(400).json({ erro: 'nome não pode ficar vazio' });
-    sets.push(`nome = $${i++}`); vals.push(nome.trim());
+    sets.push(`nome = $${i++}`); vals.push(req.user.perfil === 'cliente' ? capitalizarNome(nome) : capitalizarPessoa(nome)); // cliente pode ser nome fantasia
   }
   if (cfg.temSobrenome && sobrenome !== undefined) {
     if (!sobrenome || !sobrenome.trim()) return res.status(400).json({ erro: 'sobrenome não pode ficar vazio' });
-    sets.push(`sobrenome = $${i++}`); vals.push(sobrenome.trim());
+    sets.push(`sobrenome = $${i++}`); vals.push(capitalizarPessoa(sobrenome));
   }
   if (cfg.temTelefone && telefone !== undefined) {
     const tel = normalizarTelefone(telefone);

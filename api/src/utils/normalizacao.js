@@ -79,4 +79,12 @@ function capitalizarNome(nome) {
   }).join(' ');
 }
 
-module.exports = { capitalizarNome, normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido, formatarCnpj, slugificar, ufValida, UFS, emailInstitucionalValido, DOMINIO_INSTITUCIONAL };
+// Nome de PESSOA (administrador, funcionário, prestadora): além do que capitalizarNome faz, nome digitado todo em
+// maiúsculas ("ANA CAROLINA SEVERO") vira "Ana Carolina Severo" e a letra depois de hífen também sobe ("maria-clara").
+function capitalizarPessoa(nome) {
+  const limpo = String(nome ?? '').trim().replace(/\s+/g, ' ');
+  const base = /[a-zà-ÿ]/.test(limpo) ? limpo : limpo.toLowerCase();
+  return capitalizarNome(base).replace(/-([a-zà-ÿ])/g, (m, c) => '-' + c.toLocaleUpperCase('pt-BR'));
+}
+
+module.exports = { capitalizarPessoa, capitalizarNome, normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido, formatarCnpj, slugificar, ufValida, UFS, emailInstitucionalValido, DOMINIO_INSTITUCIONAL };

@@ -83,7 +83,7 @@ const gerarCnpj = (base12) => {
   const novaPrest = async (nome, n) => {
     const r = await http('POST', `/unidades/${slug}/admin/equipe`, { nome, email: emailQa(n), telefone: telQa(n === 'pa' ? 1 : 2) }, tokenAdm);
     const l = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: emailQa(n), senha: r.json.senha_provisoria });
-    return { id: r.json.prestadora?.id, token: l.json.token };
+    return { id: r.json.prestadora?.id, token: l.json.token, senha: r.json.senha_provisoria };
   };
   const A = await novaPrest('QA Ana', 'pa'), B = await novaPrest('QA Bia', 'pb');
   ok(A.id && A.token && B.id && B.token, 'cria duas prestadoras (Ana e Bia) e entra com elas');
@@ -293,6 +293,84 @@ const gerarCnpj = (base12) => {
   const { rows: [depoisConflito] } = await pool.query('select count(*)::int as n from atendimentos where cliente_id = $1', [prov2.json.cliente_id]);
   ok(outraConta.status === 200 && subAtomica.status === 409 && antesConflito.n === depoisConflito.n && depoisConflito.n === 1, 'substituição recusada no meio (destino agora tem atendimento) não move nada: os dados ficam como estavam');
 
+  // ---------- prestadora inativa ----------
+  console.log('\nPrestadora ativa/inativa');
+  const equipe0 = await http('GET', `/unidades/${slug}/admin/equipe`, null, tokenAdm);
+  ok(equipe0.json.find(p => p.prestadora_id === B.id)?.ativa === true, 'a Equipe mostra a prestadora como ativa');
+  const naoBool = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { ativa: 'nao' }, tokenAdm);
+  ok(naoBool.status === 400, 'valor que não é true/false: 400');
+  // funcionário (sem poder de alterar equipe) não desativa
+  const func = await http('POST', `/sub-administradores/${slug}`, { nome: 'joão  da  silva', sobrenome: 'DE SOUZA', email: emailQa('func'), senha: 'senha-qa-123', permissoes: { equipe: true } }, tokenAdm);
+  ok(func.status === 201 && func.json.nome === 'João da Silva' && func.json.sobrenome === 'De Souza', 'funcionário criado com o nome ajustado ("joão  da  silva" → "João da Silva", "DE SOUZA" → "De Souza")', JSON.stringify([func.json.nome, func.json.sobrenome]));
+  const fLogin = await http('POST', '/auth/login', { perfil: 'administrador', identificador: emailQa('func'), senha: 'senha-qa-123' });
+  const funcDesativa = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { ativa: false }, fLogin.json.token);
+  ok(funcDesativa.status === 403, 'funcionário não desativa prestadora (403)');
+  const abertoB = await atd({ prestadora_id: B.id, hora_atendimento: '19:00', duracao_horas: 1 });
+  const desativa = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { ativa: false }, tokenAdm);
+  ok(desativa.status === 200 && desativa.json.ativa === false && desativa.json.atendimentos_abertos >= 1, 'administrador desativa a Bia e a resposta conta quantos atendimentos futuros ainda estão com ela', `(${desativa.json.atendimentos_abertos})`);
+  const loginInativa = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: emailQa('pb'), senha: B.senha });
+  ok(loginInativa.status === 401 && /desativado/.test(loginInativa.json.erro), 'prestadora inativa não consegue entrar', `("${loginInativa.json.erro}")`);
+  const rotaInativa = await http('GET', '/atendimentos/prestadora/me/convites', null, B.token);
+  const syncInativa = await http('GET', '/sync', null, B.token);
+  ok(rotaInativa.status === 403 && /desativado/.test(rotaInativa.json.erro) && syncInativa.status === 403, 'e quem já estava logada é barrada na hora (403 — a tela dela sai sozinha)');
+  const lista = await http('GET', `/atendimentos/admin/${slug}/prestadoras`, null, tokenAdm);
+  ok(!lista.json.some(p => p.id === B.id) && lista.json.some(p => p.id === A.id), 'ela sai da lista de prestadoras pra atribuir atendimento');
+  const paraInativa = await atd({ prestadora_id: B.id, hora_atendimento: '18:00', duracao_horas: 1 });
+  ok(paraInativa.status === 400 && /inativa/.test(paraInativa.json.erro), 'não dá pra criar atendimento pra ela (400)', `("${paraInativa.json.erro}")`);
+  const reatInativa = await http('POST', `/atendimentos/admin/${slug}/${semPrest.json.id}/reatribuir`, { prestadora_id: B.id }, tokenAdm);
+  const outroPedido = await atd({ hora_atendimento: '06:00', duracao_horas: 1 });
+  const reatInativa2 = await http('POST', `/atendimentos/admin/${slug}/${outroPedido.json.id}/reatribuir`, { prestadora_id: B.id }, tokenAdm);
+  const proporInativa = await http('POST', `/atendimentos/admin/${slug}/${outroPedido.json.id}/propor`, { prestadora_id: B.id }, tokenAdm);
+  const serieInativa = await http('POST', `/atendimentos/admin/${slug}/recorrente`, { data_inicio: D, horizonte_meses: 1, itens: [{ dia_semana: dSerie, hora_atendimento: '05:00', tipo_servico: 'QA Serie Inativa', prestadora_id: B.id }] }, tokenAdm);
+  ok(reatInativa2.status === 400 && proporInativa.status === 400 && serieInativa.status === 400, 'trocar prestadora, propor e série também recusam prestadora inativa (400)', JSON.stringify([reatInativa.status, reatInativa2.status, proporInativa.status, serieInativa.status]));
+  const agendaDela = await http('GET', `/atendimentos/admin/${slug}/agenda?data=${D}`, null, tokenAdm);
+  ok(agendaDela.json.some(x => x.id === abertoB.json.id && x.prestadora_id === B.id), 'o histórico fica: o atendimento que já estava com ela continua ligado a ela na agenda');
+  const reativa = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { ativa: true }, tokenAdm);
+  const loginDeNovo = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: emailQa('pb'), senha: B.senha });
+  ok(reativa.status === 200 && reativa.json.ativa === true && loginDeNovo.status === 200, 'reativada, ela volta a entrar');
+  const paraAtiva = await atd({ prestadora_id: B.id, hora_atendimento: '18:00', duracao_horas: 1 });
+  ok(paraAtiva.status === 201, 'e volta a poder receber atendimento');
+
+  // ---------- nomes ajustados no cadastro ----------
+  console.log('\nNomes ajustados no cadastro');
+  const nomesCli = { nome: 'maria  da silva', email: emailQa('cliente3'), telefone: '(54) 99999-4444', senha: 'senha-qa-123', unidade_slug: slug };
+  await http('POST', '/auth/cadastro/cliente', nomesCli);
+  const cNome = await http('POST', '/auth/cadastro/cliente/confirmar', { ...nomesCli, codigo: await codigoDe(nomesCli.email) });
+  ok(cNome.status === 201 && cNome.json.cliente.nome === 'Maria da Silva', 'cliente: "maria  da silva" → "Maria da Silva"', cNome.json.cliente?.nome);
+  const nomesPre = { nome: 'ANA PAULA DE SOUZA', telefone: telQa(4), email: emailQa('prest3'), senha: 'senha-qa-123', unidade_slug: slug };
+  await http('POST', '/auth/cadastro/prestadora', nomesPre);
+  const pNome = await http('POST', '/auth/cadastro/prestadora/confirmar', { ...nomesPre, codigo: await codigoDe(nomesPre.email) });
+  ok(pNome.status === 201 && pNome.json.prestadora.nome === 'Ana Paula de Souza', 'prestadora: "ANA PAULA DE SOUZA" → "Ana Paula de Souza"', pNome.json.prestadora?.nome);
+  const eqNome = await http('POST', `/unidades/${slug}/admin/equipe`, { nome: 'joana d arc', email: emailQa('joana'), telefone: telQa(5) }, tokenAdm);
+  ok(eqNome.status === 201 && eqNome.json.prestadora.nome === 'Joana D Arc', 'prestadora criada pelo administrador: "joana d arc" → "Joana D Arc"', eqNome.json.prestadora?.nome);
+  const { rows: [admNome] } = await pool.query('select nome, sobrenome from administradores where email = $1', [emailQa('alfa')]);
+  ok(admNome.nome === 'Qa' && admNome.sobrenome === 'Agenda', 'administrador: o "QA" digitado todo em maiúsculas vira "Qa"', JSON.stringify(admNome));
+  const clienteNovo = await atd({ hora_atendimento: '05:30', duracao_horas: 1, cliente_novo: { nome: 'pedro   alves' } });
+  const { rows: [cn] } = await pool.query('select nome from clientes where id = $1', [clienteNovo.json.cliente_id]);
+  ok(cn.nome === 'Pedro Alves', 'cliente criado pela agenda: "pedro   alves" → "Pedro Alves"', cn.nome);
+  const perfilNome = await http('PATCH', '/perfil', { nome: 'ROSA MARIA' }, pNome.json.token);
+  ok(perfilNome.status === 200 && perfilNome.json.nome === 'Rosa Maria', 'trocar o nome no Meu perfil também ajusta');
+
+  // ---------- sessão guardada (recarregar a página sem novo login) ----------
+  console.log('\nSessão guardada');
+  const ses = await http('GET', '/auth/sessao', null, tokenAdm);
+  ok(ses.status === 200 && ses.json.perfil === 'administrador' && ses.json.usuario.unidades_slugs.includes(slug) && !ses.json.usuario.senha_hash, 'o token do administrador reabre a sessão (perfil + unidades, sem senha)');
+  const sesP = await http('GET', '/auth/sessao', null, A.token);
+  ok(sesP.status === 200 && sesP.json.perfil === 'prestadora' && sesP.json.usuario.unidade_slug === slug && !sesP.json.usuario.senha_hash, 'prestadora: reabre com a cidade dela');
+  const sesF = await http('GET', '/auth/sessao', null, fLogin.json.token);
+  ok(sesF.status === 200 && sesF.json.perfil === 'sub_administrador' && sesF.json.usuario.pode_equipe === true, 'funcionário: reabre com as permissões dele');
+  const sesC = await http('GET', '/auth/sessao', null, cLogin.json.token);
+  ok(sesC.status === 200 && sesC.json.perfil === 'cliente' && sesC.json.usuario.unidade_slug === slug, 'cliente: reabre');
+  const sesSem = await http('GET', '/auth/sessao');
+  const sesRuim = await http('GET', '/auth/sessao', null, 'token.invalido.aqui');
+  ok(sesSem.status === 401 && sesRuim.status === 401, 'sem token ou com token inválido: 401 (a tela volta pra home)');
+  await http('POST', `/sub-administradores/${slug}/${func.json.id}/desativar`, null, tokenAdm);
+  const sesFOff = await http('GET', '/auth/sessao', null, fLogin.json.token);
+  ok(sesFOff.status === 401, 'funcionário desativado não reabre a sessão (401)');
+  await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { ativa: false }, tokenAdm);
+  const sesBOff = await http('GET', '/auth/sessao', null, B.token);
+  ok(sesBOff.status === 401, 'prestadora desativada também não (401)');
+
   // ---------- limpeza ----------
   const { rows: unis } = await pool.query(`select id from unidades where cnpj = '12.ABC.345/01DE-35' or slug like $1`, [`qa-%${id}%`]);
   const uids = unis.map(u => u.id);
@@ -300,6 +378,7 @@ const gerarCnpj = (base12) => {
   await pool.query('delete from atendimentos where unidade_id = any($1::uuid[])', [uids]);
   await pool.query('delete from clientes where unidade_id = any($1::uuid[])', [uids]);
   await pool.query('delete from prestadoras where unidade_id = any($1::uuid[])', [uids]);
+  await pool.query('delete from sub_administradores where unidade_id = any($1::uuid[])', [uids]);
   await pool.query('delete from administrador_unidades where unidade_id = any($1::uuid[])', [uids]);
   await pool.query(`delete from administradores where email like $1`, [`qa-%-${id}@qa.invalid`]);
   await pool.query('delete from unidades where id = any($1::uuid[])', [uids]);
