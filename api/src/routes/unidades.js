@@ -76,8 +76,13 @@ router.get('/:slug/admin/dashboard', requireAuth, requireAcessoUnidade('dashboar
 
 router.get('/:slug/admin/equipe', requireAuth, requireAcessoUnidade('equipe'), asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `select v.*, p.valor_por_atendimento, p.telefone, p.email, p.primeiro_acesso_pendente
+    // faltas (a prestadora não foi) e o percentual aceitável definido pela franquia: controle INTERNO, só aqui na Equipe
+    // (a prestadora nunca recebe esses campos). Taxa = faltas ÷ atendimentos que deviam ter acontecido (concluídos + faltas).
+    `select v.*, p.valor_por_atendimento, p.telefone, p.email, p.primeiro_acesso_pendente, cp.faltas_aceitavel_pct,
+            (select count(*)::int from atendimentos a where a.prestadora_id = p.id and a.status = 'falta') as faltas,
+            (select count(*)::int from atendimentos a where a.prestadora_id = p.id and a.status in ('concluido', 'falta')) as atendimentos_devidos
      from vw_equipe_unidade v join prestadoras p on p.id = v.prestadora_id
+     left join controle_prestadora cp on cp.prestadora_id = p.id
      where v.unidade_id = $1 order by v.nome`,
     [req.unidadeId]
   );
@@ -173,13 +178,35 @@ router.patch('/:slug/admin/equipe/:prestadoraId', requireAuth, requireRole('admi
     if (typeof req.body.ativa !== 'boolean') return res.status(400).json({ erro: 'ativa deve ser true ou false' });
     vals.push(req.body.ativa); sets.push(`ativa = $${vals.length}`);
   }
-  if (sets.length === 0) return res.status(400).json({ erro: 'Nada para atualizar — informe valor_por_atendimento e/ou telefone.' });
+  // percentual de faltas aceitável (controle interno da franquia; vazio remove)
+  let faltasPct;
+  if ('faltas_aceitavel_pct' in req.body) {
+    const b = req.body.faltas_aceitavel_pct;
+    if (b === null || b === undefined || String(b).trim() === '') faltasPct = null;
+    else {
+      const n = Number(String(b).trim().replace(',', '.').replace('%', ''));
+      if (!Number.isFinite(n) || n < 0 || n > 100) return res.status(400).json({ erro: 'Percentual inválido — informe um número entre 0 e 100.' });
+      faltasPct = Math.round(n * 100) / 100;
+    }
+  }
+  if (sets.length === 0 && faltasPct === undefined) return res.status(400).json({ erro: 'Nada para atualizar — informe valor_por_atendimento, telefone, ativa e/ou faltas_aceitavel_pct.' });
 
   const { rows: [atual] } = await pool.query('select email from prestadoras where id = $1 and unidade_id = $2', [req.params.prestadoraId, req.unidadeId]);
   if (!atual) return res.status(404).json({ erro: 'Prestadora não encontrada nesta unidade' });
   // sem telefone e sem e-mail ela não teria como entrar
   if ('telefone' in req.body && !normalizarTelefone(req.body.telefone) && !atual.email) {
     return res.status(400).json({ erro: 'Esta conta não tem e-mail; sem telefone ela não teria como entrar.' });
+  }
+
+  if (faltasPct !== undefined) {
+    await pool.query(
+      `insert into controle_prestadora (prestadora_id, faltas_aceitavel_pct) values ($1, $2)
+       on conflict (prestadora_id) do update set faltas_aceitavel_pct = excluded.faltas_aceitavel_pct, atualizado_em = now()`,
+      [req.params.prestadoraId, faltasPct]);
+    if (sets.length === 0) {
+      const { rows: [so] } = await pool.query('select id, nome, telefone, email, valor_por_atendimento, primeiro_acesso_pendente, ativa from prestadoras where id = $1', [req.params.prestadoraId]);
+      return res.json({ ...so, faltas_aceitavel_pct: faltasPct, atendimentos_abertos: 0 });
+    }
   }
 
   vals.push(req.params.prestadoraId, req.unidadeId);

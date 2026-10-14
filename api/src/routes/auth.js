@@ -7,7 +7,7 @@ const { senhaValida, emailValido, nomeValido, telefoneValido } = require('../uti
 const { enviarCodigoConfirmacao, consumirCodigo, MOTIVO_CADASTRO, MOTIVO_RECUPERACAO } = require('../utils/verificacaoEmail');
 const { unidadesDoAdmin } = require('../utils/permissoes');
 const { requireAuth } = require('../middleware/auth');
-const { ErroNegocio, lerDadosUnidade, criarUnidade, vincularAdmin } = require('../utils/unidades');
+const { ErroNegocio, lerDadosUnidade, criarUnidade, vincularAdmin, cidadeDeOutraEmpresa, msgCidadeOcupada } = require('../utils/unidades');
 const { normalizarTexto } = require('../utils/importarPlanilha');
 
 const router = express.Router();
@@ -127,6 +127,9 @@ router.post('/cadastro/admin', async (req, res) => {
     const { rows: emUso } = await pool.query(
       `select 1 from administradores where email = $1 union all select 1 from sub_administradores where email = $1`, [email]);
     if (emUso.length > 0) return res.status(409).json({ erro: 'E-mail já cadastrado' });
+
+    // a cidade não pode já pertencer a outro CNPJ (vale antes de gastar um e-mail com o código)
+    if (await cidadeDeOutraEmpresa(pool, unidade.nome, unidade.uf, cnpjDigitos)) return res.status(409).json({ erro: msgCidadeOcupada(unidade.nome, unidade.uf) });
 
     const envio = await enviarCodigoConfirmacao(email, MOTIVO_CADASTRO);
     res.json({

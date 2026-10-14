@@ -307,9 +307,10 @@ async function codigoDe(email) {
   await pool.query(`delete from atendimentos where tipo_servico = 'QA Serie' and unidade_id = $1`, [uQa.id]);
 
   // ---------- SITUAÇÃO DO ATENDIMENTO (programado / concluído / cancelado) ----------
+  // (atendimento de hoje às 00:00–00:30: já terminou, então dá pra concluir à mão; só falharia entre 00:00 e 00:30)
   console.log('\nSituação do atendimento na agenda');
   const { rows: [{ hoje: hojeBr }] } = await pool.query(`select (now() at time zone 'America/Sao_Paulo')::date::text as hoje`);
-  const novoAtd = (extra = {}) => http('POST', `/atendimentos/admin/${slugA}`, { tipo_servico: 'QA Situacao', data_atendimento: hojeBr, hora_atendimento: '23:00', valor: 100, ...extra }, tokenAdm);
+  const novoAtd = (extra = {}) => http('POST', `/atendimentos/admin/${slugA}`, { tipo_servico: 'QA Situacao', data_atendimento: hojeBr, hora_atendimento: '00:00', duracao_horas: 0.5, valor: 100, ...extra }, tokenAdm);
   const doDia = async (extra = '') => (await http('GET', `/atendimentos/admin/${slugA}/agenda?data=${hojeBr}${extra}`, null, tokenAdm)).json.filter(a => a.tipo_servico === 'QA Situacao');
   const hojeNoPainel = async () => Number((await http('GET', `/unidades/${slugA}/admin/dashboard`, null, tokenAdm)).json.atendimentos_hoje);
   const noMes = async () => ((await http('GET', `/atendimentos/admin/${slugA}/agenda/resumo-mensal?mes=${hojeBr.slice(0, 7)}`, null, tokenAdm)).json.find(d => d.data === hojeBr)?.total) || 0;
@@ -337,14 +338,19 @@ async function codigoDe(email) {
   ok(sb.status === 201, 'cria um atendimento de hoje que já passou do horário, com prestadora');
   await pool.query(`update atendimentos set status = 'aceito' where id = $1`, [idPass]);
   const { concluirAtendimentosRealizados } = require('../src/utils/conclusao');
-  await concluirAtendimentosRealizados();
-  const { rows: [pass1] } = await pool.query('select status from atendimentos where id = $1', [idPass]);
-  ok(pass1.status === 'concluido', 'sem escolha manual, a conclusão automática conclui o aceito cujo horário passou');
-  const sReab = await sit('programado', tokenAdm, idPass);
-  ok(sReab.json.status === 'aceito' && sReab.json.situacao_manual === true, 'reabrir como programado (com prestadora) volta a "aceito"');
+  const sMan = await sit('programado', tokenAdm, idPass);
+  ok(sMan.json.status === 'aceito' && sMan.json.situacao_manual === true, 'marcar como programado (com prestadora) mantém "aceito" e registra a escolha manual', JSON.stringify(sMan.json).slice(0, 100));
   await concluirAtendimentosRealizados();
   const { rows: [pass2] } = await pool.query('select status from atendimentos where id = $1', [idPass]);
-  ok(pass2.status === 'aceito', 'e a conclusão automática NÃO o conclui de novo (o administrador disse que está programado)');
+  ok(pass2.status === 'aceito', 'e a conclusão automática NÃO o conclui (o administrador disse que está programado)');
+  // sem escolha manual: o aceito cujo término passou (ontem) é concluído sozinho; concluído, só dá pra marcar falta
+  const sb2 = await novoAtd({ prestadora_id: p2.json.prestadora.id, hora_atendimento: '00:40', duracao_horas: 0.5, forcar_conflito: true });
+  await pool.query(`update atendimentos set status = 'aceito', data_atendimento = (now() at time zone 'America/Sao_Paulo')::date - 1 where id = $1`, [sb2.json.id]);
+  await concluirAtendimentosRealizados();
+  const { rows: [pass1] } = await pool.query('select status from atendimentos where id = $1', [sb2.json.id]);
+  ok(pass1.status === 'concluido', 'sem escolha manual, a conclusão automática conclui o aceito cujo horário de término passou');
+  const sPos = await sit('programado', tokenAdm, sb2.json.id);
+  ok(sPos.status === 400, 'e depois de concluído não dá pra voltar a "programado" (só prestadora não foi)');
   // erros e permissões
   const sRuim = await sit('feito');
   ok(sRuim.status === 400, 'situação desconhecida: 400');

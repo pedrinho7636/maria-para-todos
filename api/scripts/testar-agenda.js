@@ -73,6 +73,25 @@ const gerarCnpj = (base12) => {
   const dono = await http('POST', '/auth/cadastro/admin', { ...mk('intruso', '12.ABC.345/01DE-35', 'Filial') });
   ok(dono.status === 403, 'o mesmo CNPJ (agora existente), digitado com outra pontuação, é reconhecido como já cadastrado (403 pra quem não é o dono)', `(HTTP ${dono.status})`);
 
+  // ---------- cidade só pode ter UM CNPJ ----------
+  console.log('\nCidade pertence a um único CNPJ');
+  const outroCnpj = '11222333000181';
+  const mesmaCidade = (extra = {}) => ({ nome: 'QA', sobrenome: 'Concorrente', email: emailQa('conc' + Math.random().toString(36).slice(2, 6)), senha: 'senha-qa-123', cnpj: outroCnpj, unidade: { nome: `qa alfa ${id}`, uf: 'rs', telefone: '(54) 9 9999-0002' }, ...extra });
+  const cid1 = await http('POST', '/auth/cadastro/admin', mesmaCidade());
+  ok(cid1.status === 409 && /outra empresa|outro CNPJ/.test(cid1.json.erro), 'outra empresa (outro CNPJ) tentando a MESMA cidade (outra caixa de letra, UF minúscula) é barrada logo no 1º passo (409)', `("${(cid1.json.erro || '').slice(0, 70)}…")`);
+  const cid1sem = await http('POST', '/auth/cadastro/admin', mesmaCidade({ unidade: { nome: `QA ÁLFA ${id}`, uf: 'RS' } }));
+  ok(cid1sem.status === 409, 'acento e maiúscula não driblam a regra ("ÁLFA" = "Alfa")', `(HTTP ${cid1sem.status})`);
+  const cid2 = await http('POST', '/auth/cadastro/admin', mesmaCidade({ unidade: { nome: `qa alfa ${id}`, uf: 'SC' } }));
+  ok(cid2.status === 200 && cid2.json.novaEmpresa, 'a mesma grafia em OUTRA UF é outra cidade e passa (Santa Maria/RS ≠ Santa Maria/PE)', `(HTTP ${cid2.status} ${cid2.json.erro || ''})`);
+  const cid3 = await http('POST', '/auth/cadastro/admin/confirmar', { ...mesmaCidade({ email: emailQa('alfa') }), codigo: '000000' });
+  ok(cid3.status === 400 || cid3.status === 409 || cid3.status === 403, 'o passo de confirmação também não é caminho de fuga', `(HTTP ${cid3.status})`);
+
+  await pool.query(`insert into unidades (slug, nome, uf, cnpj) values ($1, $2, 'RS', '11.222.333/0001-81')`, [`qa-terceira-${id}`, `QA Terceira ${idU}`]);
+  const addOcupada = await http('POST', '/unidades', { nome: `qa terceira ${id}`, uf: 'RS' }, tokenAdm);
+  ok(addOcupada.status === 409 && /outro CNPJ/.test(addOcupada.json.erro), 'logado, "Adicionar unidade" numa cidade que é de outro CNPJ: 409', `(HTTP ${addOcupada.status})`);
+  const addLivre = await http('POST', '/unidades', { nome: `QA Livre ${idU}`, uf: 'RS' }, tokenAdm);
+  ok(addLivre.status === 201, 'e numa cidade livre funciona');
+
   // ---------- cenário ----------
   const { rows: [{ hoje }] } = await pool.query(`select (now() at time zone 'America/Sao_Paulo')::date::text as hoje`);
   const soma = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -292,6 +311,102 @@ const gerarCnpj = (base12) => {
   const subAtomica = await http('POST', `/unidades/${slug}/admin/clientes/${prov2.json.cliente_id}/substituir`, { destino_id: cCad2.json.cliente.id }, tokenAdm);
   const { rows: [depoisConflito] } = await pool.query('select count(*)::int as n from atendimentos where cliente_id = $1', [prov2.json.cliente_id]);
   ok(outraConta.status === 200 && subAtomica.status === 409 && antesConflito.n === depoisConflito.n && depoisConflito.n === 1, 'substituição recusada no meio (destino agora tem atendimento) não move nada: os dados ficam como estavam');
+
+  // ---------- fases do atendimento: em andamento, concluído, falta da prestadora ----------
+  console.log('\nFases do atendimento e falta da prestadora');
+  const sit = (situacao, idAtd, token = tokenAdm) => http('POST', `/atendimentos/admin/${slug}/${idAtd}/situacao`, { situacao }, token);
+  const estado = async (idAtd) => (await pool.query('select status, prestadora_id from atendimentos where id = $1', [idAtd])).rows[0];
+  const futuroF = naoDomingo(soma(hoje, 6));
+  const fut = await http('POST', `/atendimentos/admin/${slug}`, { tipo_servico: 'QA Fase', data_atendimento: futuroF, hora_atendimento: '10:00', duracao_horas: 2, prestadora_id: A.id, cliente_novo: { nome: 'QA Cliente Fase' } }, tokenAdm);
+  await pool.query(`update atendimentos set status = 'aceito' where id = $1`, [fut.json.id]);
+  const fag0 = (await http('GET', `/atendimentos/admin/${slug}/agenda?data=${futuroF}`, null, tokenAdm)).json.find(x => x.id === fut.json.id);
+  ok(fag0.inicio_passou === false && fag0.fim_passou === false && fag0.em_andamento === false, 'atendimento futuro: ainda não começou (a agenda informa início/término passados e "em andamento")');
+  const fF = await sit('falta', fut.json.id), fC = await sit('concluido', fut.json.id);
+  ok(fF.status === 400 && /depois que o atendimento começou/.test(fF.json.erro), 'antes de começar NÃO dá pra registrar falta (400)', `("${fF.json.erro}")`);
+  ok(fC.status === 400 && /término/.test(fC.json.erro), 'nem concluir à mão antes do término (400)', `("${fC.json.erro}")`);
+  const fCan = await sit('cancelado', fut.json.id), fProg = await sit('programado', fut.json.id);
+  ok(fCan.status === 200 && fProg.status === 200, 'antes de começar dá pra cancelar e reprogramar');
+
+  // em andamento: começou há 30 min e dura 2 h (feito por SQL pra valer em qualquer horário do dia)
+  const and = await http('POST', `/atendimentos/admin/${slug}`, { tipo_servico: 'QA Fase Andamento', data_atendimento: futuroF, hora_atendimento: '15:00', duracao_horas: 2, prestadora_id: A.id, cliente_novo: { nome: 'QA Cliente Fase' } }, tokenAdm);
+  await pool.query(`update atendimentos set status = 'aceito', data_atendimento = ((now() at time zone 'America/Sao_Paulo') - interval '30 minutes')::date,
+                      hora_atendimento = ((now() at time zone 'America/Sao_Paulo') - interval '30 minutes')::time(0), duracao_horas = 2 where id = $1`, [and.json.id]);
+  const diaAnd = (await pool.query('select data_atendimento::text as d from atendimentos where id = $1', [and.json.id])).rows[0].d;
+  const fag1 = (await http('GET', `/atendimentos/admin/${slug}/agenda?data=${diaAnd}`, null, tokenAdm)).json.find(x => x.id === and.json.id);
+  ok(fag1.em_andamento === true && fag1.inicio_passou === true && fag1.fim_passou === false && fag1.status === 'aceito', 'começou e não terminou: EM ANDAMENTO (calculado na hora; o status gravado segue "aceito")');
+  const calAnd = await http('GET', `/atendimentos/prestadora/me/calendario?mes=${diaAnd.slice(0, 7)}`, null, A.token);
+  ok(calAnd.json.find(x => x.id === and.json.id)?.em_andamento === true, 'a prestadora também vê "em andamento"');
+  const meusAnd = await http('GET', '/atendimentos/cliente/me/atendimentos', null, cLogin.json.token);
+  ok(meusAnd.status === 200, 'o cliente continua conseguindo listar (campo em_andamento incluído)');
+  const andConc = await sit('concluido', and.json.id);
+  ok(andConc.status === 400, 'em andamento não dá pra concluir à mão (só depois do término)');
+  const andFalta = await sit('falta', and.json.id);
+  ok(andFalta.status === 200 && andFalta.json.status === 'falta', 'em andamento DÁ pra registrar a falta da prestadora (status "falta")');
+  const dashDepois = await http('GET', `/unidades/${slug}/admin/dashboard`, null, tokenAdm);
+  const resumoMes = await http('GET', `/atendimentos/admin/${slug}/agenda/resumo-mensal?mes=${diaAnd.slice(0, 7)}`, null, tokenAdm);
+  const contouFalta = (resumoMes.json.find(d => d.data === diaAnd)?.total || 0);
+  const emDia = (await pool.query(`select count(*)::int as n from atendimentos where unidade_id = $1 and data_atendimento = $2 and status not in ('cancelado', 'falta')`, [uni.id, diaAnd])).rows[0].n;
+  ok(contouFalta === emDia, 'a falta NÃO entra nas contagens do calendário (só programado e concluído contam)', `(${contouFalta} x ${emDia})`);
+  ok(Number(dashDepois.json.atendimentos_hoje) >= 0, 'o painel responde com a falta no banco');
+  const fin = await http('GET', `/financeiro/${slug}/resumo?mes=${diaAnd.slice(0, 7)}`, null, tokenAdm);
+  ok(fin.status === 200 && !JSON.stringify(fin.json.por_servico).includes('QA Fase Andamento'), 'a falta não vira receita nem repasse no Financeiro');
+  const refaz = await sit('concluido', and.json.id);
+  ok(refaz.status === 200 && refaz.json.status === 'concluido', 'engano da falta: dá pra voltar a "concluído"');
+  await sit('falta', and.json.id);
+  const faltaCancela = await sit('cancelado', and.json.id), faltaProg = await sit('programado', and.json.id);
+  ok(faltaCancela.status === 400 && faltaProg.status === 400, 'registrada a falta, não cancela nem reprograma (400)');
+
+  // terminou: conclui sozinho e, concluído, só pode virar falta
+  const ontem = (() => { let d = soma(hoje, -1); while (new Date(d + 'T00:00:00Z').getUTCDay() === 0) d = soma(d, -1); return d; })();
+  const ter = await http('POST', `/atendimentos/admin/${slug}`, { tipo_servico: 'QA Fase Terminou', data_atendimento: soma(hoje, 5) > ontem ? naoDomingo(soma(hoje, 5)) : ontem, hora_atendimento: '09:00', duracao_horas: 1, prestadora_id: B.id, cliente_novo: { nome: 'QA Cliente Fase' } }, tokenAdm);
+  await pool.query(`update atendimentos set status = 'aceito', data_atendimento = $2 where id = $1`, [ter.json.id, ontem]);
+  const { concluirAtendimentosRealizados } = require('../src/utils/conclusao');
+  await concluirAtendimentosRealizados();
+  ok((await estado(ter.json.id)).status === 'concluido', 'o horário de término passou: o sistema marca como concluído sozinho');
+  const terCancela = await sit('cancelado', ter.json.id), terProg = await sit('programado', ter.json.id);
+  ok(terCancela.status === 400 && terProg.status === 400 && /prestadora não foi/.test(terCancela.json.erro), 'depois de concluído só dá pra mudar pra "prestadora não foi" (cancelar/reprogramar: 400)', `("${terCancela.json.erro}")`);
+  const terFalta = await sit('falta', ter.json.id);
+  ok(terFalta.status === 200 && (await estado(ter.json.id)).status === 'falta', 'concluído → falta funciona');
+  const faltaDeNovo = await sit('falta', ter.json.id);
+  ok(faltaDeNovo.status === 200, 'repetir a falta não dá erro');
+  const semPrestFalta = await http('POST', `/atendimentos/admin/${slug}`, { tipo_servico: 'QA Fase Sem', data_atendimento: ontem, hora_atendimento: '09:00', duracao_horas: 1 }, tokenAdm);
+  const fSem = await sit('falta', semPrestFalta.json.id);
+  ok(fSem.status === 400, 'atendimento sem prestadora não tem falta (400)');
+  const fProposto = await http('POST', `/atendimentos/admin/${slug}`, { tipo_servico: 'QA Fase Prop', data_atendimento: ontem, hora_atendimento: '08:00', duracao_horas: 1, prestadora_id: A.id }, tokenAdm);
+  const fProp = await sit('falta', fProposto.json.id);
+  ok(fProp.status === 400, 'convite que a prestadora nunca aceitou também não vira falta (400)');
+  const fPrest = await sit('falta', ter.json.id, B.token);
+  ok(fPrest.status === 403 || fPrest.status === 401, 'prestadora não registra falta (nem a dela)');
+
+  // a prestadora NUNCA vê a falta
+  const calB2 = await http('GET', `/atendimentos/prestadora/me/calendario?mes=${ontem.slice(0, 7)}`, null, B.token);
+  const dela = calB2.json.find(x => x.id === ter.json.id);
+  ok(dela && dela.status === 'concluido', 'pra prestadora o atendimento com falta continua aparecendo como "concluído"');
+  const tudoDela = JSON.stringify([calB2.json, (await http('GET', '/atendimentos/prestadora/me/convites', null, B.token)).json, (await http('GET', '/atendimentos/prestadora/me/agenda', null, B.token)).json,
+    (await http('GET', '/atendimentos/prestadora/me/resumo', null, B.token)).json, (await http('GET', '/perfil', null, B.token)).json, (await http('GET', '/auth/sessao', null, B.token)).json,
+    (await http('GET', '/atendimentos/prestadora/me/avisos', null, B.token)).json]);
+  ok(!/falta/i.test(tudoDela), 'nada do que a API devolve à prestadora (agenda, calendário, resumo, perfil, sessão, avisos) menciona falta');
+  const loginDela = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: emailQa('pb'), senha: B.senha });
+  ok(!/falta/i.test(JSON.stringify(loginDela.json)), 'nem o login');
+
+  // percentual de faltas aceitável (controle da franquia, por prestadora)
+  const eq1 = await http('GET', `/unidades/${slug}/admin/equipe`, null, tokenAdm);
+  const linhaB = eq1.json.find(p => p.prestadora_id === B.id), linhaA = eq1.json.find(p => p.prestadora_id === A.id);
+  ok(linhaB.faltas === 1 && linhaB.atendimentos_devidos >= 1 && linhaB.faltas_aceitavel_pct === null, 'a Equipe traz faltas e atendimentos devidos de cada prestadora (limite ainda não definido)', JSON.stringify([linhaB.faltas, linhaB.atendimentos_devidos, linhaB.faltas_aceitavel_pct]));
+  ok(linhaA.faltas === 1, 'a Ana (que faltou no "em andamento") também tem 1 falta');
+  const lim = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { faltas_aceitavel_pct: '7,5' }, tokenAdm);
+  ok(lim.status === 200 && Number(lim.json.faltas_aceitavel_pct) === 7.5, 'o dono define o percentual aceitável de faltas da prestadora (7,5%)', JSON.stringify(lim.json).slice(0, 100));
+  const eq2 = await http('GET', `/unidades/${slug}/admin/equipe`, null, tokenAdm);
+  ok(Number(eq2.json.find(p => p.prestadora_id === B.id).faltas_aceitavel_pct) === 7.5 && eq2.json.find(p => p.prestadora_id === A.id).faltas_aceitavel_pct === null, 'cada prestadora tem o seu limite');
+  const limRuim = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { faltas_aceitavel_pct: 150 }, tokenAdm);
+  const limNeg = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { faltas_aceitavel_pct: -1 }, tokenAdm);
+  ok(limRuim.status === 400 && limNeg.status === 400, 'percentual fora de 0–100: 400');
+  const limFunc = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { faltas_aceitavel_pct: 1 }, A.token);
+  ok(limFunc.status === 403, 'prestadora não define limite (403)');
+  const limLimpa = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { faltas_aceitavel_pct: '' }, tokenAdm);
+  ok(limLimpa.status === 200 && limLimpa.json.faltas_aceitavel_pct === null, 'vazio remove o limite');
+  const limOutra = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { faltas_aceitavel_pct: 3 }, tokenAdm);
+  ok(limOutra.status === 200, 'e dá pra definir de novo');
 
   // ---------- prestadora inativa ----------
   console.log('\nPrestadora ativa/inativa');

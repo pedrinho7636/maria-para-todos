@@ -301,6 +301,36 @@ fechar o navegador; desmarcado, sobrevive a recarregar a página e some ao fecha
 e qual unidade estavam abertas): atualizar a página volta pro mesmo lugar, sem novo login. `GET /auth/sessao` reabre a sessão
 (token vencido ou conta desativada → volta pra home). Os links de convite (`?perfil=…`, `?cadastro=…`) mostram a tela pedida.
 
+**Fases do atendimento e falta da prestadora (agenda):**
+- Antes de começar: **programado** ou **cancelado**. Começou e não terminou: **▶ atendimento em andamento** (não é status gravado:
+  é `aceito` entre o início e o término, calculado no relógio de Brasília). Passou o horário de **término**: o sistema **conclui
+  sozinho** e, depois de concluído, o administrador **só pode mudar para "prestadora não foi" (falta)** — cancelar/reprogramar
+  um concluído é recusado (400). Concluir à mão só depois do término.
+- **Falta** (`status = falta`): só em atendimento confirmado/concluído **que já começou** e com prestadora. Não conta como atendimento
+  nem entra em receita/repasse; engano se desfaz voltando a "concluído". Depois de registrada a falta não cancela nem reprograma.
+- **Meta de faltas** (Equipe → *Meta de faltas*, só administrador): percentual aceitável por prestadora. A linha da Equipe mostra
+  "Faltas: X de Y (Z%) · aceitável até N%" e fica em **vermelho** se passar. Taxa = faltas ÷ (concluídos + faltas).
+- **A prestadora nunca vê isso**: pra ela o atendimento com falta continua "concluído"; a meta mora em tabela à parte
+  (`controle_prestadora`) e nenhuma rota dela devolve a palavra falta (testado em `teste:agenda`).
+
+**Cidade pertence a um único CNPJ (regra estrita):** a mesma cidade (nome + UF, sem diferenciar acento/maiúscula) não pode existir em
+dois CNPJs. Vale no cadastro de administrador (barra já no 1º passo, antes do e-mail), em "Adicionar unidade" e no `admin:criar`,
+com trava contra duas empresas tentando a mesma cidade ao mesmo tempo. Mesmo nome em **UF diferente** é outra cidade (Santa Maria/RS ≠
+Santa Maria/PE). `npm run unidades:conflitos` só **lista** cidades que já estejam em mais de um CNPJ no banco.
+
+**Carregando com porcentagem:** barra fina no topo em qualquer chamada que passa de ~0,3 s; cartão com **porcentagem** ao entrar,
+reabrir a sessão, trocar de unidade (% = chamadas concluídas ÷ esperadas) e ao enviar a planilha (% de bytes enviados, depois
+"processando…").
+
+**Celular:** menu do painel numa linha própria com rolagem; seletor de cidades vira lista suspensa (mais de 3 cidades); campos com 16 px
+(sem zoom no iPhone), botões de 40–44 px, janelas quase em tela cheia e o balão do atendimento vira folha no rodapé.
+
+**Duas abas, duas sessões:** cada aba guarda a própria sessão (sessionStorage) — entrar numa conta em outra aba não troca a conta desta;
+o localStorage só guarda a sessão "lembrada" para abas **novas**, e sair/expirar numa aba só apaga a lembrada se for a mesma.
+
+**Relatórios:** o levantamento do que já é gerado, por categoria (Agenda, Financeiro, Satisfação), está em
+`RELATORIOS-LEVANTAMENTO-DE-DADOS.md`.
+
 **Prestadora ativa/inativa (Equipe → Desativar / Reativar, só administrador completo):** inativa **não recebe atendimento novo**
 (some da lista de atribuição; a API recusa em novo atendimento, troca, convite e série), **não entra mais no portal** (login
 recusado e quem estava logada é barrada na hora) e o histórico continua. Ao desativar, o sistema avisa quantos atendimentos futuros

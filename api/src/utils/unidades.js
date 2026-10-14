@@ -54,12 +54,28 @@ async function slugLivre(db, nome) {
   throw new ErroNegocio(409, 'Não foi possível gerar um identificador para a unidade. Tente outro nome.');
 }
 
-// Cria a unidade com o CNPJ (só dígitos) da empresa, recusando nome repetido DENTRO da mesma empresa.
+// REGRA ESTRITA: uma cidade (nome + UF, sem diferenciar acento/maiúscula) só pode pertencer a UM CNPJ no sistema todo.
+// Devolve a unidade que já ocupa essa cidade em OUTRO CNPJ (ou sem CNPJ, que não dá pra provar ser o mesmo), ou null.
+// "Passo Fundo/RS" de uma empresa trava "passo fundo/rs" de qualquer outra; "Santa Maria/RS" e "Santa Maria/PE" são cidades
+// diferentes e convivem.
+async function cidadeDeOutraEmpresa(db, nome, uf, cnpjDigitos) {
+  const { rows } = await db.query(
+    "select slug, nome, uf, upper(regexp_replace(coalesce(cnpj, ''), '[^0-9A-Za-z]', '', 'g')) as d from unidades where upper(uf) = upper($1)", [uf]);
+  const alvo = normalizarTexto(nome);
+  return rows.find(u => normalizarTexto(u.nome) === alvo && u.d !== cnpjDigitos) || null;
+}
+const msgCidadeOcupada = (nome, uf) => `A cidade ${nome}/${String(uf).toUpperCase()} já está atribuída a outra empresa (outro CNPJ) e não pode ser cadastrada de novo. Cada cidade pertence a um único CNPJ.`;
+
+// Cria a unidade com o CNPJ (só dígitos) da empresa, recusando nome repetido DENTRO da mesma empresa
+// e cidade que já pertence a OUTRO CNPJ.
 async function criarUnidade(db, dadosBrutos, cnpjDigitos) {
   const dados = { ...dadosBrutos, nome: capitalizarNome(dadosBrutos.nome) }; // vale também pra quem chega por script (admin:criar)
   // Trava por empresa até o fim da transação: dois pedidos simultâneos (duplo clique, duas abas) não
   // passam os dois pela checagem de nome repetido e criam a mesma unidade duas vezes.
   await db.query('select pg_advisory_xact_lock(hashtext($1))', ['empresa:' + cnpjDigitos]);
+  // e por cidade, no sistema todo: duas empresas tentando a mesma cidade ao mesmo tempo não passam as duas
+  await db.query('select pg_advisory_xact_lock(hashtext($1))', ['cidade:' + normalizarTexto(dados.nome) + '/' + String(dados.uf).toUpperCase()]);
+  if (await cidadeDeOutraEmpresa(db, dados.nome, dados.uf, cnpjDigitos)) throw new ErroNegocio(409, msgCidadeOcupada(dados.nome, dados.uf));
   const { rows: mesmaEmpresa } = await db.query(
     `select nome from unidades where upper(regexp_replace(cnpj, '[^0-9A-Za-z]', '', 'g')) = $1`, [cnpjDigitos]);
   if (mesmaEmpresa.some(u => normalizarTexto(u.nome) === normalizarTexto(dados.nome))) {
@@ -87,4 +103,4 @@ async function cnpjsDoAdmin(db, adminId) {
   return rows.map(r => r.d).filter(Boolean);
 }
 
-module.exports = { ErroNegocio, emTransacao, lerDadosUnidade, criarUnidade, vincularAdmin, cnpjsDoAdmin };
+module.exports = { ErroNegocio, emTransacao, lerDadosUnidade, criarUnidade, cidadeDeOutraEmpresa, msgCidadeOcupada, vincularAdmin, cnpjsDoAdmin };

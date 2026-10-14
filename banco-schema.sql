@@ -19,7 +19,8 @@ create type status_atendimento as enum (
   'recusado',    -- prestadora recusou o convite
   'aceito',      -- prestadora aceitou; entra na agenda confirmada
   'concluido',   -- atendimento realizado
-  'cancelado'    -- cancelado por qualquer parte
+  'cancelado',   -- cancelado por qualquer parte
+  'falta'        -- a prestadora NÃO foi (marcado pelo administrador; controle interno, a prestadora não vê)
 );
 
 create type status_avaliacao as enum (
@@ -194,7 +195,7 @@ select
   u.id as unidade_id,
   u.nome as unidade_nome,
   (select count(*) from atendimentos a
-    where a.unidade_id = u.id and a.status <> 'cancelado'
+    where a.unidade_id = u.id and a.status not in ('cancelado', 'falta')
       and a.data_atendimento = (now() at time zone 'America/Sao_Paulo')::date) as atendimentos_hoje,
   (select count(distinct a.prestadora_id) from atendimentos a
     where a.unidade_id = u.id and a.status = 'aceito'
@@ -429,3 +430,10 @@ create index idx_avisos_prestadora on avisos_prestadora(prestadora_id, lido_em);
 
 -- Quando o administrador mandou o convite (WhatsApp) pra um cliente sem cadastro criar o próprio perfil.
 alter table clientes add column convite_enviado_em timestamptz;
+
+-- Controle interno da franquia por prestadora (percentual de faltas aceitável). Tabela à parte: a prestadora nunca recebe isso.
+create table controle_prestadora (
+  prestadora_id uuid primary key references prestadoras(id) on delete cascade,
+  faltas_aceitavel_pct numeric(5,2) check (faltas_aceitavel_pct is null or (faltas_aceitavel_pct >= 0 and faltas_aceitavel_pct <= 100)),
+  atualizado_em timestamptz not null default now()
+);

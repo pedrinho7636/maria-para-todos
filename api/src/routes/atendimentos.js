@@ -16,6 +16,16 @@ const router = express.Router();
 
 const dataBR = (d) => String(d).slice(0, 10).split('-').reverse().join('/');
 
+// Fase do atendimento pelo relógio de Brasília. Início = data + horário (sem horário, o começo do dia); término = início +
+// duração (sem duração, 1 h; sem horário, o dia todo). EM ANDAMENTO = aceito que já começou e ainda não terminou (não é
+// um status gravado: é calculado na hora). Mesma regra da conclusão automática (utils/conclusao.js).
+const AGORA_BR = "(now() at time zone 'America/Sao_Paulo')";
+const INICIO_SQL = (a) => `(${a}.data_atendimento + coalesce(${a}.hora_atendimento, '00:00'::time))`;
+const FIM_SQL = (a) => `(case when ${a}.hora_atendimento is null then (${a}.data_atendimento + 1)::timestamp
+  else ${a}.data_atendimento + ${a}.hora_atendimento + coalesce(${a}.duracao_horas, 1)::float8 * interval '1 hour' end)`;
+const FASE_SQL = (a) => `(${INICIO_SQL(a)} <= ${AGORA_BR}) as inicio_passou, (${FIM_SQL(a)} <= ${AGORA_BR}) as fim_passou,
+  (${a}.status = 'aceito' and ${INICIO_SQL(a)} <= ${AGORA_BR} and ${FIM_SQL(a)} > ${AGORA_BR}) as em_andamento`;
+
 // Antes de ATRIBUIR um atendimento a uma prestadora (convite novo, troca de prestadora, "programado" manual):
 //  • ela já RECUSOU esse atendimento antes? (o registro fica ligado ao atendimento; o administrador é avisado pra não
 //    mandar o mesmo convite de novo pra quem já disse não)
@@ -55,7 +65,8 @@ async function checarAtribuicao(db, { prestadoraId, atendimento, body = {} }) {
 // Dados do atendimento no formato que checarAtribuicao espera (data como texto, hora HH:MM)
 async function lerParaChecar(db, id, unidadeId) {
   const { rows: [a] } = await db.query(
-    `select id, status, prestadora_id, data_atendimento::text as data, to_char(hora_atendimento, 'HH24:MI') as hora, duracao_horas::float8 as duracao_horas
+    `select id, status, prestadora_id, data_atendimento::text as data, to_char(hora_atendimento, 'HH24:MI') as hora, duracao_horas::float8 as duracao_horas,
+            ${FASE_SQL('atendimentos')}
      from atendimentos where id = $1 and unidade_id = $2`, [id, unidadeId]);
   return a || null;
 }
@@ -143,7 +154,7 @@ router.get('/admin/:slug/agenda', requireAuth, requireAcessoUnidade('agenda'), a
   const { data } = req.query;
   const comCancelados = req.query.incluir_cancelados === '1';
   const { rows } = await pool.query(
-    `select a.*, p.nome as prestadora_nome, c.nome as cliente_nome,
+    `select a.*, p.nome as prestadora_nome, c.nome as cliente_nome, ${FASE_SQL('a')},
             -- quem já recusou este atendimento (continua valendo mesmo depois de passar pra outra prestadora)
             (select coalesce(json_agg(json_build_object('prestadora_id', r.prestadora_id, 'nome', pr.nome, 'em', r.recusado_em) order by r.recusado_em), '[]'::json)
                from recusas_atendimento r join prestadoras pr on pr.id = r.prestadora_id where r.atendimento_id = a.id) as recusas
@@ -168,11 +179,29 @@ router.get('/admin/:slug/agenda', requireAuth, requireAcessoUnidade('agenda'), a
 //    já passou, a conclusão automática NÃO o conclui de novo.
 router.post('/admin/:slug/:id/situacao', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
   const { situacao } = req.body;
-  if (!['programado', 'concluido', 'cancelado'].includes(situacao)) {
-    return res.status(400).json({ erro: 'situacao deve ser programado, concluido ou cancelado' });
+  if (!['programado', 'concluido', 'cancelado', 'falta'].includes(situacao)) {
+    return res.status(400).json({ erro: 'situacao deve ser programado, concluido, cancelado ou falta' });
   }
   const atual = await lerParaChecar(pool, req.params.id, req.unidadeId);
   if (!atual) return res.status(404).json({ erro: 'Atendimento não encontrado' });
+
+  // Regras por fase (relógio de Brasília):
+  //  • antes de começar: programado ou cancelado;
+  //  • em andamento (começou, não terminou): ainda aceito — pode virar FALTA da prestadora ou ser cancelado;
+  //  • terminou: o sistema conclui sozinho e, depois de concluído, só dá pra mudar pra FALTA ("a prestadora não foi");
+  //  • falta: só volta pra concluído (corrigir engano).
+  const posConclusao = atual.status === 'concluido' || atual.status === 'falta';
+  if (situacao === 'falta') {
+    if (atual.status === 'falta') return res.json({ ...atual, prestadora_avisada: false });
+    if (!atual.prestadora_id || !['aceito', 'concluido'].includes(atual.status)) {
+      return res.status(400).json({ erro: 'A falta só pode ser registrada num atendimento confirmado (ou concluído) que tenha prestadora.' });
+    }
+    if (!atual.inicio_passou) return res.status(400).json({ erro: 'A falta só pode ser registrada depois que o atendimento começou.' });
+  } else if (situacao === 'concluido') {
+    if (atual.status !== 'falta' && !atual.fim_passou) return res.status(400).json({ erro: 'O atendimento só pode ser concluído depois do horário de término (o sistema conclui sozinho).' });
+  } else if (posConclusao) { // cancelar/reprogramar um atendimento já concluído (ou com falta) não vale
+    return res.status(400).json({ erro: 'Depois de concluído, o atendimento só pode ser alterado para "prestadora não foi" (falta).' });
+  }
 
   // voltar a "programado" com prestadora vira "aceito": ela passa a ter esse horário ocupado — avisa se conflita
   if (situacao === 'programado' && atual.prestadora_id && atual.status !== 'aceito') {
@@ -184,6 +213,7 @@ router.post('/admin/:slug/:id/situacao', requireAuth, requireAcessoUnidade('agen
     `update atendimentos a set
        status = case $1::text when 'concluido' then 'concluido'::status_atendimento
                               when 'cancelado' then 'cancelado'::status_atendimento
+                              when 'falta' then 'falta'::status_atendimento
                               else case when a.prestadora_id is not null then 'aceito'::status_atendimento else 'pedido'::status_atendimento end end,
        valor_prestadora = case when $1::text in ('concluido', 'programado') and a.prestadora_id is not null
                                then coalesce(a.valor_prestadora, (select p.valor_por_atendimento from prestadoras p where p.id = a.prestadora_id))
@@ -222,7 +252,7 @@ router.get('/admin/:slug/agenda/resumo-mensal', requireAuth, requireAcessoUnidad
      from atendimentos
      where unidade_id = $1
        and date_trunc('month', data_atendimento) = date_trunc('month', ($2 || '-01')::date)
-       and status <> 'cancelado'
+       and status not in ('cancelado', 'falta')
      group by data_atendimento
      order by data_atendimento`,
     [req.unidadeId, mes]
@@ -259,7 +289,7 @@ router.post('/admin/:slug/:id/reatribuir', requireAuth, requireAcessoUnidade('ag
   // trocar pra OUTRA prestadora (ou convidar uma nova): avisa se ela já recusou este atendimento ou se tem horário em conflito
   if (prestadoraId) {
     const paraChecar = await lerParaChecar(pool, req.params.id, req.unidadeId);
-    if (paraChecar && !['concluido', 'cancelado'].includes(paraChecar.status) && paraChecar.prestadora_id !== prestadoraId) {
+    if (paraChecar && !['concluido', 'cancelado', 'falta'].includes(paraChecar.status) && paraChecar.prestadora_id !== prestadoraId) {
       const bloqueio = await checarAtribuicao(pool, { prestadoraId, atendimento: paraChecar, body: req.body });
       if (bloqueio) return res.status(bloqueio.status).json(bloqueio.json);
     }
@@ -273,7 +303,7 @@ router.post('/admin/:slug/:id/reatribuir', requireAuth, requireAcessoUnidade('ag
        -- quem já estava aceito continua aceito com a nova prestadora: trava a tarifa dela
        valor_prestadora = case when status = 'aceito' then (select valor_por_atendimento from prestadoras where id = $1::uuid) else null end,
        atualizado_em = now()
-     where id = $2 and unidade_id = $3 and status not in ('concluido', 'cancelado')
+     where id = $2 and unidade_id = $3 and status not in ('concluido', 'cancelado', 'falta')
      returning *`,
     [prestadoraId, req.params.id, req.unidadeId]
   );
@@ -322,11 +352,11 @@ router.patch('/admin/:slug/:id/valor', requireAuth, requireAcessoUnidade('agenda
 router.post('/admin/:slug/:id/concluir', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
   const { rows: [atendimento] } = await pool.query(
     `update atendimentos set status = 'concluido', atualizado_em = now()
-     where id = $1 and unidade_id = $2 and status = 'aceito'
+     where id = $1 and unidade_id = $2 and status = 'aceito' and ${FIM_SQL('atendimentos')} <= ${AGORA_BR}
      returning *`,
     [req.params.id, req.unidadeId]
   );
-  if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado ou não está em status "aceito"' });
+  if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado, não está "aceito" ou ainda não terminou' });
   res.json(atendimento);
 }));
 
@@ -665,7 +695,10 @@ router.post('/admin/:slug/serie/:serieId/cancelar', requireAuth, requireAcessoUn
 // convite (ou aceito antes da tarifa existir): a tarifa atual dela.
 // Além disso cada linha traz o cliente, o horário de término e os `conflitos`: outros atendimentos DELA que se
 // sobrepõem a este (a tela marca em vermelho — e o aceite é barrado quando o conflito é com um já confirmado).
-const COLUNAS_PRESTADORA = `a.id, a.tipo_servico, a.area, a.data_atendimento, a.hora_atendimento, a.duracao_horas, a.status,
+// A FALTA é controle interno da franquia: pra prestadora ela aparece como "concluído" (nunca como falta).
+const COLUNAS_PRESTADORA = `a.id, a.tipo_servico, a.area, a.data_atendimento, a.hora_atendimento, a.duracao_horas,
+  case when a.status = 'falta' then 'concluido'::status_atendimento else a.status end as status,
+  (a.status = 'aceito' and ${INICIO_SQL('a')} <= ${AGORA_BR} and ${FIM_SQL('a')} > ${AGORA_BR}) as em_andamento,
   to_char(a.hora_atendimento + (coalesce(a.duracao_horas, 1)::float8 * interval '1 hour'), 'HH24:MI') as hora_fim,
   a.data_atendimento::text as dia, cl.nome as cliente_nome,
   coalesce(a.valor_prestadora, p.valor_por_atendimento) as valor_pago,
@@ -699,7 +732,7 @@ router.get('/prestadora/me/calendario', requireAuth, requireRole('prestadora'), 
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) return res.status(400).json({ erro: 'mes inválido — use AAAA-MM' });
   const { rows } = await pool.query(
     `select ${COLUNAS_PRESTADORA} ${DE_PRESTADORA}
-     where a.prestadora_id = $1 and a.status in ('proposto', 'aceito', 'concluido', 'cancelado')
+     where a.prestadora_id = $1 and a.status in ('proposto', 'aceito', 'concluido', 'cancelado', 'falta')
        and a.data_atendimento >= ($2 || '-01')::date and a.data_atendimento < (($2 || '-01')::date + interval '1 month')
      order by a.data_atendimento, a.hora_atendimento`,
     [req.user.id, mes]
@@ -832,6 +865,7 @@ router.get('/cliente/me/atendimentos', requireAuth, requireRole('cliente'), asyn
     `select a.id, a.tipo_servico, a.area, a.data_atendimento::text as dia, to_char(a.hora_atendimento, 'HH24:MI') as hora,
             to_char(a.hora_atendimento + (coalesce(a.duracao_horas, 1)::float8 * interval '1 hour'), 'HH24:MI') as hora_fim,
             a.status, upper(left(a.id::text, 8)) as codigo,
+            (a.status = 'aceito' and ${INICIO_SQL('a')} <= ${AGORA_BR} and ${FIM_SQL('a')} > ${AGORA_BR}) as em_andamento,
             case when a.status in ('aceito', 'concluido') then a.prestadora_id end as prestadora_id
      from atendimentos a
      where a.cliente_id = $1

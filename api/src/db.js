@@ -35,6 +35,9 @@ pool.on('error', (erro) => {
 // (if not exists), então pode rodar sempre — banco novo, antigo ou já atualizado.
 // Espelha o final do banco-schema.sql; ao criar coluna/tabela nova, ponha aqui também.
 const MIGRACOES = [
+  // atendimento em que a PRESTADORA NÃO FOI (marcado pelo administrador depois do início): não conta como realizado nem
+  // nas contagens e é dado de controle da franquia — a prestadora nunca vê essa marca. Vem ANTES das views que citam 'falta'.
+  `alter type status_atendimento add value if not exists 'falta'`,
   `alter type origem_pedido add value if not exists 'manual'`,
   `alter type origem_pedido add value if not exists 'importacao'`,
 
@@ -112,7 +115,7 @@ const MIGRACOES = [
      u.id as unidade_id,
      u.nome as unidade_nome,
      (select count(*) from atendimentos a
-       where a.unidade_id = u.id and a.status <> 'cancelado'
+       where a.unidade_id = u.id and a.status not in ('cancelado', 'falta')
          and a.data_atendimento = (now() at time zone 'America/Sao_Paulo')::date) as atendimentos_hoje,
      (select count(distinct a.prestadora_id) from atendimentos a
        where a.unidade_id = u.id and a.status = 'aceito'
@@ -169,6 +172,14 @@ const MIGRACOES = [
 
   // quando o administrador mandou o convite (WhatsApp) pra um cliente sem cadastro criar o próprio perfil
   `alter table clientes add column if not exists convite_enviado_em timestamptz`,
+
+  // controle interno por prestadora (percentual de faltas aceitável, definido pela franquia). Fica numa tabela à parte
+  // de propósito: o "select *" do perfil/login da própria prestadora nunca pode devolver isso.
+  `create table if not exists controle_prestadora (
+     prestadora_id uuid primary key references prestadoras(id) on delete cascade,
+     faltas_aceitavel_pct numeric(5,2) check (faltas_aceitavel_pct is null or (faltas_aceitavel_pct >= 0 and faltas_aceitavel_pct <= 100)),
+     atualizado_em timestamptz not null default now()
+   )`,
 
   // índices que a sincronização entre usuários consulta a cada poucos segundos
   `create index if not exists idx_atendimentos_unidade_atualizado on atendimentos(unidade_id, atualizado_em)`,

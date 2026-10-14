@@ -1535,6 +1535,20 @@
     }
 
     /* agenda do administrador: atendimento que a prestadora recusou (ainda sem outra) */
+    /* em andamento: já começou e ainda não terminou */
+    .tl-block.em-andamento {
+      background: var(--blue-soft);
+      border-color: var(--blue);
+      color: var(--blue)
+    }
+
+    /* a prestadora não foi (controle interno da franquia) */
+    .tl-block.falta {
+      background: var(--bg);
+      border: 1.5px dashed var(--red);
+      color: var(--red)
+    }
+
     .tl-block.recusado {
       background: var(--red-soft);
       border-color: var(--red);
@@ -1590,6 +1604,87 @@
     }
 
     /* horário: dois seletores (hora 00–23 e minuto de 5 em 5), sempre em 24 h */
+    /* barra fina no topo (qualquer chamada que demora) + cartão com porcentagem (carregamentos grandes) */
+    #barra-topo {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      width: 100%;
+      z-index: 10001;
+      background: linear-gradient(90deg, transparent, var(--green), transparent);
+      background-size: 40% 100%;
+      background-repeat: no-repeat;
+      animation: barra-corre 1.1s linear infinite;
+      display: none
+    }
+
+    @keyframes barra-corre {
+      from { background-position: -40% 0 }
+      to { background-position: 140% 0 }
+    }
+
+    #carregando-tela {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      background: rgba(11, 31, 24, .45);
+      backdrop-filter: blur(2px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px
+    }
+
+    .carregando-card {
+      background: var(--surface);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding: 22px 24px;
+      width: min(360px, 100%);
+      text-align: center
+    }
+
+    .carregando-titulo {
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 14px
+    }
+
+    .carregando-trilho {
+      height: 8px;
+      border-radius: 8px;
+      background: var(--green-soft);
+      overflow: hidden
+    }
+
+    .carregando-barra {
+      height: 100%;
+      width: 0;
+      background: var(--green);
+      border-radius: 8px;
+      transition: width .25s ease
+    }
+
+    .carregando-barra.indeterminada {
+      width: 40% !important;
+      animation: barra-corre-card 1s ease-in-out infinite alternate
+    }
+
+    @keyframes barra-corre-card {
+      from { margin-left: 0 }
+      to { margin-left: 60% }
+    }
+
+    .carregando-pct {
+      margin-top: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--muted)
+    }
+
     .hora-sel {
       display: flex;
       align-items: center;
@@ -2754,6 +2849,240 @@
     :root[data-theme="dark"] .chip-off {
       background: #3A2A1E;
       color: #D9A878
+    }
+
+    /* =====================================================================================================
+       CELULAR (a maior parte dos acessos): menu em linha própria com rolagem, seletor de cidades que não quebra,
+       alvos de toque de 44 px, campos com 16 px (o iPhone dá zoom em campo menor), balões e janelas em tela cheia.
+       ===================================================================================================== */
+    .unit-select {
+      display: none
+    }
+
+    @media (max-width: 700px) {
+      html, body {
+        overflow-x: hidden
+      }
+
+      /* barra do topo: marca + sair + foto na 1ª linha; o menu (Visão geral, Agenda…) numa 2ª linha só dele, que rola */
+      .topbar-inner {
+        height: auto;
+        flex-wrap: wrap;
+        row-gap: 0;
+        padding: 8px 14px 0
+      }
+
+      .topbar-right {
+        gap: 10px
+      }
+
+      .topnav {
+        order: 3;
+        flex: 1 0 100%;
+        margin: 6px -14px 0;
+        padding: 0 10px 8px;
+        gap: 6px;
+        overflow-x: auto;
+        scroll-snap-type: x proximity;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch
+      }
+
+      .topnav a {
+        flex: none;
+        scroll-snap-align: start;
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+        padding: 0 15px;
+        font-size: 14px;
+        background: rgba(255, 255, 255, .06)
+      }
+
+      .topnav a.active {
+        background: rgba(255, 255, 255, .22)
+      }
+
+      /* seletor de cidades: até 3 cabem lado a lado e rolam; com mais, vira uma lista suspensa */
+      .hero {
+        gap: 14px
+      }
+
+      .switcher {
+        display: flex;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch
+      }
+
+      .switcher button {
+        flex: none;
+        white-space: nowrap;
+        min-height: 44px;
+        padding: 0 16px
+      }
+
+      .switcher[data-muitas] button {
+        display: none
+      }
+
+      .switcher[data-muitas] .unit-select {
+        display: block;
+        width: 100%;
+        min-height: 44px;
+        border: 0;
+        background: transparent;
+        color: var(--ink);
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 600;
+        padding: 0 10px
+      }
+
+      .view-head {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px
+      }
+
+      .hero h1, .view-head h1 {
+        font-size: 24px;
+        line-height: 1.2
+      }
+
+      /* toque e leitura */
+      input, select, textarea {
+        font-size: 16px !important
+      }
+
+      .btn-sm, .btn-accept, .btn-decline, .btn-verify {
+        min-height: 40px
+      }
+
+      .btn-lg {
+        min-height: 48px
+      }
+
+      .stat-value {
+        font-size: 26px
+      }
+
+      .stats, .pstat {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px
+      }
+
+      .panel-head {
+        flex-wrap: wrap;
+        gap: 6px
+      }
+
+      .tablerow {
+        padding: 12px 14px
+      }
+
+      .tablerow .btn-sm {
+        flex: 1 1 auto
+      }
+
+      .job {
+        padding: 12px 14px;
+        gap: 10px
+      }
+
+      .invite {
+        padding: 14px
+      }
+
+      .invite-actions {
+        display: flex;
+        gap: 8px
+      }
+
+      .invite-actions button {
+        flex: 1
+      }
+
+      .cli-card {
+        padding: 12px 14px;
+        gap: 10px
+      }
+
+      /* janelas: quase a tela toda, rolando por dentro */
+      .modal {
+        padding: 8px !important;
+        align-items: flex-end
+      }
+
+      .modal-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: 92vh !important;
+        border-radius: 16px 16px 12px 12px
+      }
+
+      .form-actions {
+        flex-wrap: wrap
+      }
+
+      .form-actions .btn-sm {
+        flex: 1 1 140px
+      }
+
+      .field-row {
+        flex-direction: column;
+        gap: 0
+      }
+
+      /* balão do atendimento na agenda: folha presa no rodapé, sem sair da tela */
+      .reatribuir-pop {
+        position: fixed !important;
+        left: 8px !important;
+        right: 8px !important;
+        top: auto !important;
+        bottom: 8px !important;
+        width: auto !important;
+        max-height: 82vh;
+        overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 0 -8px 30px rgba(0, 0, 0, .3)
+      }
+
+      /* calendários: dias maiores pra dedo */
+      .cal-day {
+        padding: 12px 0
+      }
+
+      .timeline {
+        font-size: 12px
+      }
+
+      .fin-colunas {
+        grid-template-columns: 1fr
+      }
+
+      .appfoot .foot-inner {
+        flex-direction: column;
+        gap: 4px;
+        text-align: center
+      }
+
+      .toast {
+        left: 12px;
+        right: 12px;
+        max-width: none;
+        bottom: 12px
+      }
+
+      .theme-toggle {
+        left: auto;
+        right: 12px;
+        bottom: 76px;
+        width: 40px;
+        height: 40px
+      }
     }
   </style>
 </head>
@@ -3974,6 +4303,21 @@
     </div>
   </div>
 
+  <div class="modal" id="modal-meta-faltas">
+    <div class="modal-card" style="max-width:400px">
+      <div class="modal-head"><h3>Meta de faltas</h3>
+        <button class="modal-close" onclick="fecharMetaFaltas()" aria-label="Fechar" title="Fechar (Esc)">×</button></div>
+      <p style="margin-bottom:12px">Qual percentual de faltas a franquia aceita de <b id="meta-nome"></b>? A taxa é <b>faltas ÷ atendimentos que deviam ter acontecido</b>
+        (concluídos + faltas). Passou da meta, a linha dela na Equipe fica em vermelho. É um <b>controle interno</b>: a prestadora não vê nada disso. Deixe em branco pra remover.</p>
+      <div class="field"><label for="meta-valor">Percentual aceitável (%)</label>
+        <input id="meta-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="ex.: 5"></div>
+      <div class="form-actions">
+        <button class="btn-sm ghost" onclick="fecharMetaFaltas()">Cancelar</button>
+        <button class="btn-sm" onclick="salvarMetaFaltas()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="modal-tarifa">
     <div class="modal-card" style="max-width:400px">
       <div class="modal-head"><h3>Valor por atendimento</h3>
@@ -4183,18 +4527,38 @@
     // A sessão (token) fica guardada no navegador: com "Manter conectado" em localStorage (sobrevive a fechar o navegador),
     // sem ele em sessionStorage (sobrevive a recarregar a página, some ao fechar a aba). Junto vai a "visão" (qual tela do
     // painel e qual unidade estavam abertas) pra recarregar a página voltar exatamente pro mesmo lugar.
-    function lerTokenSalvo() { try { return localStorage.getItem('pm-token') || sessionStorage.getItem('pm-token'); } catch (e) { return null; } }
+    // Cada ABA tem a sua própria sessão (sessionStorage): entrar numa conta em outra aba não troca a conta desta, e recarregar
+    // volta sempre pra quem estava aqui. O localStorage guarda só a sessão "lembrada" ("Manter conectado") pra ABAS NOVAS
+    // começarem logadas. Sair/token vencido numa aba só apaga a lembrada se for a mesma desta aba.
+    function lerTokenSalvo() { try { return sessionStorage.getItem('pm-token') || localStorage.getItem('pm-token'); } catch (e) { return null; } }
     function guardarToken(token, lembrar) {
       try {
-        localStorage.removeItem('pm-token'); sessionStorage.removeItem('pm-token');
-        (lembrar ? localStorage : sessionStorage).setItem('pm-token', token);
+        sessionStorage.setItem('pm-token', token);
+        if (lembrar) localStorage.setItem('pm-token', token); else localStorage.removeItem('pm-token');
       } catch (e) { }
     }
-    function esquecerToken() { try { ['pm-token', 'pm-visao'].forEach(k => { localStorage.removeItem(k); sessionStorage.removeItem(k); }); } catch (e) { } }
-    function guardarVisao(visao) {
-      try { (localStorage.getItem('pm-token') ? localStorage : sessionStorage).setItem('pm-visao', JSON.stringify(visao)); } catch (e) { }
+    function esquecerToken(token) {
+      try {
+        sessionStorage.removeItem('pm-token'); sessionStorage.removeItem('pm-visao');
+        if (!token || localStorage.getItem('pm-token') === token) { localStorage.removeItem('pm-token'); localStorage.removeItem('pm-visao'); }
+      } catch (e) { }
     }
-    function lerVisao() { try { return JSON.parse(localStorage.getItem('pm-visao') || sessionStorage.getItem('pm-visao') || 'null'); } catch (e) { return null; } }
+    // A "visão" (tela do painel + unidade): por aba; a cópia no localStorage só vale pra aba nova que herdou o MESMO token.
+    const marcaDoToken = () => String(authToken || '').slice(-16);
+    function guardarVisao(visao) {
+      try {
+        sessionStorage.setItem('pm-visao', JSON.stringify(visao));
+        if (localStorage.getItem('pm-token') === authToken) localStorage.setItem('pm-visao', JSON.stringify({ ...visao, t: marcaDoToken() }));
+      } catch (e) { }
+    }
+    function lerVisao() {
+      try {
+        const propria = sessionStorage.getItem('pm-visao');
+        if (propria) return JSON.parse(propria);
+        const lembrada = JSON.parse(localStorage.getItem('pm-visao') || 'null');
+        return lembrada && lembrada.t === marcaDoToken() ? lembrada : null;
+      } catch (e) { return null; }
+    }
     let authToken = lerTokenSalvo();
 
     // A API manda a versão do site em cada resposta (X-App-Versao). Se a aba foi aberta antes de uma atualização, a
@@ -4211,7 +4575,72 @@
       document.body.appendChild(faixa);
     }
 
-    async function api(path, opts = {}) {
+    // Indicadores de carregamento. A barra fina no topo aparece em qualquer chamada que passa de ~0,3 s. O cartão com PORCENTAGEM
+    // é pra carregamentos grandes (entrar, trocar de unidade, enviar planilha): a % = chamadas já concluídas ÷ chamadas esperadas
+    // (ou, no envio de arquivo, bytes enviados ÷ total), nunca passa de 99% antes de terminar de verdade.
+    const Carregando = {
+      emVoo: 0, timer: null,
+      entrou() { this.emVoo++; if (!this.timer) this.timer = setTimeout(() => { this.timer = null; if (this.emVoo > 0) this.barra(true); }, 300); Progresso.noInicio(); },
+      saiu() { this.emVoo = Math.max(0, this.emVoo - 1); if (this.emVoo === 0) { clearTimeout(this.timer); this.timer = null; this.barra(false); } Progresso.noFim(); },
+      barra(mostrar) { const b = document.getElementById('barra-topo'); if (b) b.style.display = mostrar ? 'block' : 'none'; },
+    };
+    const Progresso = {
+      ativo: false, esperadas: 0, iniciadas: 0, concluidas: 0, maior: 0, timer: null, visivel: false,
+      comecar(titulo, esperadas) {
+        this.ativo = true; this.esperadas = esperadas; this.iniciadas = 0; this.concluidas = 0; this.maior = 0;
+        clearTimeout(this.timer);
+        this.timer = setTimeout(() => { this.visivel = true; this.pintar(titulo, 0, false); }, 250); // carregamento rápido não pisca a tela
+        this.titulo = titulo;
+      },
+      noInicio() { if (this.ativo) this.iniciadas++; },
+      noFim() { if (!this.ativo) return; this.concluidas++; const total = Math.max(this.esperadas, this.iniciadas); this.pintar(this.titulo, total ? Math.min(99, Math.round(this.concluidas / total * 100)) : 0, false); },
+      definir(titulo, pct, indeterminada) { this.titulo = titulo; this.ativo = false; clearTimeout(this.timer); this.visivel = true; this.pintar(titulo, pct, indeterminada); },
+      pintar(titulo, pct, indeterminada) {
+        if (!this.visivel) return;
+        this.maior = Math.max(this.maior, pct); // só sobe
+        const tela = document.getElementById('carregando-tela'); if (!tela) return;
+        tela.style.display = 'flex';
+        document.getElementById('carregando-titulo').textContent = titulo;
+        const barra = document.getElementById('carregando-barra');
+        barra.classList.toggle('indeterminada', !!indeterminada);
+        barra.style.width = this.maior + '%';
+        document.getElementById('carregando-pct').textContent = indeterminada ? 'processando…' : this.maior + '%';
+      },
+      terminar() {
+        this.ativo = false; clearTimeout(this.timer);
+        const tela = document.getElementById('carregando-tela');
+        if (this.visivel && tela) { this.maior = 100; this.pintar(this.titulo, 100, false); setTimeout(() => { tela.style.display = 'none'; }, 180); }
+        this.visivel = false;
+      },
+    };
+    document.addEventListener('DOMContentLoaded', () => {
+      if (document.getElementById('barra-topo')) return;
+      const barra = document.createElement('div'); barra.id = 'barra-topo'; document.body.appendChild(barra);
+      const tela = document.createElement('div'); tela.id = 'carregando-tela'; tela.setAttribute('role', 'status'); tela.setAttribute('aria-live', 'polite');
+      tela.innerHTML = '<div class="carregando-card"><div class="carregando-titulo" id="carregando-titulo">Carregando…</div><div class="carregando-trilho"><div class="carregando-barra" id="carregando-barra"></div></div><div class="carregando-pct" id="carregando-pct">0%</div></div>';
+      document.body.appendChild(tela);
+    });
+    // Envio de arquivo com porcentagem de verdade (fetch não informa o progresso do envio; XMLHttpRequest informa)
+    function apiUpload(path, corpo, aoProgresso) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', API_BASE + path);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        if (authToken) xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable) aoProgresso(Math.round((e.loaded / e.total) * 100), false); };
+        xhr.upload.onload = () => aoProgresso(100, true); // enviado: agora é o servidor lendo a planilha
+        xhr.onload = () => {
+          let dados = {}; try { dados = JSON.parse(xhr.responseText); } catch (e) { }
+          verificarVersaoDoSite(xhr.getResponseHeader('x-app-versao'));
+          if (xhr.status >= 200 && xhr.status < 300) return resolve(dados);
+          const erro = new Error(dados.erro || ('Erro ' + xhr.status)); erro.status = xhr.status; erro.codigo = dados.codigo; erro.dados = dados; reject(erro);
+        };
+        xhr.onerror = () => reject(new Error('Falha de rede ao enviar o arquivo.'));
+        xhr.send(JSON.stringify(corpo));
+      });
+    }
+
+    async function apiBruta(path, opts = {}) {
       const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
       if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
       const res = await fetch(API_BASE + path, { ...opts, headers });
@@ -4224,8 +4653,9 @@
         // estava logado ficava preso numa tela autenticada vendo "Erro 401" nos
         // toasts de cada ação, sem entender que precisa entrar de novo.
         const estavaLogado = !!authToken;
+        const tokenInvalido = authToken;
         authToken = null; usuarioLogado = null;
-        esquecerToken();
+        esquecerToken(tokenInvalido);
         if (estavaLogado && typeof show === 'function') show('screen-home');
         throw new Error('Sessão expirada — faça login novamente.');
       }
@@ -4235,6 +4665,10 @@
         throw erro;
       }
       return dados;
+    }
+    async function api(path, opts = {}) {
+      Carregando.entrou();
+      try { return await apiBruta(path, opts); } finally { Carregando.saiu(); }
     }
   </script>
   <script>
@@ -4578,7 +5012,7 @@
         p.clientes ? api(`/unidades/${slug}/admin/clientes`) : Promise.resolve([]),
         p.avaliacoes ? api(`/avaliacoes/admin/${slug}`) : Promise.resolve([])
       ]);
-      equipeData[slug] = eq.map(e => ({ id: e.prestadora_id, nome: e.nome, ini: e.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), serv: Number(e.total_atendimentos), nota: Number(e.nota_media) || 0, ativa: e.ativa, telefone: e.telefone || '', email: e.email || '', pendente: !!e.primeiro_acesso_pendente, tarifa: e.valor_por_atendimento === null || e.valor_por_atendimento === undefined ? null : Number(e.valor_por_atendimento) }));
+      equipeData[slug] = eq.map(e => ({ faltas: Number(e.faltas) || 0, devidos: Number(e.atendimentos_devidos) || 0, limiteFaltas: e.faltas_aceitavel_pct === null || e.faltas_aceitavel_pct === undefined ? null : Number(e.faltas_aceitavel_pct), id: e.prestadora_id, nome: e.nome, ini: e.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), serv: Number(e.total_atendimentos), nota: Number(e.nota_media) || 0, ativa: e.ativa, telefone: e.telefone || '', email: e.email || '', pendente: !!e.primeiro_acesso_pendente, tarifa: e.valor_por_atendimento === null || e.valor_por_atendimento === undefined ? null : Number(e.valor_por_atendimento) }));
       clientesData[slug] = cl.map(c => ({ id: c.cliente_id, nome: c.nome, ini: c.nome.split(' ').map(p => p[0]).slice(0, 2).join(''), ultimo: (c.ultimo_atendimento_tipo || '—') + (c.ultimo_atendimento_data ? ' · ' + c.ultimo_atendimento_data : ''), total: Number(c.total_servicos), telefone: c.telefone || '', email: c.email || '', temConta: !!c.tem_conta, convite: c.convite_enviado_em || null, registrados: Number(c.total_registrados) || 0 }));
       avaliacoes = avs.map(a => ({ id: a.id, cliente: a.cliente_nome, prestadora: a.prestadora_nome, servico: a.servico || '', nota: a.nota, comentario: a.comentario, status: a.status, data: (a.criado_em || '').slice(0, 10) }));
     }
@@ -4588,7 +5022,7 @@
     const reaisPrest = v => (v === null || v === undefined ? null : formatarReais(v));
     const itemPrestadora = (a, status) => ({
       id: a.id, hora: a.hora_atendimento?.slice(0, 5), fim: a.hora_fim || '', serv: a.tipo_servico, area: a.area, valor: reaisPrest(a.valor_pago),
-      data: String(a.dia || a.data_atendimento).slice(0, 10), cliente: a.cliente_nome || '', status: status || a.status, conflitos: a.conflitos || [],
+      data: String(a.dia || a.data_atendimento).slice(0, 10), cliente: a.cliente_nome || '', status: status || a.status, conflitos: a.conflitos || [], emAndamento: !!a.em_andamento,
     });
     let avisosPrestadora = [];
     async function carregarDadosPrestadora() {
@@ -4681,7 +5115,8 @@
       authToken = resp.token;
       const lembrar = document.getElementById('login-manter') ? document.getElementById('login-manter').checked : true;
       guardarToken(authToken, lembrar || typeof identificadorDado === 'string'); // logo depois de um cadastro (entra direto) lembra sempre
-      await iniciarSessao(resp, { restaurando: false });
+      Progresso.comecar('Carregando os seus dados…', resp.perfil === 'prestadora' ? 6 : (resp.perfil === 'cliente' ? 2 : 9));
+      try { await iniciarSessao(resp, { restaurando: false }); } finally { Progresso.terminar(); }
     }
 
     // Monta a área do usuário que acabou de entrar (login) ou que voltou ao recarregar a página (sessão guardada).
@@ -4749,23 +5184,21 @@
       if (!authToken) return;
       const p = new URLSearchParams(location.search);
       if (p.get('perfil') || p.get('cadastro')) return;
-      const veu = document.createElement('div');
-      veu.id = 'restaurando-sessao';
-      veu.style.cssText = 'position:fixed;inset:0;z-index:9998;background:var(--bg);display:flex;align-items:center;justify-content:center;font:14px sans-serif;color:var(--muted)';
-      veu.textContent = 'Entrando…';
-      document.body.appendChild(veu);
+      Progresso.comecar('Entrando…', 8);
       try {
         const resp = await api('/auth/sessao');
+        try { sessionStorage.setItem('pm-token', authToken); } catch (e) { } // esta aba "adota" a sessão: outra aba entrar em outra conta não a troca
         await iniciarSessao(resp, { restaurando: true });
       } catch (err) {
-        if (err.status === 401 || err.status === 403) { authToken = null; esquecerToken(); } // sessão vencida/conta desativada
+        if (err.status === 401 || err.status === 403) { const velho = authToken; authToken = null; esquecerToken(velho); } // sessão vencida/conta desativada
         // falha de rede: mantém o token; recarregar de novo tenta outra vez
-      } finally { veu.remove(); }
+      } finally { Progresso.terminar(); }
     }
     function logout() {
       pararSincronizacao();
+      const tokenDaSaida = authToken;
       authToken = null; usuarioLogado = null;
-      esquecerToken();
+      esquecerToken(tokenDaSaida);
       show('screen-home');
     }
 
@@ -5086,8 +5519,10 @@
       const caixa = document.getElementById('unit-switcher');
       const slugs = unidadesDoLogin();
       caixa.style.display = slugs.length > 1 ? '' : 'none'; // uma unidade só = nada pra escolher
+      caixa.toggleAttribute('data-muitas', slugs.length > 3);
       caixa.innerHTML = slugs.map(s =>
-        `<button data-slug="${escapeHtml(s)}" class="${s === currentUnit ? 'active' : ''}" onclick="setUnit('${escapeHtml(s)}')"><span class="dot"></span>${escapeHtml((cidades[s] || {}).nome || s)}</button>`).join('');
+        `<button data-slug="${escapeHtml(s)}" class="${s === currentUnit ? 'active' : ''}" onclick="setUnit('${escapeHtml(s)}')"><span class="dot"></span>${escapeHtml((cidades[s] || {}).nome || s)}</button>`).join('')
+        + `<select class="unit-select" aria-label="Cidade" onchange="setUnit(this.value)">${slugs.map(s => `<option value="${escapeHtml(s)}" ${s === currentUnit ? 'selected' : ''}>${escapeHtml((cidades[s] || {}).nome || s)}</option>`).join('')}</select>`;
     }
     /* Layout do painel inicial por unidade: quais atalhos aparecem e em que ordem, e quais cartões de
        resumo ficam visíveis. A configuração vem da API (vale pra toda a equipe da unidade); aqui só se aplica. */
@@ -5157,10 +5592,12 @@
       document.getElementById('joblist').innerHTML = u.jobs.map(j => `<div class="job"><div class="job-time">${j.t}</div><div class="job-body"><strong>${escapeHtml(j.c)}</strong><span>${escapeHtml(j.p)}</span></div><div class="job-status ${j.s}">${j.st}</div></div>`).join('');
     }
     async function setUnit(key) {
+      Progresso.comecar('Abrindo a unidade…', 6);
       try {
         await carregarUnidadeAdmin(key);
         await carregarEquipeClientesAvaliacoes(key);
-      } catch (err) { toast('Erro ao trocar de unidade: ' + err.message); return; }
+      } catch (err) { Progresso.terminar(); toast('Erro ao trocar de unidade: ' + err.message); return; }
+      Progresso.terminar();
       setUnitUI(key);
       syncVersao = null; // outra unidade = outra impressão digital; a próxima checagem vira o novo ponto de partida
       verificarAtualizacoes();
@@ -5266,7 +5703,7 @@
       try {
         // cancelados vêm junto (riscados) pra poderem ser reativados, mas não entram na contagem
         const atendimentos = await api(`/atendimentos/admin/${currentUnit}/agenda?data=${dataISO}&incluir_cancelados=1`);
-        document.getElementById('agv-count').textContent = atendimentos.filter(a => a.status !== 'cancelado').length;
+        document.getElementById('agv-count').textContent = atendimentos.filter(a => a.status !== 'cancelado' && a.status !== 'falta').length;
         renderTimelineDia(atendimentos);
       } catch (err) { toast('Erro ao carregar agenda do dia: ' + err.message); }
     }
@@ -5344,6 +5781,12 @@
     // de confirmação (>2 dias) = azul · proposto dentro da janela (<=2 dias,
     // já pode ser confirmado pela prestadora) = laranja, pra chamar atenção.
     function classificarBlocoAgenda(item) {
+      if (item.status === 'falta') {
+        return { cls: ' falta', rotulo: (item.prestadora_nome ? escapeHtml(item.prestadora_nome) + ' · ' : '') + '✖ prestadora não foi' };
+      }
+      if (item.em_andamento) {
+        return { cls: ' em-andamento', rotulo: (item.prestadora_nome ? escapeHtml(item.prestadora_nome) + ' · ' : '') + '▶ atendimento em andamento' };
+      }
       if (item.status === 'cancelado') {
         const quem = item.prestadora_nome || item.profissional_externo || '';
         return { cls: ' cancelado', rotulo: (quem ? escapeHtml(quem) + ' · ' : '') + 'cancelado' };
@@ -5375,13 +5818,31 @@
     // Balão do atendimento: troca a prestadora e corrige o local. O campo de local
     // fica sempre aqui pro admin poder preencher/apagar; nas telas de quem lê
     // (prestadora, avisos de WhatsApp) atendimento sem local simplesmente não mostra a linha.
+    // O que o administrador pode escolher em "Situação", conforme a FASE do atendimento (relógio de Brasília):
+    //  antes de começar → programado ou cancelado · em andamento → falta da prestadora ou cancelado ·
+    //  depois do término (o sistema conclui sozinho) → só "prestadora não foi" · falta → só voltar pra concluído.
+    function situacoesDisponiveis(item) {
+      const FALTA = ['falta', 'Prestadora não foi (falta)'];
+      if (item.status === 'falta') return { atual: 'falta', opcoes: [FALTA, ['concluido', 'Concluído']] };
+      if (item.status === 'concluido') return { atual: 'concluido', opcoes: [['concluido', 'Concluído'], FALTA] };
+      if (item.status === 'cancelado') return { atual: 'cancelado', opcoes: [['programado', 'Programado'], ['cancelado', 'Cancelado (não conta)']] };
+      if (item.status === 'aceito' && item.fim_passou) { // terminou, e o sistema ainda vai concluir (roda a cada poucos minutos)
+        return { atual: 'programado', opcoes: [['programado', 'Programado'], ['concluido', 'Concluído'], FALTA, ['cancelado', 'Cancelado (não conta)']] };
+      }
+      const base = [['programado', item.em_andamento ? 'Atendimento em andamento' : 'Programado']];
+      if (item.em_andamento) base.push(FALTA);
+      base.push(['cancelado', 'Cancelado (não conta)']);
+      return { atual: 'programado', opcoes: base };
+    }
+    const prestadoraTravada = (item) => ['concluido', 'cancelado', 'falta'].includes(item.status);
+
     let reatribuirItem = null;
     function abrirReatribuir(ev, item) {
       fecharReatribuirPop();
       reatribuirItem = item;
-      const concluido = item.status === 'concluido'; // concluído: a prestadora não troca, mas o local ainda pode ser corrigido
+      const concluido = item.status === 'concluido' || item.status === 'falta'; // concluído: a prestadora não troca, mas o local ainda pode ser corrigido
       const cancelado = item.status === 'cancelado';
-      const situacaoAtual = cancelado ? 'cancelado' : concluido ? 'concluido' : 'programado';
+      const situacoes = situacoesDisponiveis(item);
       const rect = ev.currentTarget.getBoundingClientRect();
       const recusasItem = item.recusas || [];
       const jaRecusou = new Set(recusasItem.map(r => r.prestadora_id));
@@ -5395,10 +5856,10 @@
       pop.innerHTML = `
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Situação</label>
         <select id="reatribuir-situacao">
-          <option value="programado" ${situacaoAtual === 'programado' ? 'selected' : ''}>Programado</option>
-          <option value="concluido" ${situacaoAtual === 'concluido' ? 'selected' : ''}>Concluído</option>
-          <option value="cancelado" ${situacaoAtual === 'cancelado' ? 'selected' : ''}>Cancelado (não conta)</option>
+          ${situacoes.opcoes.map(([valor, rotulo]) => `<option value="${valor}" ${valor === situacoes.atual ? 'selected' : ''}>${rotulo}</option>`).join('')}
         </select>
+        ${item.status === 'concluido' ? '<p style="font-size:11.5px;margin:-4px 0 10px">Depois de concluído só dá pra marcar <b>prestadora não foi</b>. Isso é controle interno da franquia: a prestadora não vê.</p>' : ''}
+        ${item.em_andamento ? '<p style="font-size:11.5px;margin:-4px 0 10px">Começou e ainda não terminou. Se a prestadora não foi, marque a falta (controle interno: ela não vê).</p>' : ''}
         ${recusasItem.length ? `<div class="fin-alerta" style="font-size:12px;margin:0 0 10px">↩ <b>Já recusou(aram) este atendimento:</b> ${recusasItem.map(r => escapeHtml(r.nome) + ' (' + dataHoraBR(r.em) + ')').join(', ')}.
           Ao escolher uma delas de novo, o sistema pergunta antes de enviar.</div>` : ''}
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Prestadora${concluido ? ' <span style="font-weight:400">(atendimento concluído)</span>' : cancelado ? ' <span style="font-weight:400">(cancelado)</span>' : ''}</label>
@@ -5442,12 +5903,10 @@
     async function salvarReatribuicao(atendimentoId) {
       const item = reatribuirItem;
       if (!item || item.id !== atendimentoId) { fecharReatribuirPop(); return; }
-      const concluido = item.status === 'concluido';
-      const cancelado = item.status === 'cancelado';
-      const situacaoAtual = cancelado ? 'cancelado' : concluido ? 'concluido' : 'programado';
+      const situacaoAtual = situacoesDisponiveis(item).atual;
       const situacao = document.getElementById('reatribuir-situacao').value;
       const mudouSituacao = situacao !== situacaoAtual;
-      const prestadoraId = concluido || cancelado ? (item.prestadora_id || null) : (document.getElementById('reatribuir-select').value || null);
+      const prestadoraId = prestadoraTravada(item) ? (item.prestadora_id || null) : (document.getElementById('reatribuir-select').value || null);
       const local = document.getElementById('reatribuir-local').value.trim();
       const valor = lerReais(document.getElementById('reatribuir-valor').value);
       if (Number.isNaN(valor)) { toast('Valor inválido — use números, ex.: 150,00.'); return; }
@@ -5474,7 +5933,7 @@
         fecharReatribuirPop();
         const alterados = [mudouSituacao && 'situação', mudouPrestadora && 'prestadora', mudouLocal && 'local', mudouValor && 'valor'].filter(Boolean);
         toast(alterados.length === 1
-          ? { 'situação': { programado: 'Atendimento reativado como programado.', concluido: 'Atendimento marcado como concluído.', cancelado: 'Atendimento cancelado — não entra mais nas contagens' + (atendimento.prestadora_avisada ? ' e a prestadora foi avisada no portal.' : '.') }[situacao], prestadora: 'Prestadora atualizada.', local: local ? 'Local atualizado.' : 'Local removido.', valor: valor === null ? 'Valor removido.' : 'Valor atualizado.' }[alterados[0]]
+          ? { 'situação': { programado: 'Atendimento reativado como programado.', concluido: 'Atendimento marcado como concluído.', falta: 'Falta registrada: a prestadora não foi. É um controle interno da franquia — ela não é avisada nem vê isso.', cancelado: 'Atendimento cancelado — não entra mais nas contagens' + (atendimento.prestadora_avisada ? ' e a prestadora foi avisada no portal.' : '.') }[situacao], prestadora: 'Prestadora atualizada.', local: local ? 'Local atualizado.' : 'Local removido.', valor: valor === null ? 'Valor removido.' : 'Valor atualizado.' }[alterados[0]]
           : 'Atendimento atualizado (' + alterados.join(', ') + ').');
         if (mudouPrestadora) avisarPrestadoraPorWhatsApp(aba, (prestadorasAgenda[currentUnit] || []).find(p => p.id === prestadoraId), atendimento);
         selecionarDiaAgenda(diaSelecionadoAgenda);
@@ -5687,7 +6146,8 @@
         let bin = '';
         for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
         atdArquivoBase64 = btoa(bin);
-        const r = (await api(`/atendimentos/admin/${currentUnit}/importar`, { method: 'POST', body: JSON.stringify({ arquivo_base64: atdArquivoBase64 }) })).resumo;
+        const r = (await apiUpload(`/atendimentos/admin/${currentUnit}/importar`, { arquivo_base64: atdArquivoBase64 }, (pct, processando) => Progresso.definir(processando ? 'Lendo a planilha…' : 'Enviando a planilha…', pct, processando))).resumo;
+        Progresso.terminar();
 
         const semCadastro = r.profissionais_sem_cadastro;
         resumo.innerHTML =
@@ -5706,6 +6166,7 @@
         if (r.novas > 0) { botao.disabled = false; botao.textContent = `Importar ${r.novas} novo${r.novas === 1 ? '' : 's'}`; }
       } catch (err) {
         atdArquivoBase64 = null;
+        Progresso.terminar();
         resumo.innerHTML = `<div class="atd-aviso">${escapeHtml(err.message)}</div>`;
       }
     }
@@ -5716,7 +6177,8 @@
       const botao = document.getElementById('atd-importar');
       botao.disabled = true; botao.textContent = 'Importando…';
       try {
-        const r = await api(`/atendimentos/admin/${currentUnit}/importar`, { method: 'POST', body: JSON.stringify({ arquivo_base64: atdArquivoBase64, confirmar: true }) });
+        const r = await apiUpload(`/atendimentos/admin/${currentUnit}/importar`, { arquivo_base64: atdArquivoBase64, confirmar: true }, (pct, processando) => Progresso.definir(processando ? 'Importando os atendimentos…' : 'Enviando a planilha…', pct, processando));
+        Progresso.terminar();
         fecharModalAtendimento();
         toast(`${r.importados} atendimento(s) importado(s)` + (r.ja_existentes ? ` · ${r.ja_existentes} já existiam` : '')
           + (r.prestadoras_criadas?.length ? ` · ${r.prestadoras_criadas.length} prestadora(s) cadastrada(s)` : '') + '.');
@@ -5724,6 +6186,7 @@
         await carregarPrestadorasAgenda(currentUnit); // e as prestadoras novas, nas listas de atribuição
         await renderCalendarioMes();
       } catch (err) {
+        Progresso.terminar();
         toast('Erro ao importar: ' + err.message);
         botao.disabled = false; botao.textContent = 'Tentar de novo';
       } finally { atdOcupado = false; }
@@ -5776,7 +6239,7 @@
         }).join('');
       const ag = document.getElementById('prest-agenda');
       ag.innerHTML = agendaPrestadora.length === 0 ? '<div class="empty">Você ainda não aceitou atendimentos para hoje.</div>'
-        : agendaPrestadora.slice().sort((a, b) => (a.data + (a.hora || '')).localeCompare(b.data + (b.hora || ''))).map(j => `<div class="job${classeLinhaPrestadora(j)}"><div class="job-time">${j.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(j.serv)}</strong><span>${dataBR(j.data)} · ${horarioFaixa(j)}${j.cliente ? ' · Cliente: ' + escapeHtml(j.cliente) : ''}</span>${detalheJob(j)}${detalheConflito(j)}${tagsPrestadora(j)}</div><div class="job-status st-ok">aceito</div></div>`).join('');
+        : agendaPrestadora.slice().sort((a, b) => (a.data + (a.hora || '')).localeCompare(b.data + (b.hora || ''))).map(j => `<div class="job${classeLinhaPrestadora(j)}"><div class="job-time">${j.hora || '--:--'}</div><div class="job-body"><strong>${escapeHtml(j.serv)}</strong><span>${dataBR(j.data)} · ${horarioFaixa(j)}${j.cliente ? ' · Cliente: ' + escapeHtml(j.cliente) : ''}</span>${detalheJob(j)}${detalheConflito(j)}${tagsPrestadora(j)}</div><div class="job-status ${j.emAndamento ? 'st-route' : 'st-ok'}">${j.emAndamento ? 'em andamento' : 'aceito'}</div></div>`).join('');
       document.getElementById('ag-count').textContent = agendaPrestadora.length;
       const hojeISO = hojeISOBrasil();
       document.getElementById('ps-aceitos').textContent = agendaPrestadora.filter(a => a.data === hojeISO).length;
@@ -5875,7 +6338,7 @@
       const doDia = calendarioPrestadora.itens.filter(x => x.data === dataISO).sort((x, y) => (x.hora || '').localeCompare(y.hora || ''));
       document.getElementById('ps-cal-lista').innerHTML = doDia.length === 0 ? '<div class="empty">Nada agendado neste dia.</div>'
         : doDia.map(x => {
-          const [rotulo, cls] = ROTULO_STATUS_PREST[x.status] || [x.status, 'st-wait'];
+          const [rotulo, cls] = x.emAndamento ? ['em andamento', 'st-route'] : (ROTULO_STATUS_PREST[x.status] || [x.status, 'st-wait']);
           const info = [x.cliente ? 'Cliente: ' + escapeHtml(x.cliente) : '', x.area ? escapeHtml(x.area) : '', x.valor || ''].filter(Boolean).join(' · ');
           return `<div class="job${classeLinhaPrestadora(x)}"><div class="job-time" style="width:auto;min-width:46px">${x.hora || '--:--'}${x.fim ? '<br><span style="color:var(--muted);font-weight:400">' + x.fim + '</span>' : ''}</div><div class="job-body"><strong>${escapeHtml(x.serv)}</strong><span>${horarioFaixa(x)}${info ? ' · ' + info : ''}</span>${detalheConflito(x)}${tagsPrestadora(x)}</div><div class="job-status ${cls}">${rotulo}</div></div>`;
         }).join('');
@@ -5941,10 +6404,17 @@
       document.getElementById('eqv-nova').style.display = podeEditarValor ? '' : 'none'; // criar login: só administrador
       document.getElementById('eqv-list').innerHTML = arr.map(p => {
         const valor = p.tarifa === null ? '<span class="tr-meta">sem valor definido</span>' : `<span class="tr-meta">${formatarReais(p.tarifa)} / atendimento</span>`;
-        const botao = podeEditarValor ? `<button class="btn-sm ghost" onclick="abrirTarifa('${p.id}')">${p.tarifa === null ? 'Definir valor' : 'Alterar valor'}</button><button class="btn-sm ghost" onclick="abrirContatoPrestadora('${p.id}')">Contato</button><button class="btn-sm ghost" onclick="alternarAtivaPrestadora('${p.id}', ${!p.ativa})">${p.ativa ? 'Desativar' : 'Reativar'}</button>` : '';
+        const botao = podeEditarValor ? `<button class="btn-sm ghost" onclick="abrirTarifa('${p.id}')">${p.tarifa === null ? 'Definir valor' : 'Alterar valor'}</button><button class="btn-sm ghost" onclick="abrirContatoPrestadora('${p.id}')">Contato</button><button class="btn-sm ghost" onclick="abrirMetaFaltas('${p.id}')">Meta de faltas</button><button class="btn-sm ghost" onclick="alternarAtivaPrestadora('${p.id}', ${!p.ativa})">${p.ativa ? 'Desativar' : 'Reativar'}</button>` : '';
         const contato = p.telefone ? escapeHtml(exibirTelefone(p.telefone)) : '<i>sem telefone</i>';
         const pendente = p.pendente ? ' · <b title="Ainda não confirmou o e-mail nem trocou a senha padrão">primeiro acesso pendente</b>' : '';
-        return `<div class="tablerow"${p.ativa ? '' : ' style="opacity:.65"'}><div class="tr-av">${escapeHtml(p.ini)}</div><div class="tr-body"><strong>${escapeHtml(p.nome)}</strong><span>${p.serv} atendimentos · nota ${p.nota.toFixed(1)} ★</span><span>${contato}${pendente}</span></div>${valor}${botao}<span class="chip ${p.ativa ? 'chip-on' : 'chip-off'}">${p.ativa ? 'ativa' : 'inativa'}</span></div>`;
+        // faltas: controle interno da franquia (a prestadora nunca vê). Taxa = faltas ÷ atendimentos que deviam ter acontecido.
+        const taxa = p.devidos ? (p.faltas / p.devidos) * 100 : 0;
+        const acima = p.limiteFaltas !== null && p.devidos > 0 && taxa > p.limiteFaltas;
+        const pct = (n) => n.toFixed(1).replace('.', ',') + '%';
+        const faltasTxt = 'Faltas: ' + (p.devidos ? p.faltas + ' de ' + p.devidos + ' (' + pct(taxa) + ')' : 'nenhum atendimento ainda')
+          + (p.limiteFaltas !== null ? ' · aceitável até ' + pct(p.limiteFaltas) : ' · limite não definido') + (acima ? ' · ⚠ acima do aceitável' : '');
+        const faltasLinha = '<span' + (acima ? ' style="color:var(--red);font-weight:600"' : '') + '>' + faltasTxt + '</span>';
+        return `<div class="tablerow"${p.ativa ? '' : ' style="opacity:.65"'}><div class="tr-av">${escapeHtml(p.ini)}</div><div class="tr-body"><strong>${escapeHtml(p.nome)}</strong><span>${p.serv} atendimentos · nota ${p.nota.toFixed(1)} ★</span><span>${contato}${pendente}</span>${faltasLinha}</div>${valor}${botao}<span class="chip ${p.ativa ? 'chip-on' : 'chip-off'}">${p.ativa ? 'ativa' : 'inativa'}</span></div>`;
       }).join('');
     }
 
@@ -6041,6 +6511,34 @@
       } catch (err) { toast('Erro ao salvar o valor: ' + err.message); }
       finally { tarifaOcupada = false; botao.disabled = false; }
     }
+    /* Meta de faltas: percentual de faltas que a franquia aceita de cada prestadora (controle interno; só administrador). */
+    let metaFaltasId = null, metaFaltasOcupada = false;
+    function abrirMetaFaltas(id) {
+      const p = (equipeData[currentUnit] || []).find(x => x.id === id);
+      if (!p) return;
+      metaFaltasId = id;
+      document.getElementById('meta-nome').textContent = p.nome;
+      document.getElementById('meta-valor').value = p.limiteFaltas === null ? '' : String(p.limiteFaltas).replace('.', ',');
+      document.getElementById('modal-meta-faltas').classList.add('show');
+      document.getElementById('meta-valor').focus();
+    }
+    function fecharMetaFaltas() { document.getElementById('modal-meta-faltas').classList.remove('show'); }
+    async function salvarMetaFaltas() {
+      if (metaFaltasOcupada || !metaFaltasId) return;
+      const bruto = document.getElementById('meta-valor').value.trim().replace('%', '').replace(',', '.');
+      const n = bruto === '' ? null : Number(bruto);
+      if (n !== null && (!Number.isFinite(n) || n < 0 || n > 100)) { toast('Informe um percentual entre 0 e 100 (ex.: 5).'); return; }
+      metaFaltasOcupada = true;
+      try {
+        await api('/unidades/' + currentUnit + '/admin/equipe/' + metaFaltasId, { method: 'PATCH', body: JSON.stringify({ faltas_aceitavel_pct: n }) });
+        fecharMetaFaltas();
+        await carregarEquipeClientesAvaliacoes(currentUnit);
+        renderEquipe();
+        toast(n === null ? 'Meta de faltas removida.' : 'Meta de faltas definida em ' + String(n).replace('.', ',') + '%.');
+      } catch (err) { toast('Erro ao salvar: ' + err.message); }
+      finally { metaFaltasOcupada = false; }
+    }
+
     /* Ativar/desativar prestadora (só administrador completo). Inativa: não recebe atendimento novo, some da lista de
        atribuição e não entra mais no portal; o histórico e os atendimentos já feitos continuam. Os que ainda estão com ela
        (convite/confirmado, de hoje em diante) o administrador reatribui na agenda. */
@@ -6540,7 +7038,7 @@
        quem cancela é o administrador. */
     const STATUS_CLIENTE = {
       pedido: ['aguardando profissional', 'st-wait'], proposto: ['aguardando profissional', 'st-wait'], recusado: ['aguardando profissional', 'st-wait'],
-      aceito: ['confirmado', 'st-ok'], concluido: ['concluído', 'st-ok'], cancelado: ['cancelado', 'st-new'],
+      aceito: ['confirmado', 'st-ok'], concluido: ['concluído', 'st-ok'], cancelado: ['cancelado', 'st-new'], falta: ['não realizado', 'st-new'],
     };
     const fotoSegura = (foto) => (typeof foto === 'string' && /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(foto) ? foto : null);
     function cardAtendimentoCliente(a, hojeISO) {
@@ -6548,10 +7046,10 @@
       const foto = prest ? fotoSegura(prest.foto) : null;
       const avatar = foto ? `<div class="cli-foto" style="background-image:url('${foto}')" role="img" aria-label="Foto de ${escapeHtml(prest.nome)}"></div>`
         : `<div class="cli-foto" aria-hidden="true">${prest ? escapeHtml(iniciaisNome(prest.nome)) : '?'}</div>`;
-      const [rotulo, cls] = STATUS_CLIENTE[a.status] || [a.status, 'st-wait'];
+      const [rotulo, cls] = a.em_andamento ? ['em andamento', 'st-route'] : (STATUS_CLIENTE[a.status] || [a.status, 'st-wait']);
       const quando = `${dataBR(a.dia)}${a.hora ? ' · ' + a.hora + (a.hora_fim ? '–' + a.hora_fim : '') : ''}`;
       const quem = prest ? `Profissional: <b>${escapeHtml(prest.nome)}</b>` : (a.status === 'cancelado' ? '' : 'Profissional ainda não confirmada');
-      const podePedirCancelamento = ['pedido', 'proposto', 'recusado', 'aceito'].includes(a.status) && a.dia >= hojeISO;
+      const podePedirCancelamento = ['pedido', 'proposto', 'recusado', 'aceito'].includes(a.status) && a.dia >= hojeISO && !a.em_andamento;
       return `<div class="cli-card${a.status === 'cancelado' ? ' cancelado-c' : ''}">${avatar}
         <div class="cli-corpo" style="flex:1;min-width:0"><strong style="display:block;font-size:14px">${escapeHtml(a.tipo_servico)}</strong>
           <span style="font-size:12.5px;color:var(--muted);display:block">${quando}${a.area ? ' · ' + escapeHtml(a.area) : ''}</span>
@@ -6914,6 +7412,7 @@
       else if (document.getElementById('modal-nova-prestadora').classList.contains('show')) fecharNovaPrestadora();
       else if (document.getElementById('modal-recuperar').classList.contains('show')) fecharRecuperar();
       else if (document.getElementById('modal-tarifa').classList.contains('show')) fecharTarifa();
+      else if (document.getElementById('modal-meta-faltas').classList.contains('show')) fecharMetaFaltas();
       else if (document.getElementById('modal-substituir').classList.contains('show')) fecharSubstituir();
       else if (document.getElementById('modal-contato').classList.contains('show')) fecharContatoPrestadora();
       else if (document.getElementById('modal-primeiro-acesso').classList.contains('show')) return; // não dá pra pular o primeiro acesso
@@ -6931,7 +7430,7 @@
     });
 
     // Enter nos modais de recuperar senha e de valor por atendimento também confirma.
-    [['rec-ident', recuperarEnviarCodigo], ['rec-codigo', recuperarConfirmar], ['rec-senha', recuperarConfirmar], ['rec-senha2', recuperarConfirmar], ['tarifa-valor', salvarTarifa], ['contato-tel', salvarContatoPrestadora], ['pa-codigo', primeiroAcessoConcluir], ['pa-senha2', primeiroAcessoEnviarCodigo]].forEach(([id, acao]) => {
+    [['rec-ident', recuperarEnviarCodigo], ['rec-codigo', recuperarConfirmar], ['rec-senha', recuperarConfirmar], ['rec-senha2', recuperarConfirmar], ['tarifa-valor', salvarTarifa], ['meta-valor', salvarMetaFaltas], ['contato-tel', salvarContatoPrestadora], ['pa-codigo', primeiroAcessoConcluir], ['pa-senha2', primeiroAcessoEnviarCodigo]].forEach(([id, acao]) => {
       document.getElementById(id).addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); acao(); }
       });
