@@ -5989,7 +5989,7 @@
       ['Tipo', 'não', 'Complementa o serviço'],
       ['Horas', 'não', 'Duração; define o horário de término'],
       ['Cliente', 'não', '"Nome | Telefone" — criado se não existir'],
-      ['Profissionais', 'não', 'Prestadora — cadastrada se ainda não existir'],
+      ['Profissionais', 'não', 'Prestadora ("Nome | Telefone") — cadastrada, já com o telefone, se ainda não existir'],
       ['Repasse (R$)', 'opcional', 'O que a franquia paga à prestadora (custo do Financeiro)'],
       ['Situação', 'não', 'Previsto, Concluído ou Cancelado'],
       ['Recorrente', 'não lida', 'Sim/Não — pra repetir toda semana use o cadastro de atendimento recorrente'],
@@ -6163,7 +6163,7 @@
           + (r.periodo ? `<div class="atd-aviso">Período dos novos: ${dataBR(r.periodo.de)} a ${dataBR(r.periodo.ate)}.</div>` : '')
           + (r.novas === 0 ? '<div class="atd-aviso">Nada de novo neste arquivo — tudo nele já está no sistema.</div>' : '')
           + (semCadastro.length ? `<div class="atd-aviso"><b>${semCadastro.length}</b> profissional(is) da planilha ainda não são prestadoras. Ao importar, o sistema cadastra
-               cada uma (e-mail <i>nome@gmail.com</i>, sem espaços; senha padrão <b>${escapeHtml(r.senha_padrao)}</b>) e já liga os atendimentos a ela: ${semCadastro.slice(0, 5).map(p => escapeHtml(p.nome) + ' (' + p.qtd + ')').join(', ')}${semCadastro.length > 5 ? ' e mais ' + (semCadastro.length - 5) + '…' : ''}.</div>` : '')
+               cada uma (e-mail <i>nome@gmail.com</i>, sem espaços; senha padrão <b>${escapeHtml(r.senha_padrao)}</b>)${semCadastro.some(p => p.telefone) ? ' <b>já com o telefone que a planilha traz</b> (' + semCadastro.filter(p => p.telefone).length + ' de ' + semCadastro.length + ' com contato)' : ''} e já liga os atendimentos a ela: ${semCadastro.slice(0, 5).map(p => escapeHtml(p.nome) + (p.telefone ? ' · ' + escapeHtml(formatarTelefone(p.telefone)) : '') + ' (' + p.qtd + ')').join(', ')}${semCadastro.length > 5 ? ' e mais ' + (semCadastro.length - 5) + '…' : ''}.</div>` : '')
           + (r.invalidas ? `<div class="atd-aviso"><b>${r.invalidas}</b> linha(s) ignorada(s): ${r.invalidas_detalhe.slice(0, 5).map(i => 'linha ' + i.linha + ' (' + escapeHtml(i.motivo) + ')').join('; ')}${r.invalidas > 5 ? '…' : ''}.</div>` : '')
           + (r.repetidas_no_arquivo ? `<div class="atd-aviso">${r.repetidas_no_arquivo} linha(s) repetida(s) no próprio arquivo (mesmo Número) — vale a primeira.</div>` : '');
         if (r.novas > 0) { botao.disabled = false; botao.textContent = `Importar ${r.novas} novo${r.novas === 1 ? '' : 's'}`; }

@@ -16,7 +16,7 @@ const COLUNAS = [
   ['Tipo', 14, 'não', 'Complementa o Serviço (Comercial / Residencial / pós-obra...).', 'Comercial'],
   ['Horas', 8, 'não', 'Duração em horas (aceita decimais: 2,5). Define o horário de término (e a altura do bloco na agenda); sem ela, 1 hora.', '4'],
   ['Cliente', 34, 'não', 'Nome do cliente; se quiser o telefone, escreva "Nome | Telefone". O cliente é criado (sem login) se ainda não existir.', 'Empresa Exemplo LTDA | (54) 3333-4444'],
-  ['Profissionais', 26, 'não', 'Nome da prestadora. Se ela ainda não existir no portal, é cadastrada na hora (e-mail nome@gmail.com, senha padrão, e no primeiro acesso ela confirma o e-mail e troca a senha) e os atendimentos ficam ligados a ela.', 'Maria da Silva'],
+  ['Profissionais', 34, 'não', 'Nome da prestadora; se quiser o contato, escreva "Nome | Telefone" (como no Cliente). Se ela ainda não existir no portal, é cadastrada na hora — já com o telefone — (e-mail nome@gmail.com, senha padrão, e no primeiro acesso ela confirma o e-mail e troca a senha) e os atendimentos ficam ligados a ela. Quem já existia sem telefone passa a tê-lo.', 'Maria da Silva | (54) 9 9999-0001'],
   ['Repasse (R$)', 13, 'opcional', 'Quanto a FRANQUIA paga à prestadora por este atendimento (o custo / repasse que entra no Financeiro). Sem ele vale o valor por atendimento definido na tela Equipe.', '75'],
   ['Situação', 12, 'não', 'Previsto (ainda vai acontecer — vira convite pra prestadora), Concluído ou Cancelado. Vazio = Previsto.', 'Previsto'],
   ['Recorrente', 12, 'não lida', 'Sim / Não. O portal NÃO lê esta coluna: pra repetir um atendimento toda semana use "Cadastrar atendimento" → "Repetir toda semana".', 'Não'],
@@ -26,9 +26,9 @@ const COLUNAS = [
 ];
 
 const EXEMPLOS = [
-  ['500', 'EXEMPLO-1', '15/10/2026', '08:00:00', 'Manhã', 'Limpeza', 'Comercial', 4, 'Empresa Exemplo LTDA | (54) 3333-4444', 'Maria da Silva', 75, 'Previsto', 'Não', 'Rua Exemplo, nº 100, Centro, Carazinho/RS CEP: 99.500-000', 154.6, 79.6],
-  ['501', 'EXEMPLO-2', '16/10/2026', '13:30:00', 'Tarde', 'Limpeza', 'Residencial', 3, 'Cláudia Souza', 'Maria da Silva', 60, 'Previsto', 'Não', 'Av. Exemplo, nº 250, Bairro Novo, Carazinho/RS CEP: 99.500-000', 120, 60],
-  ['502', 'EXEMPLO-3', '01/10/2026', '09:00:00', 'Manhã', 'Passadoria', '', 2.5, 'Pedro Alves | (54) 99999-0000', 'Joana Prestes', '', 'Concluído', 'Não', '', 90.5, ''],
+  ['500', 'EXEMPLO-1', '15/10/2026', '08:00:00', 'Manhã', 'Limpeza', 'Comercial', 4, 'Empresa Exemplo LTDA | (54) 3333-4444', 'Maria da Silva | (54) 9 9999-0001', 75, 'Previsto', 'Não', 'Rua Exemplo, nº 100, Centro, Carazinho/RS CEP: 99.500-000', 154.6, 79.6],
+  ['501', 'EXEMPLO-2', '16/10/2026', '13:30:00', 'Tarde', 'Limpeza', 'Residencial', 3, 'Cláudia Souza', 'Maria da Silva | (54) 9 9999-0001', 60, 'Previsto', 'Não', 'Av. Exemplo, nº 250, Bairro Novo, Carazinho/RS CEP: 99.500-000', 120, 60],
+  ['502', 'EXEMPLO-3', '01/10/2026', '09:00:00', 'Manhã', 'Passadoria', '', 2.5, 'Pedro Alves | (54) 99999-0000', 'Joana Prestes | (54) 9 8888-0002', '', 'Concluído', 'Não', '', 90.5, ''],
 ];
 
 async function gerarModeloImportacao() {

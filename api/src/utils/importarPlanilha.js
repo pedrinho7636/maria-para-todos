@@ -26,6 +26,9 @@ const COLUNAS = {
   horas: ['horas', 'duracao'],
   cliente: ['cliente'],
   profissionais: ['profissionais', 'profissional', 'prestadora'],
+  // contato (telefone) da profissional, quando vem numa coluna própria; também vale "Nome | Telefone" na própria coluna Profissionais
+  contato: ['contato da profissional', 'contato profissional', 'contato da prestadora', 'contato prestadora', 'telefone da profissional',
+    'telefone profissional', 'telefone da prestadora', 'telefone prestadora', 'contato', 'telefone', 'celular', 'whatsapp', 'fone'],
   situacao: ['situacao', 'status'],
   // opcionais: se o sistema da franquia exportar valores, entram junto (valor = o que o cliente paga;
   // custo = o que a franquia paga à prestadora)
@@ -100,6 +103,14 @@ function parseCliente(v) {
   const nome = (i >= 0 ? s.slice(0, i) : s).trim().slice(0, 200);
   const telefone = (i >= 0 ? s.slice(i + 1) : '').trim().slice(0, 50);
   return { nome, telefone: telefone || null };
+}
+
+// "Maria da Silva | (54) 9 9999-0001" na coluna Profissionais (como no Cliente) ou o telefone numa coluna de contato.
+// Devolve o nome e o telefone da profissional (o telefone pode vir vazio).
+function profissionalDe(valor, contatoColuna) {
+  const { nome, telefone } = parseCliente(valor);
+  const extra = String(contatoColuna ?? '').trim();
+  return { profissional: nome.slice(0, 200), profissional_telefone: telefone || extra || null };
 }
 
 // Usa os nomes do catálogo do portal (Limpeza residencial / Limpeza empresarial / ...).
@@ -190,7 +201,7 @@ async function lerAtendimentos(buffer) {
       tipo_servico: servico.slice(0, 200),
       duracao_horas: parseHoras(celula(linha, 'horas')),
       cliente: parseCliente(celula(linha, 'cliente')),
-      profissional: String(celula(linha, 'profissionais') ?? '').trim().slice(0, 200),
+      ...profissionalDe(celula(linha, 'profissionais'), celula(linha, 'contato')),
       area: String(celula(linha, 'local') ?? '').trim().replace(/\s+/g, ' ').slice(0, 500) || null,
       situacao: mapearSituacao(celula(linha, 'situacao')),
       valor: parseValor(celula(linha, 'valor')),

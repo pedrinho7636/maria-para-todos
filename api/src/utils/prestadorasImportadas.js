@@ -1,5 +1,7 @@
 const bcrypt = require('bcrypt');
 const { normalizarTexto } = require('./importarPlanilha');
+const { normalizarTelefone } = require('./normalizacao');
+const { telefoneValido } = require('./validacao');
 
 // A planilha de atendimentos traz só o NOME da profissional (sem e-mail, sem telefone).
 // Pra elas já entrarem no sistema — com atendimentos ligados e acesso ao portal — a conta
@@ -28,24 +30,54 @@ function emailBase(nome) {
   return local || 'prestadora';
 }
 
-// Garante que cada nome tenha uma prestadora na unidade: reaproveita a que já existe
+// Garante que cada profissional tenha uma prestadora na unidade: reaproveita a que já existe
 // (mesmo nome, sem diferenciar acento/maiúscula) e cria as que faltam. `db` pode ser o pool
 // ou o client de uma transação (a criação entra na mesma transação da importação).
-// Devolve { ids: Map(nomeNormalizado -> id), criadas: [{ id, nome, email }] }.
-async function garantirPrestadoras(db, unidadeId, nomes) {
-  const { rows } = await db.query('select id, nome, email, unidade_id from prestadoras');
-  const ids = new Map();
-  const emailsEmUso = new Set();
+// Cada item de `entradas` é o nome (texto) ou { nome, telefone } — o telefone vem da planilha ("Nome | Telefone" ou coluna de
+// contato) e é APROVEITADO: vai no cadastro da prestadora nova e preenche o telefone de quem já existia sem ele. Telefone
+// inválido, ou que já é de OUTRA conta (é único no sistema), é ignorado — nunca tira o número de ninguém.
+// Devolve { ids: Map(nomeNormalizado -> id), criadas: [{ id, nome, email, telefone }], telefonesPreenchidos: n }.
+async function garantirPrestadoras(db, unidadeId, entradas) {
+  const { rows } = await db.query('select id, nome, email, unidade_id, telefone from prestadoras');
+  const ids = new Map(), semTelefone = new Set();
+  const emailsEmUso = new Set(), telefonesEmUso = new Set();
   for (const r of rows) {
     if (r.email) emailsEmUso.add(r.email.toLowerCase());
-    if (r.unidade_id === unidadeId) ids.set(normalizarTexto(r.nome), r.id);
+    if (r.telefone) telefonesEmUso.add(normalizarTelefone(r.telefone));
+    if (r.unidade_id === unidadeId) {
+      ids.set(normalizarTexto(r.nome), r.id);
+      if (!r.telefone) semTelefone.add(r.id);
+    }
   }
+  // um telefone utilizável: válido e ainda de ninguém (e marca como usado, pra duas profissionais não dividirem o mesmo)
+  const reservarTelefone = (bruto) => {
+    const tel = normalizarTelefone(bruto);
+    if (!tel || !telefoneValido(tel) || telefonesEmUso.has(tel)) return null;
+    telefonesEmUso.add(tel);
+    return tel;
+  };
 
   const criadas = [];
+  let telefonesPreenchidos = 0;
   let senhaHash = null;
-  for (const bruto of nomes) {
+  for (const entrada of entradas) {
+    const bruto = typeof entrada === 'string' ? entrada : entrada.nome;
+    const telefoneBruto = typeof entrada === 'string' ? null : entrada.telefone;
     const chave = normalizarTexto(bruto);
-    if (!chave || ids.has(chave)) continue;
+    if (!chave) continue;
+
+    if (ids.has(chave)) { // já existe: só completa o telefone, se ela não tinha
+      const idExistente = ids.get(chave);
+      if (telefoneBruto && semTelefone.has(idExistente)) {
+        const tel = reservarTelefone(telefoneBruto);
+        if (tel) {
+          await db.query('update prestadoras set telefone = $1, atualizado_em = now() where id = $2', [tel, idExistente]);
+          semTelefone.delete(idExistente);
+          telefonesPreenchidos++;
+        }
+      }
+      continue;
+    }
 
     // e-mail repetido (duas "Maria Silva") ganha um número — o login por e-mail precisa ser inequívoco
     const base = emailBase(bruto);
@@ -55,15 +87,17 @@ async function garantirPrestadoras(db, unidadeId, nomes) {
 
     senhaHash = senhaHash || await bcrypt.hash(SENHA_PADRAO, SALT_ROUNDS);
     const nome = nomeBonito(bruto);
+    const telefone = telefoneBruto ? reservarTelefone(telefoneBruto) : null;
     const { rows: [nova] } = await db.query(
       `insert into prestadoras (nome, telefone, email, senha_hash, unidade_id, primeiro_acesso_pendente)
-       values ($1, null, $2, $3, $4, true) returning id`,
-      [nome, email, senhaHash, unidadeId]
+       values ($1, $2, $3, $4, $5, true) returning id`,
+      [nome, telefone, email, senhaHash, unidadeId]
     );
     ids.set(chave, nova.id);
-    criadas.push({ id: nova.id, nome, email });
+    if (telefone) telefonesPreenchidos++;
+    criadas.push({ id: nova.id, nome, email, telefone });
   }
-  return { ids, criadas };
+  return { ids, criadas, telefonesPreenchidos };
 }
 
 module.exports = { garantirPrestadoras, nomeBonito, emailBase, SENHA_PADRAO };

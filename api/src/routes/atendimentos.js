@@ -492,6 +492,13 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
   const { rows: clientes } = await pool.query('select id, nome from clientes where unidade_id = $1', [req.unidadeId]);
   const idCliente = new Map(clientes.map(c => [normalizarTexto(c.nome), c.id]));
 
+  // o telefone que a planilha traz de cada profissional (o primeiro que aparecer); é aproveitado ao criar a prestadora
+  const telefoneDaProfissional = new Map();
+  for (const l of novas) {
+    if (l.profissional && l.profissional_telefone && !telefoneDaProfissional.has(normalizarTexto(l.profissional))) {
+      telefoneDaProfissional.set(normalizarTexto(l.profissional), l.profissional_telefone);
+    }
+  }
   const semCadastro = new Map();
   const clientesNovos = new Set();
   for (const l of novas) {
@@ -512,7 +519,8 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
     clientes_novos: clientesNovos.size,
     // profissionais que ainda não são prestadoras: a confirmação cria a conta de cada uma
     // (e-mail nome@gmail.com, senha padrão) e já liga os atendimentos a ela
-    profissionais_sem_cadastro: [...semCadastro].map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd),
+    profissionais_sem_cadastro: [...semCadastro].map(([nome, qtd]) => ({ nome, qtd, telefone: telefoneDaProfissional.get(normalizarTexto(nome)) || null })).sort((a, b) => b.qtd - a.qtd),
+    profissionais_com_telefone: telefoneDaProfissional.size, // profissionais da planilha que trouxeram contato
     senha_padrao: SENHA_PADRAO,
     com_valor: novas.filter(l => l.valor !== null).length,   // linhas novas que trouxeram Valor / Custo
     com_custo: novas.filter(l => l.custo !== null).length,
@@ -525,8 +533,9 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
   try {
     await client.query('BEGIN');
     // cria (na mesma transação) as prestadoras que a planilha cita e ainda não existem
-    const { ids: idsPrestadoras, criadas } = await garantirPrestadoras(
-      client, req.unidadeId, [...new Set(novas.map(l => l.profissional).filter(Boolean))]
+    const nomesDaPlanilha = [...new Set(novas.map(l => l.profissional).filter(Boolean))];
+    const { ids: idsPrestadoras, criadas, telefonesPreenchidos } = await garantirPrestadoras(
+      client, req.unidadeId, nomesDaPlanilha.map(nome => ({ nome, telefone: telefoneDaProfissional.get(normalizarTexto(nome)) || null }))
     );
     for (const [chave, id] of idsPrestadoras) idPrestadora.set(chave, id);
     let importados = 0;
@@ -568,7 +577,8 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
     await client.query('COMMIT');
     res.json({
       confirmado: true, importados, ja_existentes: lido.linhas.length - importados, resumo,
-      prestadoras_criadas: criadas.map(({ nome, email }) => ({ nome, email })),
+      prestadoras_criadas: criadas.map(({ nome, email, telefone }) => ({ nome, email, telefone })),
+      telefones_aproveitados: telefonesPreenchidos, // contatos da planilha gravados (prestadora nova ou que estava sem telefone)
     });
   } catch (erro) {
     await client.query('ROLLBACK');

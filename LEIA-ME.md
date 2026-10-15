@@ -232,6 +232,10 @@ funcionários. **Deixando em branco, o campo some do site** em vez de aparecer v
   Contribuição (R$). O modelo baixado em "Importar planilha" tem exatamente essas colunas, na mesma ordem.
   - **Valor (R$)** = o que o cliente paga; **Repasse (R$)** = o que a franquia paga à prestadora (vira o custo no Financeiro; sem ele
     vale a tarifa da Equipe); **Local de Atendimento** = o endereço do serviço (vira o "Local" do atendimento).
+  - **Contato da profissional:** na coluna *Profissionais* escreva "Nome | Telefone" (como no Cliente) — ou use uma coluna própria
+    ("Contato da Profissional", "Telefone da Profissional", "Celular"…). Ao criar a prestadora na importação o telefone **já vai no
+    cadastro dela** (ela passa a poder entrar também pelo telefone, e o botão de WhatsApp da Equipe funciona); quem já existia sem
+    telefone passa a tê-lo. Telefone inválido, ou que já é de **outra conta**, é ignorado (nunca tira o número de ninguém).
   - *Período*, *Recorrente* e *Margem de Contribuição* não são lidos (a margem o portal calcula: Valor − Repasse).
   - Planilhas antigas continuam valendo: "Valor", "Custo" e "Repasse" são aceitos como nomes.
 - Não confundir com o **valor pago à prestadora** (tela Equipe), que é o repasse.

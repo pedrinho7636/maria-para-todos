@@ -418,6 +418,45 @@ async function codigoDe(email) {
   const imp2 = await importar({ arquivo_base64: arq, confirmar: true });
   ok(imp2.json.importados === 0 && imp2.json.ja_existentes === 2, 'reimportar o mesmo arquivo não duplica nada');
 
+  // ---------- CONTATO DA PRESTADORA NA PLANILHA ("Nome | Telefone" ou coluna de contato) ----------
+  console.log('\nContato da prestadora vindo na planilha');
+  const telNova = telefoneQa(5), telColuna = telefoneQa(6), telPreenche = telefoneQa(7);
+  const nomeNova = `QA Nova ${id}`, nomeColuna = `QA Coluna ${id}`, nomePreenche = `QA Preenche ${id}`, nomeRoubo = `QA Roubo ${id}`, nomeInvalido = `QA Invalido ${id}`;
+  // uma prestadora que já existe SEM telefone (só e-mail), pra a planilha completar
+  const preExistente = await http('POST', `/unidades/${slugA}/admin/equipe`, { nome: nomePreenche, email: emailQa('preenche') }, tokenAdm);
+  if (preExistente.json.prestadora) criados.prestadoras.push(preExistente.json.prestadora.id);
+  const linhaPlan = (n, prof, extra = {}) => ['9', `QA-${id}-${n}`, '18/12/2026', '10:00:00', 'Manhã', 'Limpeza', 'Residencial', 2, `QA Empresa ${id}`, prof, '', 'Previsto', 'Não', 'Rua Contato, nº 3', '100', ''];
+  const arq2 = await planilhaDe([
+    linhaPlan(3, `${nomeNova} | ${telNova}`),
+    linhaPlan(4, `${nomePreenche} | ${telPreenche}`),
+    linhaPlan(5, `${nomeRoubo} | ${tel}`),        // o telefone de OUTRA conta (já cadastrada): não pode ser tomado
+    linhaPlan(6, `${nomeInvalido} | 123`),          // telefone inválido: ignorado, a conta nasce sem
+  ]);
+  const prev2 = await importar({ arquivo_base64: arq2 });
+  ok(prev2.status === 200 && prev2.json.resumo.profissionais_com_telefone === 4 && prev2.json.resumo.profissionais_sem_cadastro.find(x => x.nome === nomeNova)?.telefone === telNova, 'a pré-visualização mostra o telefone de cada profissional nova', JSON.stringify(prev2.json.resumo?.profissionais_sem_cadastro?.slice(0, 2)));
+  const conf2 = await importar({ arquivo_base64: arq2, confirmar: true });
+  ok(conf2.status === 200 && conf2.json.importados === 4, 'confirma a importação com contatos', JSON.stringify(conf2.json).slice(0, 140));
+  const { rows: pres2 } = await pool.query('select id, lower(nome) as nome, telefone, primeiro_acesso_pendente from prestadoras where unidade_id = $1 and lower(nome) = any($2::text[])', [uQa.id, [nomeNova, nomePreenche, nomeRoubo, nomeInvalido].map(n => n.toLowerCase())]);
+  pres2.forEach(x => { if (x.nome !== nomePreenche.toLowerCase()) criados.prestadoras.push(x.id); });
+  const por = Object.fromEntries(pres2.map(x => [x.nome, x]));
+  const k = (n) => n.toLowerCase();
+  ok(por[k(nomeNova)]?.telefone === telNova && por[k(nomeNova)].primeiro_acesso_pendente === true, 'a prestadora criada pela planilha já nasce com o telefone dela', JSON.stringify(por[k(nomeNova)]));
+  ok(por[k(nomePreenche)]?.telefone === telPreenche, 'quem já existia sem telefone passa a ter o da planilha', JSON.stringify(por[k(nomePreenche)]));
+  ok(por[k(nomeRoubo)] && por[k(nomeRoubo)].telefone === null, 'telefone que já é de OUTRA conta não é tomado: a nova nasce sem telefone');
+  ok(por[k(nomeInvalido)] && por[k(nomeInvalido)].telefone === null, 'telefone inválido é ignorado (a conta nasce sem)');
+  const donaDoTel = await pool.query('select nome from prestadoras where telefone = $1', [tel]);
+  ok(donaDoTel.rows.length === 1 && donaDoTel.rows[0].nome === prest.nome, 'e a dona do telefone continua sendo quem era');
+  const loginPorTel = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: telNova, senha: 'senha123' });
+  ok(loginPorTel.status === 200 && loginPorTel.json.usuario.primeiro_acesso_pendente === true, 'a prestadora nova entra pelo telefone da planilha + senha padrão (e cai no primeiro acesso)');
+  // contato numa COLUNA própria (em vez de "Nome | Telefone")
+  const escreveX = require('write-excel-file/node').default;
+  const cabX = ['Número', 'Data', 'Horário', 'Serviço', 'Tipo', 'Horas', 'Cliente', 'Profissionais', 'Contato da Profissional', 'Situação', 'Valor (R$)'];
+  const arq3 = (await escreveX([cabX, [`QA-${id}-7`, '19/12/2026', '10:00', 'Limpeza', 'Comercial', 2, `QA Empresa ${id}`, nomeColuna, telColuna, 'Previsto', 100]]).toBuffer()).toString('base64');
+  const conf3 = await importar({ arquivo_base64: arq3, confirmar: true });
+  const { rows: [pCol] } = await pool.query('select id, telefone from prestadoras where unidade_id = $1 and nome = $2', [uQa.id, nomeColuna]);
+  if (pCol) criados.prestadoras.push(pCol.id);
+  ok(conf3.status === 200 && pCol?.telefone === telColuna, 'o contato também vale quando vem numa coluna própria ("Contato da Profissional")', JSON.stringify(pCol));
+
   // ---------- PRIMEIRO ACESSO DA PRESTADORA CRIADA PELA PLANILHA ----------
   console.log('\nPrimeiro acesso da prestadora criada pela planilha');
   const idImp = prestImp[0].id, emailImp = prestImp[0].email;
