@@ -16,6 +16,7 @@ const subadministradoresRoutes = require('./routes/subadministradores');
 const perfilRoutes = require('./routes/perfil');
 const primeiroAcessoRoutes = require('./routes/primeiroAcesso');
 const financeiroRoutes = require('./routes/financeiro');
+const relatoriosRoutes = require('./routes/relatorios');
 const { iniciarConclusaoAutomatica } = require('./utils/conclusao');
 const { descreverConfiguracao } = require('./utils/email');
 
@@ -128,6 +129,7 @@ app.use('/api/sub-administradores', subadministradoresRoutes);
 app.use('/api/perfil', perfilRoutes);
 app.use('/api/primeiro-acesso', primeiroAcessoRoutes);
 app.use('/api/financeiro', financeiroRoutes);
+app.use('/api/relatorios', relatoriosRoutes);
 
 // O próprio servidor entrega o frontend (mesma origem da API = sem CORS no site
 // publicado). Só esse arquivo — nunca a pasta inteira, que tem .env, .sql etc.

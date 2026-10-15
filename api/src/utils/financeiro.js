@@ -99,4 +99,4 @@ function resumir(linhas, hoje) {
   };
 }
 
-module.exports = { resumir, totais };
+module.exports = { resumir, totais, centavos, reais, soma };

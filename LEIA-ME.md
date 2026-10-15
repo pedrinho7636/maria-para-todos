@@ -80,8 +80,10 @@ teste **sem** provedor de e-mail (instruções no cabeçalho de `api/scripts/tes
 teste cobre também o valor dos atendimentos (unitário e em grupo), o endereço da unidade e a criação automática de
 prestadoras a partir da planilha, além do Financeiro (permissões, repasses, pagamento), das views corrigidas e da
 conclusão automática (essa parte roda numa transação revertida, sem tocar nos atendimentos reais).
-`npm run teste:recorrencia` (divisão do valor mensal) e `npm run teste:financeiro` (receita, custo, margem, repasses)
-não precisam de API nem de banco.
+`npm run teste:recorrencia` (divisão do valor mensal), `npm run teste:financeiro` (receita, custo, margem, repasses) e
+`npm run teste:relatorios` (todos os cálculos da aba Relatórios) não precisam de API nem de banco. O
+`npm run teste:relatorios-api` confere as rotas dos relatórios (quem pode abrir, período, várias unidades) e precisa da API de
+testes rodando, como os demais (instruções no cabeçalho de `api/scripts/testar-relatorios-api.js`).
 
 **Publicar na internet (Render + Neon):** passo a passo, e o que só você pode fazer, em `PUBLICAR-SITE.md`. No
 código já estão: banco por `DATABASE_URL`, `render.yaml`, `/api/ping`, `npm run banco:schema` (`-- --sem-exemplos`
@@ -161,6 +163,8 @@ api/
     scripts/testar-recuperacao-valores.js — `npm run teste:recuperacao`: recuperação de senha, valores, local, endereço, planilha
     scripts/testar-recorrencia.js — `npm run teste:recorrencia`: divisão do valor mensal entre as ocorrências
     scripts/testar-financeiro.js — `npm run teste:financeiro`: cálculos do módulo Financeiro (sem API/banco)
+    scripts/testar-relatorios.js — `npm run teste:relatorios`: cálculos da aba Relatórios — período, Agenda, Financeiro, Satisfação (sem API/banco)
+    scripts/testar-relatorios-api.js — `npm run teste:relatorios-api`: rotas /api/relatorios (permissões, período, consolidado de unidades; precisa da API)
     scripts/testar-agenda.js — `npm run teste:agenda`: CNPJ, conflitos de horário, recusas, avisos de cancelamento, calendário/cliente, convite e substituição de perfil (precisa da API)
     scripts/vincular-profissionais-importadas.js — `npm run importadas:vincular`: liga atendimentos importados às prestadoras
       asyncHandler.js        — evita que erro numa rota derrube o processo
@@ -174,7 +178,9 @@ api/
       subadministradores.js     — CRUD de sub-administradores (só admin completo)
       perfil.js                 — "Meu perfil": nome/foto/telefone/senha + e-mail com verificação, pros 4 tipos
       financeiro.js             — resumo do mês (receita/custo/margem), folha e pagamento de repasses às prestadoras
+      relatorios.js             — Relatórios (Agenda, Financeiro, Satisfação) por período; só administrador completo
     utils/financeiro.js        — cálculos do Financeiro (em centavos, testáveis sem banco)
+    utils/relatorios.js        — cálculos dos Relatórios (período, séries, taxas; testáveis sem banco)
     utils/conclusao.js         — conclui sozinho o atendimento aceito cuja data/hora já passou (a cada 5 min)
 ```
 
@@ -338,8 +344,24 @@ reabrir a sessão, trocar de unidade (% = chamadas concluídas ÷ esperadas) e a
 **Duas abas, duas sessões:** cada aba guarda a própria sessão (sessionStorage) — entrar numa conta em outra aba não troca a conta desta;
 o localStorage só guarda a sessão "lembrada" para abas **novas**, e sair/expirar numa aba só apaga a lembrada se for a mesma.
 
-**Relatórios:** o levantamento do que já é gerado, por categoria (Agenda, Financeiro, Satisfação), está em
-`RELATORIOS-LEVANTAMENTO-DE-DADOS.md`.
+**Relatórios (menu *Relatórios*, só administrador completo — funcionário não vê, porque a aba mostra faltas, metas e margem):**
+três abas — **Agenda**, **Financeiro** e **Satisfação** — com período à escolha (este mês, mês passado, 30/90 dias, este ano, 12 meses,
+um mês qualquer pelas setas ‹ ›, ou datas personalizadas) e, pra quem tem mais de uma unidade, o seletor "Só esta unidade" ×
+"Todas as minhas unidades" (soma e compara as unidades do administrador). Cada aba compara com o período anterior (▲/▼), tem gráficos,
+tabelas, alertas e os botões **Baixar planilha (CSV)** e **Imprimir** (a impressão sai sem menu).
+- **Agenda:** atendimentos (concluídos × programados), horas realizadas, cancelamentos e faltas (com taxas), taxa de recusa de convites,
+  clientes atendidos/que voltaram/novos, recorrentes × avulsos, gráfico por dia/semana/mês, situação (funil), dias da semana, mapa de calor
+  dia × hora, serviços e origem dos pedidos, tabela por prestadora (faltas × meta, recusas), clientes e locais que mais aparecem, avisos de
+  cancelamento (lidos e tempo até ler) e alertas (passou sem prestadora, futuros sem prestadora, choque de horário, profissional da planilha sem cadastro).
+- **Financeiro:** receita, custo, margem, ticket médio, receita por hora, a realizar, receita perdida (cancelados e faltas com valor),
+  repasses pagos × a pagar, série do período, evolução dos últimos 12 meses, por serviço, maiores clientes (e concentração), resultado por prestadora.
+- **Satisfação:** nota média e % de satisfeitos (só avaliações **aprovadas**), distribuição das notas, taxa de resposta (avaliações ÷
+  concluídos), tempo até avaliar e de moderação, nota por serviço e por período, ranking de prestadoras (nota + faltas + recusas +
+  cancelamentos), pontos de atenção (nota ≤ 3) e elogios. A "nota média" **não é NPS** (o portal ainda não pergunta "você indicaria?").
+Regras: "atendimento" é tudo que não foi cancelado nem falta; cancelado e falta não geram receita nem repasse; o período é o do **serviço**
+(data do atendimento). Os cálculos ficam em `api/src/utils/relatorios.js` (testados por `npm run teste:relatorios`, sem banco) e a API em
+`/api/relatorios/:slug/agenda|financeiro|satisfacao` (`?mes=AAAA-MM`, `?preset=`, `?de=&ate=`, `&escopo=todas`). O levantamento de dados
+que serviu de base, e o que ainda não é capturado, está em `RELATORIOS-LEVANTAMENTO-DE-DADOS.md`.
 
 **Prestadora ativa/inativa (Equipe → Desativar / Reativar, só administrador completo):** inativa **não recebe atendimento novo**
 (some da lista de atribuição; a API recusa em novo atendimento, troca, convite e série), **não entra mais no portal** (login

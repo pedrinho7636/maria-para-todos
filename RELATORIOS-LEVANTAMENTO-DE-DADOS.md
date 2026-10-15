@@ -8,6 +8,21 @@ Legenda: ✅ já gravado e fácil de somar · 🟡 dá pra calcular com o que ex
 
 ---
 
+## Situação: aba Relatórios implementada (versão 0.0.1.1, 14/10/2026)
+
+A aba **Relatórios** do administrador já entrega tudo que está marcado ✅ e 🟡 abaixo (Agenda, Financeiro e Satisfação), com período à
+escolha, comparação com o período anterior, planilha CSV e impressão. Ficam de fora só os itens ❌ (dados que o sistema ainda não captura),
+listados na seção 4. Decisões tomadas na implementação (a confirmar com o cliente):
+- **Quem vê:** só o administrador completo; funcionário não tem acesso (não existe permissão "Relatórios").
+- **Mês/período = o do serviço** (data do atendimento), não o do pagamento.
+- **Falta** não gera receita nem repasse; o valor cadastrado dela e o dos cancelados aparecem só como **receita perdida**.
+- **Meta de faltas** é só alerta (aparece em vermelho com ⚠), não bloqueia a prestadora.
+- **Empresa × unidade:** por padrão vale a unidade aberta; quem tem mais de uma unidade pode somar e comparar todas.
+- **Satisfação** usa só avaliações **aprovadas** nas médias; "nota média" não é NPS.
+- **Taxa de recusa** = recusas ÷ convites recebidos (recusados + os que ficaram com ela); **taxa de faltas** = faltas ÷ (concluídos + faltas).
+
+---
+
 ## 0. Regras de contagem (valem pra todos os relatórios)
 
 | Situação do atendimento | Conta como atendimento? | Conta como receita/repasse? |
@@ -180,4 +195,4 @@ Em ordem de valor / esforço:
 - **Equipe:** atendimentos e nota por prestadora, tarifa, faltas × meta.
 - **Financeiro:** receita/custo/margem, repasses, pendências, CSV.
 - **Avaliações:** moderação.
-- **Relatórios:** atalho ainda "em breve".
+- **Relatórios:** aba própria com Agenda, Financeiro e Satisfação (só administrador completo).
