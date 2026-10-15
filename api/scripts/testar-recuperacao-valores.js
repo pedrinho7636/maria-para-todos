@@ -166,7 +166,8 @@ const ultimoCodigo = async (destino) => (await pool.query('select codigo from co
   check('tarifa travada no aceite (80)', Number(tr.valor_prestadora) === 80);
 
   await http('PATCH', `/unidades/carazinho/admin/equipe/${prest.id}`, { valor_por_atendimento: 100 }, tAdm);
-  const a2 = await criar({ data_atendimento: util(0) });
+  // (daqui a 2 dias, à tarde: o convite de HOJE cujo horário já passou valeria como confirmado — não dá mais pra "aceitar")
+  const a2 = await criar({ data_atendimento: util(2), hora_atendimento: '15:00' });
   r = await http('POST', `/atendimentos/prestadora/me/${a2.j.id}/aceitar`, null, tPrest);
   const ag = (await http('GET', '/atendimentos/prestadora/me/agenda', null, tPrest)).j;
   const v1 = ag.find(x => x.id === a1.j.id), v2 = ag.find(x => x.id === a2.j.id);
@@ -178,8 +179,8 @@ const ultimoCodigo = async (destino) => (await pool.query('select codigo from co
   const totalMes = resumo.mes.realizados_total + resumo.mes.previstos_total;
   const qtdMes = resumo.mes.realizados_qtd + resumo.mes.previstos_qtd;
   const mesIgual = (d) => d.slice(0, 7) === hoje.slice(0, 7);
-  const esperadoQtd = [util(1), util(0)].filter(mesIgual).length;
-  const esperadoTotal = (mesIgual(util(1)) ? 80 : 0) + (mesIgual(util(0)) ? 100 : 0);
+  const esperadoQtd = [util(1), util(2)].filter(mesIgual).length;
+  const esperadoTotal = (mesIgual(util(1)) ? 80 : 0) + (mesIgual(util(2)) ? 100 : 0);
   check(`resumo do mês = ${esperadoQtd} atend. / R$ ${esperadoTotal} (80 travado + 100 novo)`, qtdMes === esperadoQtd && totalMes === esperadoTotal, JSON.stringify(resumo.mes));
   check('semana tem qtd/total coerentes (total = soma dos valores travados)', resumo.semana.qtd >= 0 && (resumo.semana.qtd === 0 ? resumo.semana.total === 0 : resumo.semana.total > 0), JSON.stringify(resumo.semana));
 
@@ -334,7 +335,8 @@ const ultimoCodigo = async (destino) => (await pool.query('select codigo from co
   const depois = (await http('GET', '/financeiro/carazinho/resumo', null, tAdm)).j;
   check('3 concluídos a mais, receita +500, custo +230 (80 da tarifa + 70 travado + 80)', depois.realizado.qtd - antes.realizado.qtd === 3 && Math.round((depois.realizado.receita - antes.realizado.receita) * 100) === 50000 && Math.round((depois.realizado.custo - antes.realizado.custo) * 100) === 23000, JSON.stringify({ a: antes.realizado, d: depois.realizado }));
   check('alerta "sem valor" subiu 1', depois.alertas.realizados_sem_valor - antes.alertas.realizados_sem_valor === 1);
-  check('pendências listam o atendimento sem valor', depois.pendencias.some(p => p.tipo_servico === 'qa-fin' && p.falta.includes('valor')));
+  // (a lista traz só as 30 mais antigas; com a agenda real do banco local cheia de concluídos sem custo o 'qa-fin' pode não caber)
+  check('pendências listam atendimentos com o que falta', depois.pendencias.length > 0 && depois.pendencias.every(p => Array.isArray(p.falta) && p.falta.length > 0));
   const repQa = depois.por_prestadora.find(p => p.prestadora_id === pf.id);
   check('qa-Prest: 3 atendimentos, a pagar 230, nada pago', repQa && repQa.qtd === 3 && repQa.a_pagar_total === 230 && repQa.pago === 0 && repQa.pendentes_qtd === 3, JSON.stringify(repQa));
   check('margem fecha só nos completos: (300−80)+(200−70) = 350 a mais', Math.round((depois.realizado.margem - antes.realizado.margem) * 100) === 35000, `${antes.realizado.margem} -> ${depois.realizado.margem}`);
@@ -420,7 +422,8 @@ const ultimoCodigo = async (destino) => (await pool.query('select codigo from co
     check('aceito de ontem SEM horário também conclui', (await st(idOntemSemHora)).status === 'concluido');
     check('aceito de amanhã continua aceito', (await st(idFuturo)).status === 'aceito');
     check('aceito de hoje que só termina às 01:30 do dia seguinte continua aceito', (await st(idHojeTarde)).status === 'aceito');
-    check('convite (proposto) de ontem não é concluído', (await st(idPropostoOntem)).status === 'proposto');
+    const sPropOntem = await st(idPropostoOntem);
+    check('convite (proposto) de ontem, nunca aceito nem recusado, vale como confirmado e conclui (trava a tarifa)', sPropOntem.status === 'concluido' && Number(sPropOntem.valor_prestadora) === 80, JSON.stringify(sPropOntem));
     check('só os 2 elegíveis dos meus dados entraram na contagem (>= 2)', n >= 2);
     const n2 = await concluirAtendimentosRealizados(tx);
     check('rodar de novo não conclui nada de novo (idempotente)', n2 === 0, String(n2));

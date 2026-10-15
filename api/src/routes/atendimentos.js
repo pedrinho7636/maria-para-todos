@@ -10,6 +10,7 @@ const { gerarOcorrencias } = require('../utils/recorrencia');
 const { gerarModeloImportacao } = require('../utils/modeloPlanilha');
 const { STATUS_QUE_OCUPAM, STATUS_CONFIRMADOS, SQL_CONFLITOS_JSON, conflitosDoHorario, conflitosDosAtendimentos, descreverConflito } = require('../utils/conflitos');
 const { avisarCancelamento } = require('../utils/avisos');
+const { concluirAtendimentosRealizados } = require('../utils/conclusao');
 const { capitalizarNome } = require('../utils/normalizacao');
 
 const router = express.Router();
@@ -24,7 +25,7 @@ const INICIO_SQL = (a) => `(${a}.data_atendimento + coalesce(${a}.hora_atendimen
 const FIM_SQL = (a) => `(case when ${a}.hora_atendimento is null then (${a}.data_atendimento + 1)::timestamp
   else ${a}.data_atendimento + ${a}.hora_atendimento + coalesce(${a}.duracao_horas, 1)::float8 * interval '1 hour' end)`;
 const FASE_SQL = (a) => `(${INICIO_SQL(a)} <= ${AGORA_BR}) as inicio_passou, (${FIM_SQL(a)} <= ${AGORA_BR}) as fim_passou,
-  (${a}.status = 'aceito' and ${INICIO_SQL(a)} <= ${AGORA_BR} and ${FIM_SQL(a)} > ${AGORA_BR}) as em_andamento`;
+  (${a}.status in ('aceito', 'proposto') and ${a}.prestadora_id is not null and ${INICIO_SQL(a)} <= ${AGORA_BR} and ${FIM_SQL(a)} > ${AGORA_BR}) as em_andamento`;
 
 // Antes de ATRIBUIR um atendimento a uma prestadora (convite novo, troca de prestadora, "programado" manual):
 //  • ela já RECUSOU esse atendimento antes? (o registro fica ligado ao atendimento; o administrador é avisado pra não
@@ -153,6 +154,7 @@ router.post('/', limitePedidoPublico, asyncHandler(async (req, res) => {
 router.get('/admin/:slug/agenda', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
   const { data } = req.query;
   const comCancelados = req.query.incluir_cancelados === '1';
+  await concluirAtendimentosRealizados(pool, { unidadeId: req.unidadeId }); // o que já começou/terminou aparece no estado certo na hora
   const { rows } = await pool.query(
     `select a.*, p.nome as prestadora_nome, c.nome as cliente_nome, ${FASE_SQL('a')},
             -- quem já recusou este atendimento (continua valendo mesmo depois de passar pra outra prestadora)
@@ -182,6 +184,7 @@ router.post('/admin/:slug/:id/situacao', requireAuth, requireAcessoUnidade('agen
   if (!['programado', 'concluido', 'cancelado', 'falta'].includes(situacao)) {
     return res.status(400).json({ erro: 'situacao deve ser programado, concluido, cancelado ou falta' });
   }
+  await concluirAtendimentosRealizados(pool, { atendimentoId: req.params.id, unidadeId: req.unidadeId });
   const atual = await lerParaChecar(pool, req.params.id, req.unidadeId);
   if (!atual) return res.status(404).json({ erro: 'Atendimento não encontrado' });
 
@@ -224,6 +227,10 @@ router.post('/admin/:slug/:id/situacao', requireAuth, requireAcessoUnidade('agen
      returning *`,
     [situacao, req.params.id, req.unidadeId]
   );
+  // reativar um atendimento cujo horário já passou: não fica "programado" — com prestadora ele conta como realizado
+  await concluirAtendimentosRealizados(pool, { atendimentoId: atendimento.id });
+  const { rows: [relido] } = await pool.query('select * from atendimentos where id = $1', [atendimento.id]);
+  Object.assign(atendimento, relido);
   // cancelado pelo administrador: a prestadora responsável recebe um aviso no portal (e some da agenda dela)
   let avisada = false;
   if (situacao === 'cancelado' && atual.status !== 'cancelado' && atual.prestadora_id) {
@@ -545,8 +552,8 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
       const r = await client.query(
         `insert into atendimentos
            (unidade_id, cliente_id, prestadora_id, tipo_servico, data_atendimento, hora_atendimento, duracao_horas,
-            status, origem, codigo_externo, orcamento_externo, profissional_externo, valor_prestadora, valor)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, 'importacao', $9, $10, $11, $12, $13)
+            status, origem, codigo_externo, orcamento_externo, profissional_externo, valor_prestadora, valor, area)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, 'importacao', $9, $10, $11, $12, $13, $14)
          on conflict (unidade_id, codigo_externo) where codigo_externo is not null do nothing`,
         [req.unidadeId, clienteId, prestadoraId, l.tipo_servico, l.data, l.hora, l.duracao_horas, status,
          l.codigo, l.orcamento, l.profissional && !prestadoraId ? l.profissional : null,
@@ -554,7 +561,7 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
          // tarifa de hoje e ainda não aceito fica nulo até o aceite
          prestadoraId && l.custo !== null ? l.custo
            : prestadoraId && (status === 'concluido' || status === 'aceito') ? tarifaPrestadora.get(prestadoraId) ?? null : null,
-         l.valor]
+         l.valor, l.area]
       );
       importados += r.rowCount;
     }
@@ -698,7 +705,7 @@ router.post('/admin/:slug/serie/:serieId/cancelar', requireAuth, requireAcessoUn
 // A FALTA é controle interno da franquia: pra prestadora ela aparece como "concluído" (nunca como falta).
 const COLUNAS_PRESTADORA = `a.id, a.tipo_servico, a.area, a.data_atendimento, a.hora_atendimento, a.duracao_horas,
   case when a.status = 'falta' then 'concluido'::status_atendimento else a.status end as status,
-  (a.status = 'aceito' and ${INICIO_SQL('a')} <= ${AGORA_BR} and ${FIM_SQL('a')} > ${AGORA_BR}) as em_andamento,
+  (a.status in ('aceito', 'proposto') and a.prestadora_id is not null and ${INICIO_SQL('a')} <= ${AGORA_BR} and ${FIM_SQL('a')} > ${AGORA_BR}) as em_andamento,
   to_char(a.hora_atendimento + (coalesce(a.duracao_horas, 1)::float8 * interval '1 hour'), 'HH24:MI') as hora_fim,
   a.data_atendimento::text as dia, cl.nome as cliente_nome,
   coalesce(a.valor_prestadora, p.valor_por_atendimento) as valor_pago,
@@ -707,6 +714,7 @@ const DE_PRESTADORA = `from atendimentos a join prestadoras p on p.id = a.presta
 
 // Convites pendentes de aceite pela prestadora logada
 router.get('/prestadora/me/convites', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
+  await concluirAtendimentosRealizados(pool, { prestadoraId: req.user.id }); // convite de atendimento que já começou vira confirmado
   const { rows } = await pool.query(
     `select ${COLUNAS_PRESTADORA} ${DE_PRESTADORA}
      where a.prestadora_id = $1 and a.status = 'proposto' order by a.data_atendimento, a.hora_atendimento`,
@@ -717,6 +725,7 @@ router.get('/prestadora/me/convites', requireAuth, requireRole('prestadora'), re
 
 // Agenda já aceita pela prestadora logada
 router.get('/prestadora/me/agenda', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
+  await concluirAtendimentosRealizados(pool, { prestadoraId: req.user.id });
   const { rows } = await pool.query(
     `select ${COLUNAS_PRESTADORA} ${DE_PRESTADORA}
      where a.prestadora_id = $1 and a.status = 'aceito' order by a.data_atendimento, a.hora_atendimento`,
@@ -730,6 +739,7 @@ router.get('/prestadora/me/agenda', requireAuth, requireRole('prestadora'), requ
 router.get('/prestadora/me/calendario', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
   const mes = String(req.query.mes ?? '');
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) return res.status(400).json({ erro: 'mes inválido — use AAAA-MM' });
+  await concluirAtendimentosRealizados(pool, { prestadoraId: req.user.id });
   const { rows } = await pool.query(
     `select ${COLUNAS_PRESTADORA} ${DE_PRESTADORA}
      where a.prestadora_id = $1 and a.status in ('proposto', 'aceito', 'concluido', 'cancelado', 'falta')
@@ -764,6 +774,7 @@ router.post('/prestadora/me/avisos/:id/lida', requireAuth, requireRole('prestado
 // concluído); "previsto" = aceito de hoje em diante. Semana começa no domingo,
 // igual ao painel dela.
 router.get('/prestadora/me/resumo', requireAuth, requireRole('prestadora'), requirePrimeiroAcessoConcluido, asyncHandler(async (req, res) => {
+  await concluirAtendimentosRealizados(pool, { prestadoraId: req.user.id });
   const { rows: [r] } = await pool.query(
     `with datas as (
        select (now() at time zone 'America/Sao_Paulo')::date as hoje
@@ -861,11 +872,12 @@ router.post('/prestadora/me/:id/recusar', requireAuth, requireRole('prestadora')
 // prestadora (em `prestadoras`), não repetida em cada atendimento. Cancelamento é pedido pelo WhatsApp e decidido pela
 // unidade — nada aqui altera o atendimento.
 router.get('/cliente/me/atendimentos', requireAuth, requireRole('cliente'), asyncHandler(async (req, res) => {
+  await concluirAtendimentosRealizados(pool, { clienteId: req.user.id });
   const { rows } = await pool.query(
     `select a.id, a.tipo_servico, a.area, a.data_atendimento::text as dia, to_char(a.hora_atendimento, 'HH24:MI') as hora,
             to_char(a.hora_atendimento + (coalesce(a.duracao_horas, 1)::float8 * interval '1 hour'), 'HH24:MI') as hora_fim,
             a.status, upper(left(a.id::text, 8)) as codigo,
-            (a.status = 'aceito' and ${INICIO_SQL('a')} <= ${AGORA_BR} and ${FIM_SQL('a')} > ${AGORA_BR}) as em_andamento,
+            (a.status in ('aceito', 'proposto') and a.prestadora_id is not null and ${INICIO_SQL('a')} <= ${AGORA_BR} and ${FIM_SQL('a')} > ${AGORA_BR}) as em_andamento,
             case when a.status in ('aceito', 'concluido') then a.prestadora_id end as prestadora_id
      from atendimentos a
      where a.cliente_id = $1
@@ -885,6 +897,7 @@ router.get('/cliente/me/atendimentos', requireAuth, requireRole('cliente'), asyn
 
 // Atendimentos concluídos do cliente logado, aguardando avaliação
 router.get('/cliente/me/pendentes-avaliacao', requireAuth, requireRole('cliente'), asyncHandler(async (req, res) => {
+  await concluirAtendimentosRealizados(pool, { clienteId: req.user.id });
   const { rows } = await pool.query(
     `select a.* from atendimentos a
      where a.cliente_id = $1 and a.status = 'concluido'

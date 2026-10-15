@@ -373,8 +373,30 @@ const gerarCnpj = (base12) => {
   const fSem = await sit('falta', semPrestFalta.json.id);
   ok(fSem.status === 400, 'atendimento sem prestadora não tem falta (400)');
   const fProposto = await http('POST', `/atendimentos/admin/${slug}`, { tipo_servico: 'QA Fase Prop', data_atendimento: ontem, hora_atendimento: '08:00', duracao_horas: 1, prestadora_id: A.id }, tokenAdm);
+  // convite que ninguém aceitou nem recusou e cujo horário já passou: vale como CONFIRMADO (não foi cancelado nem trocado) → concluído
+  const { rows: [tarifaA] } = await pool.query('select valor_por_atendimento v from prestadoras where id = $1', [A.id]);
+  await http('PATCH', `/unidades/${slug}/admin/equipe/${A.id}`, { valor_por_atendimento: '55' }, tokenAdm);
+  const agOntem = await http('GET', `/atendimentos/admin/${slug}/agenda?data=${ontem}`, null, tokenAdm);
+  const virou = agOntem.json.find(x => x.id === fProposto.json.id);
+  ok(virou && virou.status === 'concluido' && Number(virou.valor_prestadora) === 55, 'convite nunca aceito com o horário já passado vira "concluído" sozinho (e trava a tarifa)', JSON.stringify([virou?.status, virou?.valor_prestadora]));
   const fProp = await sit('falta', fProposto.json.id);
-  ok(fProp.status === 400, 'convite que a prestadora nunca aceitou também não vira falta (400)');
+  ok(fProp.status === 200, 'e, como valeu como confirmado, a falta pode ser registrada');
+  await http('PATCH', `/unidades/${slug}/admin/equipe/${A.id}`, { valor_por_atendimento: tarifaA.v === null ? '' : String(tarifaA.v) }, tokenAdm);
+
+  // começou e ainda não terminou: o convite sem resposta vira "aceito" + em andamento
+  const convT = await http('POST', `/atendimentos/admin/${slug}`, { tipo_servico: 'QA Fase Convite', data_atendimento: futuroF, hora_atendimento: '21:00', duracao_horas: 2, prestadora_id: B.id }, tokenAdm);
+  await pool.query(`update atendimentos set data_atendimento = ((now() at time zone 'America/Sao_Paulo') - interval '20 minutes')::date,
+                      hora_atendimento = ((now() at time zone 'America/Sao_Paulo') - interval '20 minutes')::time(0), duracao_horas = 2 where id = $1`, [convT.json.id]);
+  const diaConv = (await pool.query('select data_atendimento::text d from atendimentos where id = $1', [convT.json.id])).rows[0].d;
+  const emAnd = (await http('GET', `/atendimentos/admin/${slug}/agenda?data=${diaConv}`, null, tokenAdm)).json.find(x => x.id === convT.json.id);
+  ok(emAnd.status === 'aceito' && emAnd.em_andamento === true, 'convite sem resposta cujo horário de início já passou: fica "aceito" e "em andamento"', JSON.stringify([emAnd?.status, emAnd?.em_andamento]));
+  const invites = await http('GET', '/atendimentos/prestadora/me/convites', null, B.token);
+  ok(!invites.json.some(x => x.id === convT.json.id), 'e deixa de aparecer como convite pra prestadora (não dá mais pra "aceitar" o que já começou)');
+  // sem prestadora ninguém foi: pedido/recusado do passado continuam como estão
+  const pedidoPassado = await http('POST', `/atendimentos/admin/${slug}`, { tipo_servico: 'QA Fase Pedido', data_atendimento: futuroF, hora_atendimento: '09:00', duracao_horas: 1 }, tokenAdm);
+  await pool.query(`update atendimentos set data_atendimento = $2 where id = $1`, [pedidoPassado.json.id, ontem]);
+  await http('GET', `/atendimentos/admin/${slug}/agenda?data=${ontem}`, null, tokenAdm);
+  ok((await estado(pedidoPassado.json.id)).status === 'pedido', 'pedido sem prestadora com horário passado NÃO é concluído (ninguém foi)');
   const fPrest = await sit('falta', ter.json.id, B.token);
   ok(fPrest.status === 403 || fPrest.status === 401, 'prestadora não registra falta (nem a dela)');
 
@@ -393,7 +415,7 @@ const gerarCnpj = (base12) => {
   const eq1 = await http('GET', `/unidades/${slug}/admin/equipe`, null, tokenAdm);
   const linhaB = eq1.json.find(p => p.prestadora_id === B.id), linhaA = eq1.json.find(p => p.prestadora_id === A.id);
   ok(linhaB.faltas === 1 && linhaB.atendimentos_devidos >= 1 && linhaB.faltas_aceitavel_pct === null, 'a Equipe traz faltas e atendimentos devidos de cada prestadora (limite ainda não definido)', JSON.stringify([linhaB.faltas, linhaB.atendimentos_devidos, linhaB.faltas_aceitavel_pct]));
-  ok(linhaA.faltas === 1, 'a Ana (que faltou no "em andamento") também tem 1 falta');
+  ok(linhaA.faltas === 2, 'a Ana tem 2 faltas (a do "em andamento" e a do convite que valeu como confirmado)', String(linhaA.faltas));
   const lim = await http('PATCH', `/unidades/${slug}/admin/equipe/${B.id}`, { faltas_aceitavel_pct: '7,5' }, tokenAdm);
   ok(lim.status === 200 && Number(lim.json.faltas_aceitavel_pct) === 7.5, 'o dono define o percentual aceitável de faltas da prestadora (7,5%)', JSON.stringify(lim.json).slice(0, 100));
   const eq2 = await http('GET', `/unidades/${slug}/admin/equipe`, null, tokenAdm);

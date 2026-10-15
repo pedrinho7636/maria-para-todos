@@ -5983,16 +5983,19 @@
       ['Orçamento', 'não', 'Agrupa atendimentos do mesmo orçamento'],
       ['Número', 'sim', 'Código único do atendimento — é a chave: reenviar a planilha só traz o que ainda não existe'],
       ['Data', 'sim', 'dd/mm/aaaa'],
-      ['Horário', 'sim', 'hh:mm (início)'],
+      ['Horário', 'sim', 'hh:mm (início, 24 h)'],
       ['Período', 'não lida', 'Manhã/Tarde — o portal usa o Horário'],
       ['Serviço', 'sim', 'Ex.: Limpeza (+ Tipo: Comercial/Residencial)'],
       ['Tipo', 'não', 'Complementa o serviço'],
-      ['Horas', 'não', 'Duração; define a altura do bloco na agenda'],
+      ['Horas', 'não', 'Duração; define o horário de término'],
       ['Cliente', 'não', '"Nome | Telefone" — criado se não existir'],
       ['Profissionais', 'não', 'Prestadora — cadastrada se ainda não existir'],
+      ['Repasse (R$)', 'opcional', 'O que a franquia paga à prestadora (custo do Financeiro)'],
       ['Situação', 'não', 'Previsto, Concluído ou Cancelado'],
       ['Recorrente', 'não lida', 'Sim/Não — pra repetir toda semana use o cadastro de atendimento recorrente'],
+      ['Local de Atendimento', 'não', 'Endereço do serviço — vira o "Local" do atendimento'],
       ['Valor (R$)', 'opcional', 'O que o cliente paga (alimenta o Financeiro)'],
+      ['Margem de Contribuição (R$)', 'não lida', 'Valor − Repasse: o portal calcula sozinho'],
     ];
     function renderColunasModelo() {
       document.getElementById('atd-colunas-modelo').innerHTML = ATD_COLUNAS_MODELO.map(([c, o, u]) =>
@@ -6156,7 +6159,7 @@
              <div class="atd-stat"><b>${r.ja_existentes}</b><span>já importados</span></div>
              <div class="atd-stat"><b>${r.clientes_novos}</b><span>clientes novos</span></div>
            </div>`
-          + (r.com_valor || r.com_custo ? `<div class="atd-aviso">A planilha traz <b>Valor</b> em ${r.com_valor} linha(s) e <b>Custo</b> em ${r.com_custo}: eles entram no Financeiro.</div>` : '')
+          + (r.com_valor || r.com_custo ? `<div class="atd-aviso">A planilha traz <b>Valor</b> em ${r.com_valor} linha(s) e <b>Repasse</b> em ${r.com_custo}: eles entram no Financeiro.</div>` : '')
           + (r.periodo ? `<div class="atd-aviso">Período dos novos: ${dataBR(r.periodo.de)} a ${dataBR(r.periodo.ate)}.</div>` : '')
           + (r.novas === 0 ? '<div class="atd-aviso">Nada de novo neste arquivo — tudo nele já está no sistema.</div>' : '')
           + (semCadastro.length ? `<div class="atd-aviso"><b>${semCadastro.length}</b> profissional(is) da planilha ainda não são prestadoras. Ao importar, o sistema cadastra

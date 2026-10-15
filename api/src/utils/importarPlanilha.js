@@ -1,8 +1,9 @@
 // Leitura da planilha de atendimentos exportada do sistema da franquia
 // (.xlsx com: Orçamento | Número | Data | Horário | Período | Serviço | Tipo |
-// Horas | Cliente | Profissionais | Situação | Recorrente | Valor (R$) — e, opcional, Custo).
-// "Período" e "Recorrente" vêm na planilha mas não são lidos (o período sai do Horário; o que repete
-// toda semana é cadastrado pelo formulário de atendimento recorrente).
+// Horas | Cliente | Profissionais | Repasse (R$) | Situação | Recorrente | Local de Atendimento | Valor (R$) |
+// Margem de Contribuição (R$)).
+// "Período", "Recorrente" e "Margem de Contribuição" vêm na planilha mas não são lidos (o período sai do Horário; o que
+// repete toda semana é cadastrado pelo formulário de atendimento recorrente; a margem o portal calcula: Valor − Repasse).
 // Só lê e valida — quem grava no banco é a rota.
 const read = require('read-excel-file/node');
 
@@ -29,7 +30,9 @@ const COLUNAS = {
   // opcionais: se o sistema da franquia exportar valores, entram junto (valor = o que o cliente paga;
   // custo = o que a franquia paga à prestadora)
   valor: ['valor', 'valor (r$)', 'valor r$', 'valor cobrado', 'preco'],
-  custo: ['custo', 'custo (r$)', 'repasse', 'valor prestadora', 'valor da prestadora', 'valor pago'],
+  custo: ['repasse (r$)', 'repasse', 'custo', 'custo (r$)', 'valor prestadora', 'valor da prestadora', 'valor pago'],
+  // onde o atendimento acontece (endereço): vira o "Local" do atendimento
+  local: ['local de atendimento', 'local', 'endereco', 'endereço'],
 };
 const OBRIGATORIAS = ['numero', 'data', 'horario', 'servico'];
 
@@ -188,6 +191,7 @@ async function lerAtendimentos(buffer) {
       duracao_horas: parseHoras(celula(linha, 'horas')),
       cliente: parseCliente(celula(linha, 'cliente')),
       profissional: String(celula(linha, 'profissionais') ?? '').trim().slice(0, 200),
+      area: String(celula(linha, 'local') ?? '').trim().replace(/\s+/g, ' ').slice(0, 500) || null,
       situacao: mapearSituacao(celula(linha, 'situacao')),
       valor: parseValor(celula(linha, 'valor')),
       custo: parseValor(celula(linha, 'custo')),

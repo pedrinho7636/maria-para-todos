@@ -338,11 +338,11 @@ async function codigoDe(email) {
   ok(sb.status === 201, 'cria um atendimento de hoje que já passou do horário, com prestadora');
   await pool.query(`update atendimentos set status = 'aceito' where id = $1`, [idPass]);
   const { concluirAtendimentosRealizados } = require('../src/utils/conclusao');
-  const sMan = await sit('programado', tokenAdm, idPass);
-  ok(sMan.json.status === 'aceito' && sMan.json.situacao_manual === true, 'marcar como programado (com prestadora) mantém "aceito" e registra a escolha manual', JSON.stringify(sMan.json).slice(0, 100));
   await concluirAtendimentosRealizados();
   const { rows: [pass2] } = await pool.query('select status from atendimentos where id = $1', [idPass]);
-  ok(pass2.status === 'aceito', 'e a conclusão automática NÃO o conclui (o administrador disse que está programado)');
+  ok(pass2.status === 'concluido', 'atendimento confirmado (hoje 00:30–01:00) cujo horário de término já passou fica concluído, sem exceção');
+  const sMan = await sit('programado', tokenAdm, idPass);
+  ok(sMan.status === 400, 'e concluído não volta a "programado" (só prestadora não foi)');
   // sem escolha manual: o aceito cujo término passou (ontem) é concluído sozinho; concluído, só dá pra marcar falta
   const sb2 = await novoAtd({ prestadora_id: p2.json.prestadora.id, hora_atendimento: '00:40', duracao_horas: 0.5, forcar_conflito: true });
   await pool.query(`update atendimentos set status = 'aceito', data_atendimento = (now() at time zone 'America/Sao_Paulo')::date - 1 where id = $1`, [sb2.json.id]);
@@ -393,21 +393,24 @@ async function codigoDe(email) {
   const importar = (corpo) => http('POST', `/atendimentos/admin/${slugA}/importar`, corpo, tokenAdm);
   const planilhaDe = async (linhas) => {
     const escreve = require('write-excel-file/node').default;
-    const cab = ['Número', 'Data', 'Horário', 'Serviço', 'Tipo', 'Horas', 'Cliente', 'Profissionais', 'Situação', 'Valor', 'Custo'];
+    // as MESMAS 16 colunas, na mesma ordem, da planilha real da franquia
+    const cab = ['Orçamento', 'Número', 'Data', 'Horário', 'Período', 'Serviço', 'Tipo', 'Horas', 'Cliente', 'Profissionais', 'Repasse (R$)', 'Situação', 'Recorrente', 'Local de Atendimento', 'Valor (R$)', 'Margem de Contribuição (R$)'];
     return (await escreve([[...cab], ...linhas]).toBuffer()).toString('base64');
   };
   const nomeImp = `QA Importada ${id}`;
   const arq = await planilhaDe([
-    [`QA-${id}-1`, '15/12/2026', '08:00', 'Limpeza', 'Comercial', 4, `QA Empresa ${id} | (54) 3333-4444`, nomeImp, 'Previsto', '600,00', '150,00'],
-    [`QA-${id}-2`, '16/12/2026', '09:00', 'Passadoria', '', 2, `QA Empresa ${id}`, nomeImp, 'Concluído', 200, ''],
-    [`EXEMPLO-${id}`, '17/12/2026', '10:00', 'Limpeza', 'Residencial', 3, 'Exemplo', 'Ninguém', 'Previsto', '', ''],
+    ['500', `QA-${id}-1`, '15/12/2026', '08:00:00', 'Manhã', 'Limpeza', 'Comercial', 4, `QA Empresa ${id} | (54) 3333-4444`, nomeImp, '150,00', 'Previsto', 'Não', 'Rua Teste, nº 1, Centro, Carazinho/RS CEP: 99.500-000', '600,00', '450,00'],
+    ['501', `QA-${id}-2`, '16/12/2026', '09:00:00', 'Manhã', 'Passadoria', '', 2, `QA Empresa ${id}`, nomeImp, '', 'Concluído', 'Não', 'Av. Teste, nº 2, Bairro Novo, Carazinho/RS', 200, ''],
+    ['502', `EXEMPLO-${id}`, '17/12/2026', '10:00:00', 'Manhã', 'Limpeza', 'Residencial', 3, 'Exemplo', 'Ninguém', '', 'Previsto', 'Não', '', '', ''],
   ]);
   const imp0 = await importar({ arquivo_base64: arq });
   ok(imp0.status === 200 && imp0.json.resumo.novas === 2 && imp0.json.resumo.com_valor === 2 && imp0.json.resumo.com_custo === 1, 'pré-visualização: 2 novas (a linha EXEMPLO é ignorada), 2 com valor e 1 com custo', JSON.stringify(imp0.json.resumo).slice(0, 200));
   const imp1 = await importar({ arquivo_base64: arq, confirmar: true });
   ok(imp1.status === 200 && imp1.json.importados === 2 && imp1.json.prestadoras_criadas?.length === 1, 'confirma: importa 2 e cadastra a prestadora que não existia', JSON.stringify(imp1.json).slice(0, 160));
   const { rows: impBanco } = await pool.query(`select codigo_externo, valor, valor_prestadora, status, prestadora_id from atendimentos where unidade_id = $1 and codigo_externo like $2 order by codigo_externo`, [uQa.id, `QA-${id}-%`]);
-  ok(Number(impBanco[0].valor) === 600 && Number(impBanco[0].valor_prestadora) === 150 && impBanco[0].status === 'proposto', 'Valor e Custo da planilha entram (valor 600; custo 150 vira o repasse combinado)', JSON.stringify(impBanco[0]));
+  ok(Number(impBanco[0].valor) === 600 && Number(impBanco[0].valor_prestadora) === 150 && impBanco[0].status === 'proposto', 'Valor (R$) e Repasse (R$) da planilha entram (valor 600; repasse 150 vira o custo combinado); a Margem é ignorada', JSON.stringify(impBanco[0]));
+  const { rows: locais } = await pool.query(`select area from atendimentos where unidade_id = $1 and codigo_externo like $2 order by codigo_externo`, [uQa.id, `QA-${id}-%`]);
+  ok(locais[0].area === 'Rua Teste, nº 1, Centro, Carazinho/RS CEP: 99.500-000' && locais[1].area === 'Av. Teste, nº 2, Bairro Novo, Carazinho/RS', 'a coluna "Local de Atendimento" vira o local (área) do atendimento', JSON.stringify(locais));
   ok(Number(impBanco[1].valor) === 200 && impBanco[1].status === 'concluido' && impBanco[1].prestadora_id, 'a linha concluída entra com valor e ligada à prestadora');
   const { rows: prestImp } = await pool.query(`select id, email from prestadoras where unidade_id = $1 and nome = $2`, [uQa.id, nomeImp]);
   ok(prestImp.length === 1 && prestImp[0].email === `qaimportada${id}@gmail.com`, 'a prestadora da planilha nasce com e-mail nome@gmail.com', JSON.stringify(prestImp));

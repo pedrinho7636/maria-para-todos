@@ -227,11 +227,13 @@ funcionários. **Deixando em branco, o campo some do site** em vez de aparecer v
   valor informado, centavo a centavo. Mês só parcialmente coberto (a série começa ou termina no meio dele) recebe a
   parte proporcional às ocorrências que de fato entram. Cada atendimento guarda o seu valor (`atendimentos.valor`)
   e o mensal original (`valor_mensal`) — é daí que os dashboards vão somar o faturamento.
-- Planilha importada: a exportação da franquia traz a coluna **Valor (R$)** (o que o cliente paga) e o portal a lê.
-  O **Custo** (repasse) é opcional: acrescente uma coluna "Custo (R$)" se o cliente conseguir exportá-lo.
-  O modelo baixado em "Importar planilha" tem as mesmas colunas, na mesma ordem, da planilha real
-  (Orçamento, Número, Data, Horário, Período, Serviço, Tipo, Horas, Cliente, Profissionais, Situação, Recorrente, Valor (R$));
-  *Período* e *Recorrente* não são lidos.
+- Planilha importada (padrão atual, a exportação da franquia com **16 colunas**): Orçamento, Número, Data, Horário, Período, Serviço,
+  Tipo, Horas, Cliente, Profissionais, **Repasse (R$)**, Situação, Recorrente, **Local de Atendimento**, **Valor (R$)**, Margem de
+  Contribuição (R$). O modelo baixado em "Importar planilha" tem exatamente essas colunas, na mesma ordem.
+  - **Valor (R$)** = o que o cliente paga; **Repasse (R$)** = o que a franquia paga à prestadora (vira o custo no Financeiro; sem ele
+    vale a tarifa da Equipe); **Local de Atendimento** = o endereço do serviço (vira o "Local" do atendimento).
+  - *Período*, *Recorrente* e *Margem de Contribuição* não são lidos (a margem o portal calcula: Valor − Repasse).
+  - Planilhas antigas continuam valendo: "Valor", "Custo" e "Repasse" são aceitos como nomes.
 - Não confundir com o **valor pago à prestadora** (tela Equipe), que é o repasse.
 
 **Prestadoras vindas da planilha:** ao importar, as profissionais que ainda não existem como prestadoras são
@@ -302,10 +304,14 @@ e qual unidade estavam abertas): atualizar a página volta pro mesmo lugar, sem 
 (token vencido ou conta desativada → volta pra home). Os links de convite (`?perfil=…`, `?cadastro=…`) mostram a tela pedida.
 
 **Fases do atendimento e falta da prestadora (agenda):**
-- Antes de começar: **programado** ou **cancelado**. Começou e não terminou: **▶ atendimento em andamento** (não é status gravado:
-  é `aceito` entre o início e o término, calculado no relógio de Brasília). Passou o horário de **término**: o sistema **conclui
-  sozinho** e, depois de concluído, o administrador **só pode mudar para "prestadora não foi" (falta)** — cancelar/reprogramar
-  um concluído é recusado (400). Concluir à mão só depois do término.
+- **Regra do relógio:** atendimento que **não foi cancelado e cuja prestadora não foi trocada vale como CONFIRMADO por ela** — não existe
+  "aceitar" um atendimento que já começou. Com prestadora ligada: o horário de **início** chegou → **▶ em andamento** (convite sem
+  resposta vira "aceito" e a tarifa dela é travada); o horário de **término** passou → **concluído** (convite nunca respondido também;
+  sem horário vale o dia todo). Sem prestadora (pedido/recusado) ninguém foi: continua como está. Não há exceção por escolha manual.
+  A regra roda a cada poucos minutos **e** na hora em que a agenda, a área da prestadora, a do cliente e o Financeiro abrem.
+- Antes de começar: **programado** ou **cancelado**. Em andamento: falta da prestadora ou cancelar. Depois do término o sistema conclui
+  sozinho e, depois de concluído, o administrador **só pode mudar para "prestadora não foi" (falta)**; cancelar/reprogramar um concluído
+  é recusado (400). Reativar (cancelado → programado) um atendimento de data passada com prestadora já o deixa **concluído**.
 - **Falta** (`status = falta`): só em atendimento confirmado/concluído **que já começou** e com prestadora. Não conta como atendimento
   nem entra em receita/repasse; engano se desfaz voltando a "concluído". Depois de registrada a falta não cancela nem reprograma.
 - **Meta de faltas** (Equipe → *Meta de faltas*, só administrador): percentual aceitável por prestadora. A linha da Equipe mostra
