@@ -4422,6 +4422,7 @@
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-clientes"> Clientes</label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-dashboard"> Visão geral</label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400"><input type="checkbox" id="sa-perm-financeiro"> Financeiro</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400" title="Agenda e Satisfação. O relatório Financeiro só aparece se o funcionário também tiver a permissão Financeiro."><input type="checkbox" id="sa-perm-relatorios"> Relatórios</label>
               </div>
             </div>
             <div class="form-actions">
@@ -4678,7 +4679,7 @@
         </div>
         <div class="field-row">
           <div class="field"><label>Prestadora (opcional)</label><select id="atd-prestadora"></select></div>
-          <div class="field"><label id="atd-valor-rotulo">Valor do atendimento (R$)</label><input id="atd-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"></div>
+          <div class="field"><label id="atd-valor-rotulo">Valor do atendimento (R$)</label><input id="atd-valor" type="text" inputmode="numeric" data-moeda autocomplete="off" placeholder="0,00"></div>
         </div>
 
         <div class="field" style="margin-bottom:6px">
@@ -4697,8 +4698,8 @@
             <div class="field" style="align-self:flex-end"><label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:13px"><input type="checkbox" id="atd-quinzenal" style="width:auto;flex:none"> Semana sim, semana não</label></div>
           </div>
           <p style="font-size:12px;margin:0">O <b>mesmo horário e duração</b> valem pra todos os dias marcados (precisa de horários diferentes? cadastre outra repetição).
-            <b>Valor:</b> aqui vale o <b>mês inteiro</b> — o sistema divide entre os atendimentos de cada mês (ex.: R$ 1.200 com 4 terças = R$ 300 cada;
-            com 5 terças = R$ 240 cada) e a soma do mês fecha no valor informado.</p>
+            <b>Valor:</b> é o de <b>cada atendimento</b> — todos os atendimentos gerados recebem esse valor, e o total da repetição é
+            o valor × a quantidade (ex.: R$ 150 em 12 terças = R$ 1.800).</p>
         </div>
 
         <p style="font-size:12px;margin:0 0 14px" id="atd-nota-valor">O valor é o que o <b>cliente paga</b> por este atendimento (alimenta o financeiro e os
@@ -4841,7 +4842,7 @@
         pra ela, já somado nos atendimentos aceitos. Vale a partir dos <b>próximos aceites</b>: o que ela já aceitou mantém
         o valor combinado na hora. Deixe em branco pra remover.</p>
       <div class="field"><label for="tarifa-valor">Valor (R$)</label>
-        <input id="tarifa-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"></div>
+        <input id="tarifa-valor" type="text" inputmode="numeric" data-moeda autocomplete="off" placeholder="0,00"></div>
       <div class="form-actions">
         <button class="btn-sm ghost" onclick="fecharTarifa()">Cancelar</button>
         <button class="btn-sm" id="tarifa-salvar" onclick="salvarTarifa()">Salvar</button>
@@ -5296,6 +5297,24 @@
     const exibirTelefone = (v) => (String(v == null ? '' : v).replace(/\D/g, '').length >= 10 ? formatarTelefone(v) : (v || ''));
     function mascararTelefone(input) { input.value = formatarTelefone(input.value); }
 
+    /* Dinheiro como no app do banco: só dígitos, sempre duas casas, e cada dígito novo entra pela direita
+       (1 → 0,01 · 15 → 0,15 · 1500 → 15,00 · 150000 → 1.500,00). Apagar tudo deixa o campo vazio ("sem valor").
+       Vale pra todo <input data-moeda> — inclusive os criados depois (detalhe do atendimento na agenda). */
+    function formatarMoedaCampo(valor) {
+      const d = String(valor == null ? '' : valor).replace(/\D/g, '').replace(/^0+/, '').slice(0, 10); // até 99.999.999,99
+      if (!d) return '';
+      const c = d.padStart(3, '0');
+      return c.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + c.slice(-2);
+    }
+    // valor numérico vindo do banco (150 / "150.5") → "150,50", pronto pra máscara
+    const moedaParaCampo = (v) => (v === null || v === undefined || v === '' ? '' : formatarMoedaCampo(Math.round(Number(v) * 100)));
+    document.addEventListener('input', (e) => {
+      const el = e.target;
+      if (!el.matches || !el.matches('input[data-moeda]')) return;
+      el.value = formatarMoedaCampo(el.value);
+      el.setSelectionRange(el.value.length, el.value.length); // o cursor fica sempre no fim, como no banco
+    });
+
     /* Nomes: primeira letra de cada palavra em maiúscula ("ana carolina" → "Ana Carolina"; de/da/do/dos/das/e ficam
        minúsculos no meio). Nome de PESSOA digitado todo em maiúsculas também vira "Ana Carolina". Ao sair do campo; o
        servidor faz a mesma coisa ao gravar. */
@@ -5405,7 +5424,8 @@
       return {
         dashboard: !!u.pode_dashboard, agenda: !!u.pode_agenda, avaliacoes: !!u.pode_avaliacoes,
         equipe: !!u.pode_equipe, clientes: !!u.pode_clientes, financeiro: !!u.pode_financeiro,
-        relatorios: false, subadmins: false // relatórios mostram faltas, metas e margem: só o administrador completo
+        // Relatórios: Agenda e Satisfação com pode_relatorios; o relatório Financeiro exige também pode_financeiro
+        relatorios: !!u.pode_relatorios, subadmins: false
       };
     }
     function aplicarPermissoesAdminUI() {
@@ -5665,7 +5685,7 @@
           await carregarEquipeClientesAvaliacoes(regiao);
           show('screen-franqueado'); setUnitUI(regiao);
           const p = permissoesAtuais();
-          const ordem = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes'], ['financeiro', 'financeiro']];
+          const ordem = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes'], ['financeiro', 'financeiro'], ['relatorios', 'relatorios']];
           const primeira = (ordem.find(([, modulo]) => p[modulo])?.[0]) || 'agenda';
           // recarregou a página: volta pra mesma tela (se a permissão dela continua valendo)
           const voltar = visao && MODULO_DA_VISAO[visao.view] && p[MODULO_DA_VISAO[visao.view]] !== false ? visao.view : primeira;
@@ -5804,7 +5824,7 @@
       aplicarPermissoesAdminUI();
       toast('Suas permissões foram atualizadas pelo administrador.');
       const p = permissoesAtuais();
-      const modulos = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes'], ['financeiro', 'financeiro']];
+      const modulos = [['visaogeral', 'dashboard'], ['agenda', 'agenda'], ['avaliacoes', 'avaliacoes'], ['equipe', 'equipe'], ['clientes', 'clientes'], ['financeiro', 'financeiro'], ['relatorios', 'relatorios']];
       const aberta = modulos.find(([v]) => document.getElementById('av-' + v)?.style.display === 'block');
       if (aberta && !p[aberta[1]]) adminView((modulos.find(([, m]) => p[m]) || ['agenda'])[0]); // a tela atual deixou de ser permitida
     }
@@ -6374,9 +6394,21 @@
       pop.id = 'reatribuir-pop';
       pop.innerHTML = `
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Situação</label>
-        <select id="reatribuir-situacao">
+        <select id="reatribuir-situacao" onchange="mostrarCamposCancelamento()">
           ${situacoes.opcoes.map(([valor, rotulo]) => `<option value="${valor}" ${valor === situacoes.atual ? 'selected' : ''}>${rotulo}</option>`).join('')}
         </select>
+        <div id="reatribuir-cancelamento" style="display:none">
+          <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Quem pediu o cancelamento? <span style="font-weight:400">(opcional)</span></label>
+          <select id="reatribuir-cancel-quem">
+            <option value="">Não informar</option>
+            <option value="cliente">O cliente pediu</option>
+            <option value="franquia">A franquia cancelou</option>
+            <option value="prestadora">A prestadora cancelou</option>
+          </select>
+          <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Motivo <span style="font-weight:400">(opcional)</span></label>
+          <input id="reatribuir-cancel-motivo" maxlength="300" autocomplete="off" placeholder="Ex.: cliente viajou">
+          <p style="font-size:11.5px;margin:-4px 0 10px">Fica só no histórico da franquia e alimenta os relatórios de cancelamento: a prestadora não vê.</p>
+        </div>
         ${item.status === 'concluido' ? '<p style="font-size:11.5px;margin:-4px 0 10px">Depois de concluído só dá pra marcar <b>prestadora não foi</b>. Isso é controle interno da franquia: a prestadora não vê.</p>' : ''}
         ${item.em_andamento ? '<p style="font-size:11.5px;margin:-4px 0 10px">Começou e ainda não terminou. Se a prestadora não foi, marque a falta (controle interno: ela não vê).</p>' : ''}
         ${recusasItem.length ? `<div class="fin-alerta" style="font-size:12px;margin:0 0 10px">↩ <b>Já recusou(aram) este atendimento:</b> ${recusasItem.map(r => escapeHtml(r.nome) + ' (' + dataHoraBR(r.em) + ')').join(', ')}.
@@ -6386,7 +6418,7 @@
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Local / bairro</label>
         <input id="reatribuir-local" maxlength="500" value="${escapeHtml(item.area || '')}" placeholder="Sem local — deixe vazio pra ocultar">
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:6px">Valor do atendimento (R$)</label>
-        <input id="reatribuir-valor" inputmode="decimal" autocomplete="off" value="${item.valor === null || item.valor === undefined ? '' : Number(item.valor).toFixed(2).replace('.', ',')}" placeholder="0,00">
+        <input id="reatribuir-valor" inputmode="numeric" data-moeda autocomplete="off" value="${moedaParaCampo(item.valor)}" placeholder="0,00">
         ${item.valor_mensal ? `<p style="font-size:11.5px;margin:-4px 0 10px">Parte do valor mensal de ${formatarReais(item.valor_mensal)}, dividido entre os atendimentos do mês.</p>` : ''}
         ${!item.prestadora_id && item.profissional_externo ? `<div class="fin-alerta" style="font-size:12px;margin:0 0 10px">⚠ <b>${escapeHtml(item.profissional_externo)}</b> está na agenda,
           mas é uma <b>prestadora sem cadastro no Portal da Maria</b>. ${usuarioLogado?.tipo === 'administrador' ? `<a href="#" onclick="event.preventDefault();abrirNovaPrestadora(${JSON.stringify(item.profissional_externo).replace(/"/g, '&quot;')});fecharReatribuirPop()">Cadastrar agora</a>` : 'Peça ao administrador para cadastrá-la.'}</div>` : ''}
@@ -6399,6 +6431,12 @@
       pop.style.top = (rect.top + window.scrollY) + 'px';
     }
     function fecharReatribuirPop() { document.getElementById('reatribuir-pop')?.remove(); }
+    // quem pediu e o motivo só aparecem quando a situação escolhida é "cancelado" e o atendimento ainda não estava cancelado
+    function mostrarCamposCancelamento() {
+      const pergunta = reatribuirItem?.status !== 'cancelado' && document.getElementById('reatribuir-situacao')?.value === 'cancelado';
+      const bloco = document.getElementById('reatribuir-cancelamento');
+      if (bloco) bloco.style.display = pergunta ? '' : 'none';
+    }
 
     // Preenche a aba de WhatsApp (já aberta no clique, ver salvarReatribuicao) com o
     // aviso de novo atendimento pra prestadora. A confirmação só acontece no portal
@@ -6433,7 +6471,10 @@
       const mudouLocal = local !== (item.area || '');
       const mudouValor = valor !== (item.valor === null || item.valor === undefined ? null : Number(item.valor));
       if (!mudouSituacao && !mudouPrestadora && !mudouLocal && !mudouValor) { fecharReatribuirPop(); return; }
-      const mudarSituacao = () => apiComConfirmacao(`/atendimentos/admin/${currentUnit}/${atendimentoId}/situacao`, { method: 'POST', body: JSON.stringify({ situacao }) });
+      // ao cancelar, vai junto quem pediu e o motivo (lidos agora, antes de a janelinha fechar)
+      const dadosCancelamento = situacao === 'cancelado' && item.status !== 'cancelado'
+        ? { cancelado_por: document.getElementById('reatribuir-cancel-quem')?.value || null, motivo: (document.getElementById('reatribuir-cancel-motivo')?.value || '').trim() } : {};
+      const mudarSituacao = () => apiComConfirmacao(`/atendimentos/admin/${currentUnit}/${atendimentoId}/situacao`, { method: 'POST', body: JSON.stringify({ situacao, ...dadosCancelamento }) });
 
       // Abre a aba em branco ANTES do await: depois que a resposta da API chega
       // o navegador já não considera mais isso "gesto do usuário" e bloqueia o
@@ -6539,12 +6580,12 @@
       document.getElementById('atd-tab-importar').classList.toggle('active', qual === 'importar');
     }
     // "Repetir toda semana": o mesmo formulário vira um atendimento recorrente (antes eram dois formulários,
-    // com os mesmos campos repetidos). Ligado, a data vira "a partir de" e o valor passa a ser o do MÊS.
+    // com os mesmos campos repetidos). Ligado, a data vira "a partir de" (o valor continua sendo o de cada atendimento).
     function atdRepeteMudou() {
       const repete = document.getElementById('atd-repete').checked;
       document.getElementById('atd-repetir').style.display = repete ? 'block' : 'none';
       document.getElementById('atd-data-rotulo').textContent = repete ? 'A partir de' : 'Data';
-      document.getElementById('atd-valor-rotulo').textContent = repete ? 'Valor do MÊS inteiro (R$)' : 'Valor do atendimento (R$)';
+      document.getElementById('atd-valor-rotulo').textContent = repete ? 'Valor de cada atendimento (R$)' : 'Valor do atendimento (R$)';
       document.getElementById('atd-salvar').textContent = repete ? 'Gerar atendimentos' : 'Cadastrar';
       if (repete) {
         // sugere o dia da semana da data escolhida (se ainda não marcou nenhum)
@@ -6568,20 +6609,20 @@
     }
 
     // Série semanal (marcou "Repetir toda semana"): monta um item por dia da semana escolhido, todos
-    // com o mesmo horário/duração/serviço/cliente/prestadora, e manda o valor do MÊS inteiro pra API
-    // dividir entre todas as ocorrências de cada mês.
+    // com o mesmo horário/duração/serviço/cliente/prestadora, e manda o valor de CADA atendimento: todas as
+    // ocorrências recebem o valor cheio (o total da série é valor × quantidade).
     async function salvarSerieAtendimentos() {
       const data = atdVal('atd-data'), hora = lerHora(atdVal('atd-hora')), servico = atdVal('atd-servico').trim();
       if (!data || !hora || !servico) { toast('Preencha "a partir de", horário e serviço.'); return; }
       const dias = [...document.querySelectorAll('#atd-dias input:checked')].map(c => Number(c.value));
       if (dias.length === 0) { toast('Marque ao menos um dia da semana.'); return; }
-      const valorMes = lerReais(atdVal('atd-valor'));
-      if (Number.isNaN(valorMes)) { toast('Valor do mês inválido — use números, ex.: 1200,00.'); return; }
+      const valorCada = lerReais(atdVal('atd-valor'));
+      if (Number.isNaN(valorCada)) { toast('Valor inválido — use números, ex.: 150,00.'); return; }
 
       const comum = { hora_atendimento: hora, tipo_servico: servico, area: atdVal('atd-area').trim() || null, duracao_horas: Number(atdVal('atd-duracao')) || null, prestadora_id: atdVal('atd-prestadora') || null };
       const corpo = {
         data_inicio: data, horizonte_meses: Number(atdVal('atd-meses')) || 3, semanas_alternadas: document.getElementById('atd-quinzenal').checked,
-        itens: dias.map(d => ({ ...comum, dia_semana: d })), valor_mensal_total: valorMes,
+        itens: dias.map(d => ({ ...comum, dia_semana: d })), valor_por_atendimento: valorCada,
       };
       const cliente = atdVal('atd-cliente');
       if (cliente === '__novo__') {
@@ -6596,8 +6637,9 @@
       try {
         const resp = await apiComConfirmacao(`/atendimentos/admin/${currentUnit}/recorrente`, { method: 'POST', body: JSON.stringify(corpo) });
         fecharModalAtendimento();
-        const comValor = resp.atendimentos.filter(a => a.valor !== null && a.valor !== undefined).length;
-        toast(resp.quantidade_gerada + ' atendimentos gerados' + (comValor ? ` (valor do mês dividido entre ${comValor}).` : '.'));
+        const total = resp.atendimentos.reduce((s, a) => s + (a.valor === null || a.valor === undefined ? 0 : Number(a.valor)), 0);
+        toast(resp.quantidade_gerada + ' atendimentos gerados' + (valorCada !== null
+          ? ` — ${resp.quantidade_gerada} × ${formatarReais(valorCada)} = ${formatarReais(total)}.` : '.'));
         if (corpo.cliente_novo) await carregarEquipeClientesAvaliacoes(currentUnit);
         const [ano, mes] = data.split('-').map(Number);
         diaSelecionadoAgenda = data;
@@ -7014,7 +7056,7 @@
       if (!p) return;
       tarifaPrestadoraId = prestadoraId;
       document.getElementById('tarifa-nome').textContent = p.nome;
-      document.getElementById('tarifa-valor').value = p.tarifa === null ? '' : p.tarifa.toFixed(2).replace('.', ',');
+      document.getElementById('tarifa-valor').value = moedaParaCampo(p.tarifa);
       document.getElementById('modal-tarifa').classList.add('show');
       document.getElementById('tarifa-valor').focus();
     }
@@ -7570,6 +7612,16 @@
 
     const relStatusChip = s => ({ aprovada: '<span class="chip chip-on">aprovada</span>', pendente: '<span class="chip chip-off">aguardando moderação</span>', recusada: '<span class="chip chip-off">recusada</span>' }[s] || '');
     const relNomePrestadora = p => escapeHtml(p.nome) + (p.ativa === false ? ' <span class="chip chip-off">inativa</span>' : '');
+    // quem pediu o cancelamento (do histórico de status)
+    const REL_QUEM_CANCELOU = { cliente: 'O cliente pediu', franquia: 'A franquia cancelou', prestadora: 'A prestadora cancelou', nao_informado: 'Não informado', sem_registro: 'Anterior ao histórico' };
+    const REL_COR_QUEM = { cliente: 'azul', franquia: '', prestadora: 'ruim', nao_informado: 'ambar', sem_registro: 'ambar' };
+    const relMotivo = m => (m === null ? 'Sem motivo informado' : m);
+    const relDiasOuHoras = h => (h === null || h === undefined ? '—' : Math.abs(h) >= 48 ? relDec(h / 24, 1) + ' dias' : relHoras(h));
+    // o histórico de status só existe desde o dia em que passou a ser gravado: o que é anterior fica de fora desses indicadores
+    function relAvisoHistorico(h) {
+      if (!h || !h.sem_historico) return '';
+      return relTexto(`${plural(h.sem_historico, 'atendimento do período é anterior', 'atendimentos do período são anteriores')} ao histórico de status${h.desde ? ' (gravado desde ' + dataHoraBR(h.desde) + ')' : ''}: ${h.sem_historico === 1 ? 'fica' : 'ficam'} de fora do funil real, do tempo de resposta aos convites e do motivo dos cancelamentos.`);
+    }
 
     // ---------- carregamento e controles ----------
     function relQuery() {
@@ -7581,6 +7633,10 @@
       return '?' + q.join('&');
     }
     function relMarcarAba() {
+      // funcionário sem a permissão Financeiro: sem a aba de receita/margem
+      const podeFin = permissoesAtuais().financeiro;
+      document.getElementById('rel-aba-financeiro').style.display = podeFin ? '' : 'none';
+      if (!podeFin && relAba === 'financeiro') relAba = 'agenda';
       ['agenda', 'financeiro', 'satisfacao'].forEach(a => {
         const b = document.getElementById('rel-aba-' + a);
         b.classList.toggle('active', a === relAba); b.setAttribute('aria-selected', a === relAba ? 'true' : 'false');
@@ -7696,17 +7752,49 @@
       const origem = relBarras(d.por_origem, { valor: o => o.qtd, rotulo: o => REL_ORIGEM[o.origem] || o.origem, texto: o => relInt(o.qtd), cor: () => 'azul' });
 
       const prest = relTabela(
-        [['Prestadora'], ['Concluídos', 'num'], ['Programados', 'num'], ['Horas', 'num'], ['Faltas', 'num'], ['Recusas', 'num'], ['Cancel.', 'num']],
+        [['Prestadora'], ['Concluídos', 'num'], ['Programados', 'num'], ['Horas', 'num'], ['Faltas', 'num'], ['Recusas', 'num'], ['Cancel.', 'num'], ['Resposta', 'num']],
         d.prestadoras.map(p => [
           relNomePrestadora(p), relInt(p.concluidos), relInt(p.programados), relHoras(p.horas_realizadas),
           `<span class="${p.acima_meta ? 'rel-ruim' : ''}" title="${p.meta_pct === null ? 'Meta de faltas não definida (Equipe → Meta de faltas)' : 'Meta: até ' + relPct(p.meta_pct)}">${p.faltas ? p.faltas + ' (' + relPct(p.taxa_faltas_pct) + ')' : '0'}${p.acima_meta ? ' ⚠' : ''}</span>`,
-          p.recusas ? `${p.recusas} (${relPct(p.taxa_recusa_pct)})` : '0', relInt(p.cancelados),
+          p.recusas ? `${p.recusas} (${relPct(p.taxa_recusa_pct)})` : '0',
+          `<span title="${p.cancelou_ela ? 'Cancelamentos pedidos por ela: ' + p.cancelou_ela : ''}">${relInt(p.cancelados)}${p.cancelou_ela ? ' (' + p.cancelou_ela + ' por ela)' : ''}</span>`,
+          p.respondidos ? `<span title="Tempo médio até aceitar ou recusar um convite (${plural(p.respondidos, 'resposta', 'respostas')})">${relDiasOuHoras(p.resposta_media_h)}</span>` : '—',
         ]));
       const clientes = relTabela([['Cliente'], ['Atend.', 'num'], ['Concluídos', 'num']], d.clientes.top.map(c => [escapeHtml(c.cliente), relInt(c.qtd), relInt(c.concluidos)]));
       const locais = relBarras(d.por_local, { valor: l => l.qtd, rotulo: l => l.area, texto: l => relInt(l.qtd), cor: () => 'azul' });
       const avisosPrest = d.avisos.enviados
         ? `<div class="tablerow"><div class="tr-body"><strong>${plural(d.avisos.enviados, 'aviso de cancelamento enviado', 'avisos de cancelamento enviados')}</strong><span>${d.avisos.lidos} lido(s) · ${d.avisos.nao_lidos} ainda sem ler${d.avisos.horas_ate_ler === null ? '' : ' · ' + relHoras(d.avisos.horas_ate_ler) + ' em média até a prestadora ler'}</span></div></div>`
         : relVazio('Nenhum aviso de cancelamento enviado neste período.');
+      // ----- do histórico de status -----
+      const fr = d.funil_real;
+      const funilReal = fr.base
+        ? relBarras(fr.etapas, { valor: e => e.qtd, rotulo: e => e.rotulo, texto: e => (e.etapa === 'pedido' ? relInt(e.qtd) : `${relInt(e.qtd)} · ${relPct(e.pct_do_inicio)}`), cor: e => (e.etapa === 'concluido' ? '' : 'azul') })
+          + relTexto(`Por quantas etapas cada atendimento passou (quem chegou a uma etapa também passou pelas anteriores). No caminho, ${plural(fr.desfechos.recusados, 'atendimento teve convite recusado', 'atendimentos tiveram convite recusado')}, `
+            + `${plural(fr.desfechos.cancelados, 'foi cancelado', 'foram cancelados')} e ${plural(fr.desfechos.faltas, 'teve falta', 'tiveram falta')}. Dos confirmados, ${plural(fr.aceitos_pela_prestadora, 'foi aceito', 'foram aceitos')} pela própria prestadora; nos demais a unidade deu como combinado ou o sistema confirmou quando o horário chegou. `
+            + `Atendimentos futuros ainda não chegaram ao fim.${fr.importados ? ` Ficam de fora ${plural(fr.importados, 'atendimento da planilha', 'atendimentos da planilha')} (entram prontos, sem o caminho).` : ''}`)
+        : relVazio('Ainda não há histórico de status para os atendimentos deste período.');
+
+      const rc = d.resposta_convites;
+      const respostaConvites = rc.convites
+        ? `<p class="fin-nota" style="margin:0 0 10px"><b>${plural(rc.convites, 'convite enviado', 'convites enviados')}</b> · ${plural(rc.respondidos, 'respondido', 'respondidos')} (${rc.aceitos} ${rc.aceitos === 1 ? 'aceite' : 'aceites'}, ${plural(rc.recusados, 'recusa', 'recusas')})`
+          + `${rc.respondidos ? ` · tempo médio <b>${relDiasOuHoras(rc.tempo_medio_h)}</b> (mediana ${relDiasOuHoras(rc.mediana_h)}; ${relPct(rc.ate_24h_pct)} em até 24 h)` : ''}`
+          + `${rc.sem_resposta ? ` · ${plural(rc.sem_resposta, 'sem resposta dela', 'sem resposta delas')}` : ''}${rc.em_aberto ? ` · ${rc.em_aberto} em aberto` : ''}${rc.trocados ? ` · ${plural(rc.trocados, 'passou', 'passaram')} a outra prestadora/cancelou antes da resposta` : ''}</p>`
+          + relTabela([['Prestadora'], ['Convites', 'num'], ['Aceites', 'num'], ['Recusas', 'num'], ['Sem resposta', 'num'], ['Tempo médio', 'num'], ['Mediana', 'num'], ['Em até 24 h', 'num']],
+            rc.por_prestadora.map(p => [relNomePrestadora(p), relInt(p.convites), relInt(p.aceitos), relInt(p.recusados), relInt(p.sem_resposta + p.trocados + p.em_aberto), relDiasOuHoras(p.tempo_medio_h), relDiasOuHoras(p.mediana_h), relPct(p.ate_24h_pct)]))
+          + relTexto('Tempo de resposta = do convite até ela aceitar ou recusar. O aceite só abre 2 dias antes do atendimento: num convite feito com mais antecedência o tempo conta a partir dessa abertura (a recusa conta desde o convite). '
+            + 'Sem resposta = a unidade deu como combinado, o sistema confirmou/concluiu quando o horário chegou, ou o convite foi passado a outra prestadora, cancelado ou segue em aberto. Quem demora mais aparece primeiro. Isto é controle interno da franquia: a prestadora não vê.')
+        : relVazio('Nenhum convite com histórico neste período.');
+
+      const cn = d.cancelamentos, ant = cn.antecedencia;
+      const cancelQuem = cn.total
+        ? relBarras(cn.por_quem.filter(x => x.qtd > 0), { valor: x => x.qtd, rotulo: x => REL_QUEM_CANCELOU[x.quem], texto: x => `${relInt(x.qtd)} · ${relPct(x.pct)}`, cor: x => REL_COR_QUEM[x.quem] })
+          + (ant.avaliados ? relTexto(`${relPct(ant.menos_24h_pct)} dos cancelamentos (${ant.menos_24h} de ${ant.avaliados}) foram feitos com menos de 24 h para o início${ant.depois_do_inicio ? `, ${ant.depois_do_inicio} deles já depois de o atendimento começar` : ''}. Mediana: ${relDiasOuHoras(ant.mediana_h)} de antecedência.`) : '')
+        : relVazio('Nenhum cancelamento neste período.');
+      const cancelMotivos = cn.total
+        ? relBarras(cn.motivos, { valor: m => m.qtd, rotulo: m => relMotivo(m.motivo), texto: m => relInt(m.qtd), cor: m => (m.motivo === null ? 'ambar' : 'azul') })
+          + relTexto('O motivo é opcional e digitado pela unidade ao cancelar; escritas parecidas ("Viagem", "viagem.") são somadas.')
+        : relVazio('Nenhum cancelamento neste período.');
+
       const unidades = d.por_unidade.length ? `<div class="rel-bloco">${relPainel('Comparativo entre unidades', relTabela(
         [['Unidade'], ['Atendimentos', 'num'], ['Concluídos', 'num'], ['Programados', 'num'], ['Cancel.', 'num'], ['Faltas', 'num'], ['Horas realizadas', 'num']],
         d.por_unidade.map(u => [escapeHtml(u.nome), relInt(u.total), relInt(u.concluidos), relInt(u.programados), relInt(u.cancelados), relInt(u.faltas), relHoras(u.horas_realizadas)])))}</div>` : '';
@@ -7714,12 +7802,16 @@
       return cards + relAlertas(avisos)
         + `<div class="rel-bloco">${relPainel(`Atendimentos por ${REL_GRAN[gran]}`, serie, relInt(r.total) + ' no período')}</div>`
         + `<div class="rel-2">${relPainel('Situação dos atendimentos', funil)}${relPainel('Dias da semana', semana)}</div>`
+        + `<div class="rel-bloco">${relPainel('Do pedido ao atendimento concluído', funilReal, fr.base ? plural(fr.base, 'atendimento', 'atendimentos') : '')}</div>`
         + `<div class="rel-bloco">${relPainel('Horários mais movimentados', relCalor(d.calor))}</div>`
         + `<div class="rel-2">${relPainel('Serviços mais pedidos', servicos)}${relPainel('Origem dos pedidos', origem)}</div>`
         + `<div class="rel-bloco">${relPainel('Prestadoras', prest, plural(d.prestadoras.length, 'com movimento', 'com movimento'))}${relTexto('Faltas: taxa = faltas ÷ (concluídos + faltas), comparada com a meta definida na Equipe. Recusas: convites que ela recusou ÷ convites que recebeu. Isto é controle interno da franquia: a prestadora não vê.')}</div>`
+        + `<div class="rel-bloco">${relPainel('Resposta das prestadoras aos convites', respostaConvites, rc.respondidos ? plural(rc.respondidos, 'resposta', 'respostas') : '')}</div>`
+        + `<div class="rel-2">${relPainel('Quem cancelou', cancelQuem, plural(cn.total, 'cancelamento', 'cancelamentos'))}${relPainel('Motivos dos cancelamentos', cancelMotivos)}</div>`
         + `<div class="rel-2">${relPainel('Clientes que mais agendam', clientes)}${relPainel('Locais mais atendidos', locais)}</div>`
         + `<div class="rel-bloco">${relPainel('Avisos às prestadoras', avisosPrest)}</div>`
-        + unidades;
+        + unidades
+        + relAvisoHistorico(d.historico);
     }
 
     // ---------- FINANCEIRO ----------
@@ -7761,6 +7853,16 @@
       const prest = relTabela([['Prestadora'], ['Atend.', 'num'], ['Receita gerada', 'num'], ['Custo', 'num'], ['Margem', 'num'], ['A pagar', 'num'], ['Pago', 'num']],
         d.por_prestadora.map(p => [escapeHtml(p.prestadora), relInt(p.qtd), relReais(p.receita), relReais(p.custo), p.margem_pct === null ? '—' : `${relReais(p.margem)} · ${relPct(p.margem_pct)}`,
           `${relReais(p.pendente)}${p.sem_custo_qtd ? ` <span title="Atendimentos sem valor por atendimento definido">(${p.sem_custo_qtd} sem custo)</span>` : ''}`, relReais(p.pago)]));
+      // receita perdida com cancelamentos (do histórico de status): quem pediu e por quê; as faltas só aparecem como total
+      const pc = d.perdido.cancelados, pfa = d.perdido.faltas;
+      const perdaQuem = pc.qtd
+        ? relBarras(pc.por_quem, { valor: x => x.receita ?? 0, rotulo: x => `${REL_QUEM_CANCELOU[x.quem]} (${x.qtd})`, texto: x => (x.com_valor ? relReais(x.receita) : 'sem valor'), cor: x => REL_COR_QUEM[x.quem] })
+        : relVazio('Nenhum cancelamento neste período.');
+      const perdaMotivo = pc.qtd
+        ? relBarras(pc.por_motivo, { valor: m => m.receita ?? 0, rotulo: m => `${relMotivo(m.motivo)} (${m.qtd})`, texto: m => relReais(m.receita), cor: m => (m.motivo === null ? 'ambar' : 'azul') })
+        : relVazio('Nenhum cancelamento neste período.');
+      const perdaNota = relTexto(`${relReais(pc.receita)} perdidos em ${plural(pc.qtd, 'cancelamento', 'cancelamentos')}${pc.com_valor < pc.qtd ? ` (${pc.qtd - pc.com_valor} sem valor cadastrado)` : ''}`
+        + `${pfa.qtd ? ` e ${relReais(pfa.receita)} em ${plural(pfa.qtd, 'falta da prestadora', 'faltas da prestadora')}` : ''}. Quem pediu e o motivo vêm do histórico: cancelamentos anteriores a ele aparecem como "Anterior ao histórico".`);
       const unidades = d.por_unidade.length ? `<div class="rel-bloco">${relPainel('Comparativo entre unidades', relTabela(
         [['Unidade'], ['Atend.', 'num'], ['Receita', 'num'], ['Custo', 'num'], ['Margem', 'num']],
         d.por_unidade.map(u => [escapeHtml(u.nome), relInt(u.qtd), relReais(u.receita), relReais(u.custo), u.margem_pct === null ? '—' : `${relReais(u.margem)} · ${relPct(u.margem_pct)}`])))}</div>` : '';
@@ -7769,6 +7871,7 @@
         + `<div class="rel-bloco">${relPainel(`Receita e custo por ${REL_GRAN[gran]}`, serie, relReais(re.receita))}${relTexto('Só atendimentos concluídos. A receita prevista dos dias futuros aparece na dica de cada coluna.')}</div>`
         + `<div class="rel-bloco">${relPainel('Evolução dos últimos 12 meses', evolucao)}${relTexto('Os 12 meses terminam no mês final do período escolhido. A margem considera só os atendimentos com valor e custo.')}</div>`
         + `<div class="rel-2">${relPainel('Receita por serviço', servicos)}${relPainel('Maiores clientes', clientes, plural(d.concentracao.clientes, 'cliente', 'clientes'))}</div>`
+        + (pc.qtd || pfa.qtd ? `<div class="rel-2">${relPainel('Receita perdida: quem cancelou', perdaQuem + perdaNota)}${relPainel('Receita perdida: motivos', perdaMotivo)}</div>` : '')
         + `<div class="rel-bloco">${relPainel('Resultado por prestadora', prest)}${relTexto('A pagar = custo dos atendimentos concluídos ainda não marcados como pagos (o pagamento se marca no Financeiro).')}</div>`
         + unidades
         + relTexto('Receita = o que o cliente paga. Custo = o que a franquia repassa à prestadora (valor travado no aceite, ou a tarifa atual dela). Cancelados e faltas não geram receita nem repasse; o valor deles aparece só como receita perdida.');
@@ -7845,6 +7948,11 @@
           ['Origem dos pedidos', ['Origem', 'Quantidade'], d.por_origem.map(o => [REL_ORIGEM[o.origem] || o.origem, o.qtd])],
           ['Prestadoras', ['Prestadora', 'Concluídos', 'Programados', 'Horas realizadas', 'Faltas', 'Taxa de faltas (%)', 'Meta de faltas (%)', 'Recusas', 'Taxa de recusa (%)', 'Cancelados'],
             d.prestadoras.map(p => [p.nome, p.concluidos, p.programados, p.horas_realizadas, p.faltas, p.taxa_faltas_pct, p.meta_pct, p.recusas, p.taxa_recusa_pct, p.cancelados])],
+          ['Resposta aos convites', ['Prestadora', 'Convites', 'Aceites', 'Recusas', 'Sem resposta dela', 'Passou a outra/cancelado', 'Em aberto', 'Tempo médio (h)', 'Mediana (h)', 'Em até 24 h (%)'],
+            d.resposta_convites.por_prestadora.map(p => [p.nome, p.convites, p.aceitos, p.recusados, p.sem_resposta, p.trocados, p.em_aberto, p.tempo_medio_h, p.mediana_h, p.ate_24h_pct])],
+          ['Do pedido ao concluído (histórico)', ['Etapa', 'Atendimentos', '% do total', '% da etapa anterior'], d.funil_real.etapas.map(e => [e.rotulo, e.qtd, e.pct_do_inicio, e.pct_do_anterior])],
+          ['Cancelamentos - quem pediu', ['Quem', 'Cancelamentos', '%'], d.cancelamentos.por_quem.filter(x => x.qtd > 0).map(x => [REL_QUEM_CANCELOU[x.quem], x.qtd, x.pct])],
+          ['Cancelamentos - motivos', ['Motivo', 'Cancelamentos'], d.cancelamentos.motivos.map(m => [relMotivo(m.motivo), m.qtd])],
           ['Clientes que mais agendam', ['Cliente', 'Atendimentos', 'Concluídos'], d.clientes.top.map(c => [c.cliente, c.qtd, c.concluidos])],
           ...(d.por_unidade.length ? [['Por unidade', ['Unidade', 'Atendimentos', 'Concluídos', 'Programados', 'Cancelados', 'Faltas', 'Horas realizadas'], d.por_unidade.map(u => [u.nome, u.total, u.concluidos, u.programados, u.cancelados, u.faltas, u.horas_realizadas])]] : []),
         ];
@@ -7858,6 +7966,8 @@
           ['Por serviço', ['Serviço', 'Atendimentos', 'Receita (R$)', 'Custo (R$)', 'Margem (R$)', 'Margem (%)', 'Ticket médio (R$)'], d.por_servico.map(s => [s.tipo_servico, s.qtd, s.receita, s.custo, s.margem, s.margem_pct, s.ticket_medio])],
           ['Maiores clientes', ['Cliente', 'Atendimentos', 'Receita (R$)', '% da receita'], d.por_cliente.map(c => [c.cliente, c.qtd, c.receita, c.pct_receita])],
           ['Por prestadora', ['Prestadora', 'Atendimentos', 'Receita (R$)', 'Custo (R$)', 'Margem (R$)', 'A pagar (R$)', 'Pago (R$)'], d.por_prestadora.map(p => [p.prestadora, p.qtd, p.receita, p.custo, p.margem, p.pendente, p.pago])],
+          ['Receita perdida - quem cancelou', ['Quem', 'Cancelamentos', 'Receita perdida (R$)'], d.perdido.cancelados.por_quem.map(x => [REL_QUEM_CANCELOU[x.quem], x.qtd, x.receita])],
+          ['Receita perdida - motivos', ['Motivo', 'Cancelamentos', 'Receita perdida (R$)'], d.perdido.cancelados.por_motivo.map(m => [relMotivo(m.motivo), m.qtd, m.receita])],
           ...(d.por_unidade.length ? [['Por unidade', ['Unidade', 'Atendimentos', 'Receita (R$)', 'Custo (R$)', 'Margem (R$)'], d.por_unidade.map(u => [u.nome, u.qtd, u.receita, u.custo, u.margem])]] : []),
         ];
       }
@@ -7895,8 +8005,8 @@
     /* Acessos: CRUD de sub-administradores (funcionários com permissão por módulo) */
     let subadminsCache = [];
     let subadminEditandoId = null; // null = formulário em modo "criar"
-    const SA_MODULOS = ['agenda', 'avaliacoes', 'equipe', 'clientes', 'dashboard', 'financeiro'];
-    const SA_ROTULOS = { agenda: 'Agenda', avaliacoes: 'Avaliações', equipe: 'Equipe', clientes: 'Clientes', dashboard: 'Visão geral', financeiro: 'Financeiro' };
+    const SA_MODULOS = ['agenda', 'avaliacoes', 'equipe', 'clientes', 'dashboard', 'financeiro', 'relatorios'];
+    const SA_ROTULOS = { agenda: 'Agenda', avaliacoes: 'Avaliações', equipe: 'Equipe', clientes: 'Clientes', dashboard: 'Visão geral', financeiro: 'Financeiro', relatorios: 'Relatórios' };
 
     async function renderSubadmins() {
       document.getElementById('sa-unit').textContent = unidades[currentUnit].nome;

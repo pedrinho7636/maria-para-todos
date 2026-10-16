@@ -19,23 +19,49 @@ const FIM = `(case when a.hora_atendimento is null then (a.data_atendimento + 1)
            else a.data_atendimento + a.hora_atendimento + coalesce(a.duracao_horas, 1)::float8 * interval '1 hour' end)`;
 const TARIFA = '(select p.valor_por_atendimento from prestadoras p where p.id = a.prestadora_id)';
 
+// Cada mudança grava também o evento no histórico (atendimento_eventos), na MESMA instrução (tudo ou nada). O "alvo" trava as
+// linhas e guarda o status de antes; se duas rodadas (o temporizador e uma tela) pegarem a mesma linha, a segunda espera a
+// primeira e, já com o status novo, não a pega de novo — então nenhum evento sai duplicado.
+
 // começou e ainda não terminou: convite sem resposta vira confirmado
-const SQL_CONFIRMAR = `
-  update atendimentos a set
-    status = 'aceito',
-    valor_prestadora = coalesce(a.valor_prestadora, ${TARIFA}),
-    atualizado_em = now()
-  where a.status = 'proposto' and a.prestadora_id is not null
-    and (${INICIO}) <= ${AGORA} and ${FIM} > ${AGORA}`;
+const SQL_CONFIRMAR = (filtro) => `
+  with alvo as (
+    select a.id from atendimentos a
+    where a.status = 'proposto' and a.prestadora_id is not null
+      and (${INICIO}) <= ${AGORA} and ${FIM} > ${AGORA}${filtro}
+    for update
+  ), mudou as (
+    update atendimentos a set
+      status = 'aceito',
+      valor_prestadora = coalesce(a.valor_prestadora, ${TARIFA}),
+      atualizado_em = now()
+    from alvo where a.id = alvo.id
+    returning a.id, a.prestadora_id
+  ), evento as (
+    insert into atendimento_eventos (atendimento_id, status_anterior, status_novo, acao, prestadora_id, ator_perfil)
+    select id, 'proposto'::status_atendimento, 'aceito'::status_atendimento, 'confirmado_auto', prestadora_id, 'sistema' from mudou
+  )
+  select count(*)::int as n from mudou`;
 
 // terminou: confirmado (ou convite que nunca foi respondido) vira concluído
-const SQL_CONCLUIR = `
-  update atendimentos a set
-    status = 'concluido',
-    valor_prestadora = coalesce(a.valor_prestadora, ${TARIFA}),
-    atualizado_em = now()
-  where a.status in ('aceito', 'proposto') and a.prestadora_id is not null
-    and ${FIM} <= ${AGORA}`;
+const SQL_CONCLUIR = (filtro) => `
+  with alvo as (
+    select a.id, a.status as de from atendimentos a
+    where a.status in ('aceito', 'proposto') and a.prestadora_id is not null
+      and ${FIM} <= ${AGORA}${filtro}
+    for update
+  ), mudou as (
+    update atendimentos a set
+      status = 'concluido',
+      valor_prestadora = coalesce(a.valor_prestadora, ${TARIFA}),
+      atualizado_em = now()
+    from alvo where a.id = alvo.id
+    returning a.id, a.prestadora_id, alvo.de
+  ), evento as (
+    insert into atendimento_eventos (atendimento_id, status_anterior, status_novo, acao, prestadora_id, ator_perfil)
+    select id, de, 'concluido'::status_atendimento, 'concluido_auto', prestadora_id, 'sistema' from mudou
+  )
+  select count(*)::int as n from mudou`;
 
 // `escopo` restringe a conta a uma unidade / prestadora / cliente / atendimento (as telas chamam isso ao abrir, só no
 // que vão mostrar, pra não depender do intervalo do temporizador). Sem escopo, vale pra todos.
@@ -45,9 +71,9 @@ async function concluirAtendimentosRealizados(db = pool, escopo = {}) {
     if (escopo[campo]) { params.push(escopo[campo]); cond.push(`${coluna} = $${params.length}`); }
   }
   const filtro = cond.length ? ' and ' + cond.join(' and ') : '';
-  await db.query(SQL_CONFIRMAR + filtro, params);
-  const { rowCount } = await db.query(SQL_CONCLUIR + filtro, params);
-  return rowCount;
+  await db.query(SQL_CONFIRMAR(filtro), params);
+  const { rows: [{ n }] } = await db.query(SQL_CONCLUIR(filtro), params);
+  return n;
 }
 
 // Intervalo em minutos (variável CONCLUSAO_MINUTOS, padrão 5). Em hospedagem com banco que "dorme"

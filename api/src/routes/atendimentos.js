@@ -12,6 +12,8 @@ const { STATUS_QUE_OCUPAM, STATUS_CONFIRMADOS, SQL_CONFLITOS_JSON, conflitosDoHo
 const { avisarCancelamento } = require('../utils/avisos');
 const { concluirAtendimentosRealizados } = require('../utils/conclusao');
 const { capitalizarNome } = require('../utils/normalizacao');
+const { atorDe, lerCancelamento, acaoDaMudanca, registrarEvento, registrarEventos } = require('../utils/eventos');
+const { emTransacao } = require('../utils/unidades');
 
 const router = express.Router();
 
@@ -140,9 +142,15 @@ router.post('/', limitePedidoPublico, asyncHandler(async (req, res) => {
   // Quem pediu entra como cliente avulso (sem login) da unidade — antes o nome e o telefone digitados no
   // site se perdiam e a unidade não tinha como retornar. Reaproveita o cliente de mesmo nome.
   const clienteId = nomePedido ? await acharOuCriarCliente(pool, unidade.id, nomePedido, telefonePedido) : null;
+  // o pedido e o primeiro evento do histórico entram juntos (mesma instrução = tudo ou nada)
   const { rows: [atendimento] } = await pool.query(
-    `insert into atendimentos (unidade_id, cliente_id, tipo_servico, area, data_atendimento, hora_atendimento, origem, status)
-     values ($1, $2, $3, $4, $5, $6, $7, 'pedido') returning *`,
+    `with novo as (
+       insert into atendimentos (unidade_id, cliente_id, tipo_servico, area, data_atendimento, hora_atendimento, origem, status)
+       values ($1, $2, $3, $4, $5, $6, $7, 'pedido') returning *
+     ), evento as (
+       insert into atendimento_eventos (atendimento_id, status_novo, acao, ator_perfil) select id, status, 'criado', 'publico' from novo
+     )
+     select * from novo`,
     [unidade.id, clienteId, tipo_servico, area || null, data_atendimento, hora_atendimento || null, origem === 'whatsapp' ? 'whatsapp' : 'site']
   );
   res.status(201).json(atendimento);
@@ -184,6 +192,9 @@ router.post('/admin/:slug/:id/situacao', requireAuth, requireAcessoUnidade('agen
   if (!['programado', 'concluido', 'cancelado', 'falta'].includes(situacao)) {
     return res.status(400).json({ erro: 'situacao deve ser programado, concluido, cancelado ou falta' });
   }
+  // ao cancelar, o administrador pode dizer quem pediu (cliente / franquia / prestadora) e o motivo — os dois são opcionais
+  const cancelamento = situacao === 'cancelado' ? lerCancelamento(req.body) : {};
+  if (cancelamento.erro) return res.status(400).json({ erro: cancelamento.erro });
   await concluirAtendimentosRealizados(pool, { atendimentoId: req.params.id, unidadeId: req.unidadeId });
   const atual = await lerParaChecar(pool, req.params.id, req.unidadeId);
   if (!atual) return res.status(404).json({ erro: 'Atendimento não encontrado' });
@@ -212,21 +223,33 @@ router.post('/admin/:slug/:id/situacao', requireAuth, requireAcessoUnidade('agen
     if (bloqueio) return res.status(bloqueio.status).json(bloqueio.json);
   }
 
-  const { rows: [atendimento] } = await pool.query(
-    `update atendimentos a set
-       status = case $1::text when 'concluido' then 'concluido'::status_atendimento
-                              when 'cancelado' then 'cancelado'::status_atendimento
-                              when 'falta' then 'falta'::status_atendimento
-                              else case when a.prestadora_id is not null then 'aceito'::status_atendimento else 'pedido'::status_atendimento end end,
-       valor_prestadora = case when $1::text in ('concluido', 'programado') and a.prestadora_id is not null
-                               then coalesce(a.valor_prestadora, (select p.valor_por_atendimento from prestadoras p where p.id = a.prestadora_id))
-                               else a.valor_prestadora end,
-       situacao_manual = ($1::text = 'programado'),
-       atualizado_em = now()
-     where a.id = $2 and a.unidade_id = $3
-     returning *`,
-    [situacao, req.params.id, req.unidadeId]
-  );
+  // a mudança e o evento do histórico entram na mesma transação
+  const ator = atorDe(req.user);
+  const atendimento = await emTransacao(async (db) => {
+    const { rows: [antes] } = await db.query('select status from atendimentos where id = $1 and unidade_id = $2 for update', [req.params.id, req.unidadeId]);
+    const { rows: [novo] } = await db.query(
+      `update atendimentos a set
+         status = case $1::text when 'concluido' then 'concluido'::status_atendimento
+                                when 'cancelado' then 'cancelado'::status_atendimento
+                                when 'falta' then 'falta'::status_atendimento
+                                else case when a.prestadora_id is not null then 'aceito'::status_atendimento else 'pedido'::status_atendimento end end,
+         valor_prestadora = case when $1::text in ('concluido', 'programado') and a.prestadora_id is not null
+                                 then coalesce(a.valor_prestadora, (select p.valor_por_atendimento from prestadoras p where p.id = a.prestadora_id))
+                                 else a.valor_prestadora end,
+         situacao_manual = ($1::text = 'programado'),
+         atualizado_em = now()
+       where a.id = $2 and a.unidade_id = $3
+       returning *`,
+      [situacao, req.params.id, req.unidadeId]
+    );
+    if (antes && novo && antes.status !== novo.status) {
+      await registrarEvento(db, {
+        atendimentoId: novo.id, de: antes.status, para: novo.status, acao: acaoDaMudanca(antes.status, novo.status, ator), prestadoraId: novo.prestadora_id, ator,
+        canceladoPor: cancelamento.canceladoPor, motivo: cancelamento.motivo, // só vêm preenchidos no cancelamento
+      });
+    }
+    return novo;
+  });
   // reativar um atendimento cujo horário já passou: não fica "programado" — com prestadora ele conta como realizado
   await concluirAtendimentosRealizados(pool, { atendimentoId: atendimento.id });
   const { rows: [relido] } = await pool.query('select * from atendimentos where id = $1', [atendimento.id]);
@@ -277,12 +300,17 @@ router.post('/admin/:slug/:id/propor', requireAuth, requireAcessoUnidade('agenda
   const bloqueio = paraChecar && await checarAtribuicao(pool, { prestadoraId: prestadora_id, atendimento: paraChecar, body: req.body });
   if (bloqueio) return res.status(bloqueio.status).json(bloqueio.json);
 
-  const { rows: [atendimento] } = await pool.query(
-    `update atendimentos set prestadora_id = $1, status = 'proposto', profissional_externo = null, valor_prestadora = null, atualizado_em = now()
-     where id = $2 and unidade_id = $3 and status = 'pedido'
-     returning *`,
-    [prestadora_id, req.params.id, req.unidadeId]
-  );
+  const ator = atorDe(req.user);
+  const atendimento = await emTransacao(async (db) => {
+    const { rows: [novo] } = await db.query(
+      `update atendimentos set prestadora_id = $1, status = 'proposto', profissional_externo = null, valor_prestadora = null, atualizado_em = now()
+       where id = $2 and unidade_id = $3 and status = 'pedido'
+       returning *`,
+      [prestadora_id, req.params.id, req.unidadeId]
+    );
+    if (novo) await registrarEvento(db, { atendimentoId: novo.id, de: 'pedido', para: 'proposto', acao: 'proposto', prestadoraId: prestadora_id, ator });
+    return novo;
+  });
   if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado ou não está em status "pedido"' });
   res.json(await comValorPago(atendimento));
 }));
@@ -302,18 +330,34 @@ router.post('/admin/:slug/:id/reatribuir', requireAuth, requireAcessoUnidade('ag
     }
   }
 
-  const { rows: [atendimento] } = await pool.query(
-    `update atendimentos set
-       prestadora_id = $1::uuid,
-       status = case when status in ('pedido', 'recusado') and $1::uuid is not null then 'proposto' else status end,
-       profissional_externo = case when $1::uuid is not null then null else profissional_externo end,
-       -- quem já estava aceito continua aceito com a nova prestadora: trava a tarifa dela
-       valor_prestadora = case when status = 'aceito' then (select valor_por_atendimento from prestadoras where id = $1::uuid) else null end,
-       atualizado_em = now()
-     where id = $2 and unidade_id = $3 and status not in ('concluido', 'cancelado', 'falta')
-     returning *`,
-    [prestadoraId, req.params.id, req.unidadeId]
-  );
+  // mudou de status (pedido/recusado → proposto) ou só de prestadora: os dois entram no histórico. Trocar a prestadora de um
+  // convite abre um convite novo pra nova prestadora (é dele que sai o tempo de resposta).
+  const ator = atorDe(req.user);
+  const atendimento = await emTransacao(async (db) => {
+    const { rows: [antes] } = await db.query(
+      "select status, prestadora_id from atendimentos where id = $1 and unidade_id = $2 and status not in ('concluido', 'cancelado', 'falta') for update",
+      [req.params.id, req.unidadeId]
+    );
+    const { rows: [novo] } = await db.query(
+      `update atendimentos set
+         prestadora_id = $1::uuid,
+         status = case when status in ('pedido', 'recusado') and $1::uuid is not null then 'proposto' else status end,
+         profissional_externo = case when $1::uuid is not null then null else profissional_externo end,
+         -- quem já estava aceito continua aceito com a nova prestadora: trava a tarifa dela
+         valor_prestadora = case when status = 'aceito' then (select valor_por_atendimento from prestadoras where id = $1::uuid) else null end,
+         atualizado_em = now()
+       where id = $2 and unidade_id = $3 and status not in ('concluido', 'cancelado', 'falta')
+       returning *`,
+      [prestadoraId, req.params.id, req.unidadeId]
+    );
+    if (antes && novo && (antes.status !== novo.status || antes.prestadora_id !== novo.prestadora_id)) {
+      await registrarEvento(db, {
+        atendimentoId: novo.id, de: antes.status, para: novo.status, prestadoraId: novo.prestadora_id, ator,
+        acao: antes.status !== novo.status ? acaoDaMudanca(antes.status, novo.status, ator) : 'reatribuido',
+      });
+    }
+    return novo;
+  });
   if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado ou já concluído/cancelado' });
   res.json(await comValorPago(atendimento));
 }));
@@ -357,12 +401,17 @@ router.patch('/admin/:slug/:id/valor', requireAuth, requireAcessoUnidade('agenda
 
 // Admin (ou gatilho futuro por data/hora) marca atendimento aceito como concluído
 router.post('/admin/:slug/:id/concluir', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
-  const { rows: [atendimento] } = await pool.query(
-    `update atendimentos set status = 'concluido', atualizado_em = now()
-     where id = $1 and unidade_id = $2 and status = 'aceito' and ${FIM_SQL('atendimentos')} <= ${AGORA_BR}
-     returning *`,
-    [req.params.id, req.unidadeId]
-  );
+  const ator = atorDe(req.user);
+  const atendimento = await emTransacao(async (db) => {
+    const { rows: [novo] } = await db.query(
+      `update atendimentos set status = 'concluido', atualizado_em = now()
+       where id = $1 and unidade_id = $2 and status = 'aceito' and ${FIM_SQL('atendimentos')} <= ${AGORA_BR}
+       returning *`,
+      [req.params.id, req.unidadeId]
+    );
+    if (novo) await registrarEvento(db, { atendimentoId: novo.id, de: 'aceito', para: 'concluido', acao: 'concluido', prestadoraId: novo.prestadora_id, ator });
+    return novo;
+  });
   if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado, não está "aceito" ou ainda não terminou' });
   res.json(atendimento);
 }));
@@ -426,6 +475,7 @@ router.post('/admin/:slug', requireAuth, requireAcessoUnidade('agenda'), asyncHa
       [req.unidadeId, clienteId, prestadora_id || null, servico, area ? String(area).trim() : null, dataStr,
        hora_atendimento, duracao, valorNum, prestadora_id ? 'proposto' : 'pedido']
     );
+    await registrarEvento(client, { atendimentoId: atendimento.id, de: null, para: atendimento.status, acao: 'criado', prestadoraId: atendimento.prestadora_id, ator: atorDe(req.user) });
     // convite pra uma prestadora que já tem outro atendimento nesse horário: avisa (o administrador pode confirmar mesmo assim)
     if (prestadora_id && !req.body.forcar_conflito) {
       const conflitos = await conflitosDosAtendimentos(client, [atendimento.id]);
@@ -539,6 +589,7 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
     );
     for (const [chave, id] of idsPrestadoras) idPrestadora.set(chave, id);
     let importados = 0;
+    const ator = atorDe(req.user);
     for (const l of novas) {
       let clienteId = null;
       const chaveCliente = normalizarTexto(l.cliente.nome);
@@ -557,20 +608,28 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
       // "Previsto" ainda vai acontecer: com prestadora conhecida vira convite (ela
       // confirma pelo portal, na janela de 2 dias); sem, fica aguardando atribuição.
       const status = l.situacao === 'previsto' ? (prestadoraId ? 'proposto' : 'pedido') : l.situacao;
-      // ON CONFLICT cobre duas importações simultâneas do mesmo arquivo: a segunda não duplica.
+      // ON CONFLICT cobre duas importações simultâneas do mesmo arquivo: a segunda não duplica. O evento "importado"
+      // (com o status que a planilha trazia) entra na mesma instrução e só quando a linha foi de fato inserida.
       const r = await client.query(
-        `insert into atendimentos
-           (unidade_id, cliente_id, prestadora_id, tipo_servico, data_atendimento, hora_atendimento, duracao_horas,
-            status, origem, codigo_externo, orcamento_externo, profissional_externo, valor_prestadora, valor, area)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, 'importacao', $9, $10, $11, $12, $13, $14)
-         on conflict (unidade_id, codigo_externo) where codigo_externo is not null do nothing`,
+        `with novo as (
+           insert into atendimentos
+             (unidade_id, cliente_id, prestadora_id, tipo_servico, data_atendimento, hora_atendimento, duracao_horas,
+              status, origem, codigo_externo, orcamento_externo, profissional_externo, valor_prestadora, valor, area)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, 'importacao', $9, $10, $11, $12, $13, $14)
+           on conflict (unidade_id, codigo_externo) where codigo_externo is not null do nothing
+           returning id, status, prestadora_id
+         ), evento as (
+           insert into atendimento_eventos (atendimento_id, status_novo, acao, prestadora_id, ator_perfil, ator_id)
+           select id, status, 'importado', prestadora_id, $15, $16::uuid from novo
+         )
+         select id from novo`,
         [req.unidadeId, clienteId, prestadoraId, l.tipo_servico, l.data, l.hora, l.duracao_horas, status,
          l.codigo, l.orcamento, l.profissional && !prestadoraId ? l.profissional : null,
          // custo vindo na planilha vale como o repasse combinado; sem ele, já realizado/aceito trava a
          // tarifa de hoje e ainda não aceito fica nulo até o aceite
          prestadoraId && l.custo !== null ? l.custo
            : prestadoraId && (status === 'concluido' || status === 'aceito') ? tarifaPrestadora.get(prestadoraId) ?? null : null,
-         l.valor, l.area]
+         l.valor, l.area, ator.perfil, ator.id]
       );
       importados += r.rowCount;
     }
@@ -595,7 +654,7 @@ router.post('/admin/:slug/importar', requireAuth, requireAcessoUnidade('agenda')
 // sem tabela de regra, mesmo princípio de antes, só que agora com várias
 // entradas por semana em vez de uma só.
 router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
-  const { data_inicio, horizonte_meses, semanas_alternadas, itens, valor_mensal_total, cliente_novo } = req.body;
+  const { data_inicio, horizonte_meses, semanas_alternadas, itens, valor_mensal_total, valor_por_atendimento, cliente_novo } = req.body;
 
   if (!data_inicio || !Array.isArray(itens) || itens.length === 0) {
     return res.status(400).json({ erro: 'data_inicio e itens (ao menos um) são obrigatórios' });
@@ -606,6 +665,14 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
     valorMensalTotal = Number(String(valor_mensal_total).replace(',', '.'));
     if (!Number.isFinite(valorMensalTotal) || valorMensalTotal < 0 || valorMensalTotal >= 1e8) return res.status(400).json({ erro: 'Valor do mês inválido' });
     valorMensalTotal = Math.round(valorMensalTotal * 100) / 100;
+  }
+  // valor de CADA atendimento da série (o que o formulário manda): todas as ocorrências recebem o valor cheio, e o total
+  // da série é valor × quantidade. Tem prioridade sobre o valor do mês (que é dividido entre as ocorrências).
+  let valorPorAtendimento = null;
+  if (valor_por_atendimento !== undefined && valor_por_atendimento !== null && String(valor_por_atendimento).trim() !== '') {
+    valorPorAtendimento = Number(String(valor_por_atendimento).replace(',', '.'));
+    if (!Number.isFinite(valorPorAtendimento) || valorPorAtendimento < 0 || valorPorAtendimento >= 1e8) return res.status(400).json({ erro: 'Valor do atendimento inválido' });
+    valorPorAtendimento = Math.round(valorPorAtendimento * 100) / 100;
   }
   const nomeNovo = String(cliente_novo?.nome ?? '').trim().slice(0, 200);
   for (const item of itens) {
@@ -648,6 +715,7 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
     return res.status(400).json({ erro: erro.message });
   }
   if (linhas.length === 0) return res.status(400).json({ erro: 'Nenhuma ocorrência gerada nesse período' });
+  if (valorPorAtendimento !== null) linhas.forEach(l => { l.valor = valorPorAtendimento; l.valor_mensal = null; });
 
   const serieId = crypto.randomUUID();
   const client = await pool.connect();
@@ -670,6 +738,7 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
       );
       inseridos.push(linha);
     }
+    await registrarEventos(client, inseridos.map(i => ({ atendimentoId: i.id, de: null, para: i.status, acao: 'criado', prestadoraId: i.prestadora_id, ator: atorDe(req.user) })));
     // série com prestadora: confere se alguma ocorrência cai num horário em que ela já tem outro atendimento
     // (inclusive entre as da própria série); o administrador pode confirmar mesmo assim (forcar_conflito)
     if (!req.body.forcar_conflito) {
@@ -694,14 +763,27 @@ router.post('/admin/:slug/recorrente', requireAuth, requireAcessoUnidade('agenda
 }));
 
 // Cancela as ocorrências futuras (ainda não concluídas/canceladas) de uma série
+// (quem pediu o cancelamento — cancelado_por: cliente / franquia / prestadora — e o motivo são opcionais e valem pra todas)
 router.post('/admin/:slug/serie/:serieId/cancelar', requireAuth, requireAcessoUnidade('agenda'), asyncHandler(async (req, res) => {
-  const { rows } = await pool.query(
-    `update atendimentos set status = 'cancelado', atualizado_em = now()
-     where serie_id = $1 and unidade_id = $2 and data_atendimento >= (now() at time zone 'America/Sao_Paulo')::date
-       and status not in ('concluido', 'cancelado')
-     returning id`,
-    [req.params.serieId, req.unidadeId]
-  );
+  const cancelamento = lerCancelamento(req.body);
+  if (cancelamento.erro) return res.status(400).json({ erro: cancelamento.erro });
+  const ator = atorDe(req.user);
+  const rows = await emTransacao(async (db) => {
+    const { rows: antes } = await db.query(
+      `select id, status, prestadora_id from atendimentos
+       where serie_id = $1 and unidade_id = $2 and data_atendimento >= (now() at time zone 'America/Sao_Paulo')::date
+         and status not in ('concluido', 'cancelado')
+       for update`,
+      [req.params.serieId, req.unidadeId]
+    );
+    if (!antes.length) return [];
+    await db.query(`update atendimentos set status = 'cancelado', atualizado_em = now() where id = any($1::uuid[])`, [antes.map(r => r.id)]);
+    await registrarEventos(db, antes.map(r => ({
+      atendimentoId: r.id, de: r.status, para: 'cancelado', acao: 'cancelado', prestadoraId: r.prestadora_id, ator,
+      canceladoPor: cancelamento.canceladoPor, motivo: cancelamento.motivo,
+    })));
+    return antes;
+  });
   // cada prestadora que tinha ocorrências da série é avisada de cada cancelamento
   const avisadas = await avisarCancelamento(pool, rows.map(r => r.id));
   res.json({ cancelados: rows.length, avisos_enviados: avisadas });
@@ -848,13 +930,18 @@ router.post('/prestadora/me/:id/aceitar', requireAuth, requireRole('prestadora')
     });
   }
 
-  const { rows: [atendimento] } = await pool.query(
-    // ao aceitar, trava a tarifa vigente: o que ela viu no convite é o que vale
-    `update atendimentos set status = 'aceito', atualizado_em = now(),
-       valor_prestadora = (select valor_por_atendimento from prestadoras where id = $2)
-     where id = $1 returning id, tipo_servico, area, data_atendimento, hora_atendimento, status, valor_prestadora as valor_pago`,
-    [req.params.id, req.user.id]
-  );
+  const atendimento = await emTransacao(async (db) => {
+    const { rows: [antes] } = await db.query('select status from atendimentos where id = $1 for update', [req.params.id]);
+    const { rows: [aceito] } = await db.query(
+      // ao aceitar, trava a tarifa vigente: o que ela viu no convite é o que vale
+      `update atendimentos set status = 'aceito', atualizado_em = now(),
+         valor_prestadora = (select valor_por_atendimento from prestadoras where id = $2)
+       where id = $1 returning id, tipo_servico, area, data_atendimento, hora_atendimento, status, valor_prestadora as valor_pago`,
+      [req.params.id, req.user.id]
+    );
+    await registrarEvento(db, { atendimentoId: aceito.id, de: antes?.status ?? atual.status, para: 'aceito', acao: 'aceito', prestadoraId: req.user.id, ator: atorDe(req.user) });
+    return aceito;
+  });
   res.json(atendimento);
 }));
 
@@ -868,6 +955,9 @@ router.post('/prestadora/me/:id/recusar', requireAuth, requireRole('prestadora')
        returning id, tipo_servico, area, data_atendimento, hora_atendimento, status
      ), registro as (
        insert into recusas_atendimento (atendimento_id, prestadora_id) select id, $2 from recusado
+     ), evento as (
+       insert into atendimento_eventos (atendimento_id, status_anterior, status_novo, acao, prestadora_id, ator_perfil, ator_id)
+       select id, 'proposto'::status_atendimento, 'recusado'::status_atendimento, 'recusado', $2::uuid, 'prestadora', $2::uuid from recusado
      )
      select * from recusado`,
     [req.params.id, req.user.id]

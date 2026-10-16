@@ -75,12 +75,31 @@ const limpar = async () => {
     let r = await http(`/relatorios/carazinho/${aba}${P}`, tAdm);
     check(`${aba}: administrador da unidade abre (200)`, r.s === 200, JSON.stringify(r.j).slice(0, 120));
     r = await http(`/relatorios/carazinho/${aba}${P}`, tSub);
-    check(`${aba}: funcionário NÃO abre, mesmo com todos os módulos (403)`, r.s === 403);
+    check(`${aba}: funcionário SEM a permissão Relatórios NÃO abre, mesmo com todos os outros módulos (403)`, r.s === 403);
     r = await http(`/relatorios/carazinho/${aba}${P}`, tPan);
     check(`${aba}: administrador de OUTRA unidade (403)`, r.s === 403);
     r = await http(`/relatorios/carazinho/${aba}${P}`);
     check(`${aba}: sem login (401)`, r.s === 401);
   }
+
+  console.log('\n== Funcionário com a permissão Relatórios ==');
+  await pool.query("update sub_administradores set pode_relatorios = true where email = 'qa-relsub@teste.local'");
+  for (const aba of ['agenda', 'financeiro', 'satisfacao']) {
+    const r = await http(`/relatorios/carazinho/${aba}${P}`, tSub);
+    check(`${aba}: com Relatórios + Financeiro abre (200)`, r.s === 200, JSON.stringify(r.j).slice(0, 120));
+  }
+  let rs = await http(`/relatorios/carazinho/agenda${P}&escopo=todas`, tSub);
+  check('escopo=todas não vale pro funcionário: só a unidade dele', rs.s === 200 && rs.j.escopo === 'unidade' && rs.j.unidades.length === 1, JSON.stringify(rs.j).slice(0, 160));
+  rs = await http(`/relatorios/panambi/agenda${P}`, tSub);
+  check('funcionário não abre relatório de outra unidade (403)', rs.s === 403);
+  await pool.query("update sub_administradores set pode_financeiro = false where email = 'qa-relsub@teste.local'");
+  rs = await http(`/relatorios/carazinho/financeiro${P}`, tSub);
+  check('sem a permissão Financeiro: relatório Financeiro bloqueado (403)', rs.s === 403);
+  for (const aba of ['agenda', 'satisfacao']) {
+    rs = await http(`/relatorios/carazinho/${aba}${P}`, tSub);
+    check(`sem a permissão Financeiro: ${aba} continua abrindo (200)`, rs.s === 200);
+  }
+  await pool.query("update sub_administradores set pode_relatorios = false, pode_financeiro = true where email = 'qa-relsub@teste.local'");
 
   console.log('\n== Período ==');
   let r = await http('/relatorios/carazinho/agenda?mes=2026-13', tAdm);

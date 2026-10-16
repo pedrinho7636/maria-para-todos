@@ -65,6 +65,8 @@ const MIGRACOES = [
   `alter table administradores     add column if not exists telefone text`,
   `alter table administradores     add column if not exists foto text`,
   `alter table sub_administradores add column if not exists telefone text`,
+  // Relatórios da unidade pro funcionário (Agenda e Satisfação; o Financeiro exige também pode_financeiro)
+  `alter table sub_administradores add column if not exists pode_relatorios boolean not null default false`,
   `alter table sub_administradores add column if not exists foto text`,
   `alter table prestadoras         add column if not exists email text`,
   `alter table prestadoras         add column if not exists foto text`,
@@ -187,6 +189,25 @@ const MIGRACOES = [
 
   // a moderação passou a poder ser feita por sub-administrador também
   `alter table avaliacoes drop constraint if exists avaliacoes_moderado_por_fkey`,
+
+  // HISTÓRICO de cada atendimento: uma linha por mudança de status (ou de prestadora num convite), com quando, quem fez e,
+  // no cancelamento, quem pediu e o motivo. Só se acrescenta (nunca se edita). Alimenta os relatórios: tempo de resposta ao
+  // convite, funil real e motivo/quem cancelou. Vem DEPOIS do alter type que cria 'falta'. Espelha o final do banco-schema.sql.
+  `create table if not exists atendimento_eventos (
+     id               bigint generated always as identity primary key,
+     atendimento_id   uuid not null references atendimentos(id) on delete cascade,
+     status_anterior  status_atendimento,
+     status_novo      status_atendimento not null,
+     acao             text not null,
+     prestadora_id    uuid references prestadoras(id) on delete set null,
+     ator_perfil      text not null,
+     ator_id          uuid,
+     cancelado_por    text check (cancelado_por is null or cancelado_por in ('cliente', 'franquia', 'prestadora')),
+     motivo           text,
+     quando           timestamptz not null default clock_timestamp()
+   )`,
+  `create index if not exists idx_atendimento_eventos_atendimento on atendimento_eventos(atendimento_id, id)`,
+  `create index if not exists idx_atendimento_eventos_prestadora on atendimento_eventos(prestadora_id, quando) where prestadora_id is not null`,
 ];
 
 const TABELAS_BASE = ['unidades', 'administradores', 'administrador_unidades', 'prestadoras', 'clientes', 'atendimentos', 'avaliacoes', 'codigos_verificacao'];

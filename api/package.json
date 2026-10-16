@@ -20,7 +20,9 @@
     "unidades:capitalizar": "node scripts/capitalizar-unidades.js",
     "unidades:conflitos": "node scripts/conferir-cidades.js",
     "teste:relatorios": "node scripts/testar-relatorios.js",
-    "teste:relatorios-api": "node scripts/testar-relatorios-api.js"
+    "teste:relatorios-api": "node scripts/testar-relatorios-api.js",
+    "teste:eventos": "node scripts/testar-eventos.js",
+    "teste:relatorios-historico": "node scripts/testar-relatorios-historico.js"
   },
   "engines": {
     "node": ">=20"

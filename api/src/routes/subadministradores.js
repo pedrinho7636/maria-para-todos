@@ -10,7 +10,7 @@ const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
-const MODULOS = ['dashboard', 'agenda', 'avaliacoes', 'equipe', 'clientes', 'financeiro'];
+const MODULOS = ['dashboard', 'agenda', 'avaliacoes', 'equipe', 'clientes', 'financeiro', 'relatorios'];
 
 // Gerir sub-administradores é sempre admin-completo — nunca delegável via
 // requireAcessoUnidade, mesmo que o sub-admin tenha todos os outros módulos.

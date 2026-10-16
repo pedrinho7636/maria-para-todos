@@ -385,7 +385,8 @@ create table sub_administradores (
   pode_avaliacoes boolean not null default false,
   pode_equipe     boolean not null default false,
   pode_clientes   boolean not null default false,
-  pode_financeiro boolean not null default false, -- reservado, módulo "em breve" no painel
+  pode_financeiro boolean not null default false,
+  pode_relatorios boolean not null default false, -- Agenda e Satisfação; o relatório Financeiro exige também pode_financeiro
   criado_em       timestamptz not null default now()
 );
 
@@ -437,3 +438,26 @@ create table controle_prestadora (
   faltas_aceitavel_pct numeric(5,2) check (faltas_aceitavel_pct is null or (faltas_aceitavel_pct >= 0 and faltas_aceitavel_pct <= 100)),
   atualizado_em timestamptz not null default now()
 );
+
+-- Histórico de cada atendimento: uma linha por mudança de status (ou de prestadora num convite), com quando e quem fez e,
+-- no cancelamento, quem pediu (cliente / franquia / prestadora) e o motivo. Só se acrescenta; nunca se edita.
+-- Alimenta os relatórios: tempo de resposta ao convite, funil real e motivo/quem cancelou.
+--   acao: criado, importado, proposto, reatribuido, aceito, recusado, confirmado_auto, concluido, concluido_auto,
+--         cancelado, falta, reaberto (o código está em api/src/utils/eventos.js)
+--   ator_perfil: administrador, sub_administrador, prestadora, cliente, publico (pedido pelo site) ou sistema (automático)
+--   prestadora_id: a prestadora a quem o evento se refere (convidada, quem aceitou/recusou, quem estava no atendimento)
+create table atendimento_eventos (
+  id               bigint generated always as identity primary key,
+  atendimento_id   uuid not null references atendimentos(id) on delete cascade,
+  status_anterior  status_atendimento,                    -- nulo quando o atendimento acabou de ser criado
+  status_novo      status_atendimento not null,
+  acao             text not null,
+  prestadora_id    uuid references prestadoras(id) on delete set null,
+  ator_perfil      text not null,
+  ator_id          uuid,                                  -- id de quem agiu (administrador, funcionário, prestadora ou cliente); nulo no sistema / pedido do site
+  cancelado_por    text check (cancelado_por is null or cancelado_por in ('cliente', 'franquia', 'prestadora')),
+  motivo           text,
+  quando           timestamptz not null default clock_timestamp()
+);
+create index idx_atendimento_eventos_atendimento on atendimento_eventos(atendimento_id, id);
+create index idx_atendimento_eventos_prestadora on atendimento_eventos(prestadora_id, quando) where prestadora_id is not null;

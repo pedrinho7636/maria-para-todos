@@ -8,6 +8,8 @@
 //   • o "mês"/período de um relatório é o do SERVIÇO (data do atendimento), não o do pagamento.
 //   • custo = valor travado no aceite (valor_prestadora) ou, se ainda não travou, a tarifa atual da prestadora.
 //   • só relatórios do administrador usam estes números: eles mostram faltas e metas, que a prestadora nunca vê.
+//   • o HISTÓRICO (atendimento_eventos) só existe desde o dia em que passou a ser gravado: o que é mais antigo não tem eventos e
+//     fica de fora de tempo de resposta, funil real e motivo/quem cancelou (a tela avisa quantos são).
 const { totais, resumir, centavos, reais, soma } = require('./financeiro');
 
 const DIA_MS = 86400000;
@@ -106,6 +108,166 @@ function comOutros(lista, n, juntar) {
   return [...lista.slice(0, n), juntar(lista.slice(n))];
 }
 
+const mediana = (lista, c = 1) => {
+  if (!lista.length) return null;
+  const o = [...lista].sort((a, b) => a - b), m = Math.floor(o.length / 2);
+  return arred(o.length % 2 ? o[m] : (o[m - 1] + o[m]) / 2, c);
+};
+
+// ---------- HISTÓRICO DE STATUS (tabela atendimento_eventos) ----------
+// eventos: [{ id, atendimento_id, status_anterior, status_novo, acao, prestadora_id, ator_perfil, cancelado_por, motivo, quando,
+//             inicio_em (começo do atendimento), janela_abre (a partir de quando a prestadora pode aceitar: 2 dias antes) }]
+const HORA_MS = 3600000;
+const instante = (t) => (t instanceof Date ? t.getTime() : Date.parse(t));
+const QUEM_CANCELOU = ['cliente', 'franquia', 'prestadora', 'nao_informado', 'sem_registro'];
+
+// Os eventos de cada atendimento, na ordem em que aconteceram
+function cadeias(eventos) {
+  const mapa = new Map();
+  for (const e of eventos) {
+    if (!mapa.has(e.atendimento_id)) mapa.set(e.atendimento_id, []);
+    mapa.get(e.atendimento_id).push(e);
+  }
+  for (const lista of mapa.values()) lista.sort((a, b) => Number(a.id) - Number(b.id));
+  return mapa;
+}
+
+// Convite = o atendimento ficou "proposto" com uma prestadora ligada (convite novo, troca de prestadora num convite, cadastro já com
+// prestadora). A importação da planilha não conta: não se sabe quando o convite foi de fato feito.
+const ehConvite = (e) => e.status_novo === 'proposto' && !!e.prestadora_id && ['criado', 'proposto', 'reatribuido'].includes(e.acao);
+
+// Tempo de resposta da prestadora a cada convite dela. Cada convite termina no evento seguinte do atendimento:
+//   • ela aceitou / recusou → resposta (conta o tempo);
+//   • a unidade deu como combinado, o sistema confirmou ou concluiu (o horário chegou) → "sem resposta" dela;
+//   • trocaram a prestadora, cancelaram ou reabriram antes de ela responder → "trocado/cancelado";
+//   • nada depois → "em aberto".
+// O ACEITE só abre 2 dias antes do atendimento (regra do portal): contar desde o convite faria toda resposta a um convite feito com
+// semanas de antecedência parecer lenta, então o aceite conta desde o que vier por último entre o convite e a abertura da janela. A
+// recusa pode ser feita a qualquer hora e conta desde o convite.
+function respostasAosConvites(eventos, prestadoras = []) {
+  const nomes = new Map(prestadoras.map(p => [p.id, p.nome]));
+  const porPrestadora = new Map();
+  const dados = (id) => {
+    if (!porPrestadora.has(id)) porPrestadora.set(id, { prestadora_id: id, nome: nomes.get(id) || '—', convites: 0, aceitos: 0, recusados: 0, sem_resposta: 0, em_aberto: 0, trocados: 0, horas: [] });
+    return porPrestadora.get(id);
+  };
+  for (const cadeia of cadeias(eventos).values()) {
+    cadeia.forEach((e, i) => {
+      if (!ehConvite(e)) return;
+      const d = dados(e.prestadora_id), prox = cadeia[i + 1];
+      d.convites++;
+      if (!prox) { d.em_aberto++; return; }
+      const dela = prox.prestadora_id === e.prestadora_id;
+      if (prox.acao === 'aceito' && prox.ator_perfil === 'prestadora' && dela) {
+        d.aceitos++;
+        const base = Math.max(instante(e.quando), e.janela_abre ? instante(e.janela_abre) : -Infinity);
+        d.horas.push(Math.max(0, (instante(prox.quando) - base) / HORA_MS));
+      } else if (prox.acao === 'recusado' && dela) {
+        d.recusados++;
+        d.horas.push(Math.max(0, (instante(prox.quando) - instante(e.quando)) / HORA_MS));
+      } else if (['aceito', 'confirmado_auto', 'concluido_auto', 'concluido', 'falta'].includes(prox.acao)) d.sem_resposta++;
+      else d.trocados++;
+    });
+  }
+  const estat = (horas) => ({ tempo_medio_h: media(horas, 1), mediana_h: mediana(horas, 1), ate_24h_pct: pct(horas.filter(h => h <= 24).length, horas.length) });
+  const todas = [...porPrestadora.values()];
+  const horas = todas.flatMap(d => d.horas);
+  const soma_ = (campo) => todas.reduce((s, d) => s + d[campo], 0);
+  const lista = todas.map(({ horas: hs, ...d }) => ({ ...d, respondidos: d.aceitos + d.recusados, ...estat(hs) }))
+    .sort((a, b) => (b.tempo_medio_h ?? -1) - (a.tempo_medio_h ?? -1) || b.convites - a.convites || a.nome.localeCompare(b.nome)); // quem demora mais primeiro
+  return {
+    convites: soma_('convites'), respondidos: soma_('aceitos') + soma_('recusados'), aceitos: soma_('aceitos'), recusados: soma_('recusados'),
+    sem_resposta: soma_('sem_resposta'), em_aberto: soma_('em_aberto'), trocados: soma_('trocados'), ...estat(horas),
+    por_prestadora: lista,
+  };
+}
+
+// Pra cada atendimento que está cancelado: o último evento de cancelamento dele (quando, quem pediu, motivo, antecedência).
+// Cancelado de antes do histórico (sem evento) não entra no mapa.
+function infoCancelamentos(linhas, eventos) {
+  const cancelados = new Set(linhas.filter(l => l.status === 'cancelado').map(l => l.id));
+  const info = new Map();
+  for (const [id, cadeia] of cadeias(eventos.filter(e => cancelados.has(e.atendimento_id)))) {
+    const ultimo = cadeia[cadeia.length - 1];
+    if (ultimo.status_novo !== 'cancelado') continue;
+    info.set(id, {
+      quando: ultimo.quando, quem: ultimo.cancelado_por || null, motivo: ultimo.motivo ? String(ultimo.motivo).trim() : null,
+      prestadora_id: ultimo.prestadora_id || null, inicio_em: ultimo.inicio_em || null,
+    });
+  }
+  return info;
+}
+const quemCancelou = (info) => (info ? info.quem || 'nao_informado' : 'sem_registro');
+
+// Motivos digitados à mão: "Viagem", "viagem." e "VIAGEM " são o mesmo. Mostra a grafia mais usada; os sem motivo vão numa linha
+// à parte (motivo = null) no fim. itens: [{ motivo, valor (centavos|null) }]
+const chaveMotivo = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').replace(/[\s.!;,]+$/, '').trim();
+function motivosAgrupados(itens, n = 8) {
+  const grupos = new Map(), sem = { motivo: null, qtd: 0, receita: 0 };
+  for (const it of itens) {
+    if (!it.motivo) { sem.qtd++; sem.receita += it.valor ?? 0; continue; }
+    const k = chaveMotivo(it.motivo);
+    if (!grupos.has(k)) grupos.set(k, { grafias: new Map(), qtd: 0, receita: 0 });
+    const g = grupos.get(k);
+    g.qtd++; g.receita += it.valor ?? 0; g.grafias.set(it.motivo, (g.grafias.get(it.motivo) || 0) + 1);
+  }
+  const lista = [...grupos.values()]
+    .map(g => ({ motivo: [...g.grafias].sort((a, b) => b[1] - a[1])[0][0], qtd: g.qtd, receita: g.receita }))
+    .sort((a, b) => b.qtd - a.qtd || b.receita - a.receita || a.motivo.localeCompare(b.motivo));
+  const topo = comOutros(lista, n, resto => ({ motivo: 'Outros motivos', qtd: soma(resto, x => x.qtd), receita: soma(resto, x => x.receita) }));
+  return sem.qtd ? [...topo, sem] : topo;
+}
+
+// Cancelamentos do período: quem pediu, por quê e com quanta antecedência
+function resumoCancelamentos(linhas, info) {
+  const cancelados = linhas.filter(l => l.status === 'cancelado');
+  const total = cancelados.length;
+  const porQuem = QUEM_CANCELOU.map(quem => {
+    const qtd = cancelados.filter(l => quemCancelou(info.get(l.id)) === quem).length;
+    return { quem, qtd, pct: pct(qtd, total) };
+  });
+  const motivos = motivosAgrupados(cancelados.map(l => ({ motivo: info.get(l.id)?.motivo || null })), 8).map(({ motivo, qtd }) => ({ motivo, qtd }));
+  // antecedência = do cancelamento até o início do atendimento (negativa = cancelado depois de começar)
+  const horas = [...info.values()].filter(i => i.inicio_em && i.quando).map(i => (instante(i.inicio_em) - instante(i.quando)) / HORA_MS);
+  return {
+    total, com_registro: info.size, sem_registro: total - info.size, por_quem: porQuem, motivos,
+    antecedencia: {
+      avaliados: horas.length, menos_24h: horas.filter(h => h < 24).length, menos_24h_pct: pct(horas.filter(h => h < 24).length, horas.length),
+      depois_do_inicio: horas.filter(h => h < 0).length, mediana_h: mediana(horas, 1),
+    },
+  };
+}
+
+// Funil de verdade: por quantas etapas cada atendimento PASSOU (e não só em qual está agora). Cada etapa inclui as seguintes — quem
+// chegou a "concluído" também foi convidado e confirmado, mesmo que o sistema tenha confirmado/concluído sozinho. Atendimentos
+// importados da planilha entram prontos (sem fluxo) e os anteriores ao histórico não têm eventos: os dois ficam fora da conta.
+function funilDoHistorico(linhas, eventos) {
+  const ids = new Set(linhas.map(l => l.id));
+  const ch = cadeias(eventos.filter(e => ids.has(e.atendimento_id)));
+  const ETAPAS = [
+    ['pedido', 'Pedido recebido', null],
+    ['proposto', 'Convite enviado', ['proposto', 'recusado', 'aceito', 'concluido', 'falta']],
+    ['aceito', 'Confirmado', ['aceito', 'concluido', 'falta']],
+    ['concluido', 'Concluído', ['concluido', 'falta']],
+  ];
+  const qtd = { pedido: 0, proposto: 0, aceito: 0, concluido: 0 }, desfechos = { recusados: 0, cancelados: 0, faltas: 0 };
+  let importados = 0, aceitosPelaPrestadora = 0;
+  for (const cadeia of ch.values()) {
+    if (cadeia[0].acao === 'importado') { importados++; continue; }
+    qtd.pedido++;
+    const vistos = new Set(cadeia.map(e => e.status_novo));
+    for (const [etapa, , alcanca] of ETAPAS) if (alcanca && alcanca.some(st => vistos.has(st))) qtd[etapa]++;
+    if (vistos.has('recusado')) desfechos.recusados++;
+    if (vistos.has('cancelado')) desfechos.cancelados++;
+    if (vistos.has('falta')) desfechos.faltas++;
+    if (cadeia.some(e => e.acao === 'aceito' && e.ator_perfil === 'prestadora')) aceitosPelaPrestadora++;
+  }
+  const etapas = ETAPAS.map(([etapa, rotulo], i) => ({
+    etapa, rotulo, qtd: qtd[etapa], pct_do_anterior: i === 0 ? null : pct(qtd[etapa], qtd[ETAPAS[i - 1][0]]), pct_do_inicio: pct(qtd[etapa], qtd.pedido),
+  }));
+  return { base: qtd.pedido, importados, sem_historico: linhas.filter(l => !ch.has(l.id)).length, etapas, desfechos, aceitos_pela_prestadora: aceitosPelaPrestadora };
+}
+
 // ---------- AGENDA ----------
 function contarAgenda(linhas) {
   const r = { registrados: linhas.length, total: 0, concluidos: 0, programados: 0, cancelados: 0, faltas: 0, horas_total: 0, horas_realizadas: 0, horas_programadas: 0 };
@@ -146,12 +308,17 @@ function choquesDeHorario(linhas) {
 //            prestadora_id, prestadora_nome, cliente_id, cliente_nome, profissional_externo }]
 // ctx: { periodo, hoje, anteriores (linhas do período anterior), recusas: [{ atendimento_id, prestadora_id }],
 //        avisos: [{ criado_em, lido_em }], prestadoras: [{ id, nome, ativa, faltas_aceitavel_pct }],
-//        unidades: [{ id, nome }], clientesNovos }
+//        unidades: [{ id, nome }], clientesNovos, eventos (histórico dos atendimentos do período), historicoDesde (quando o histórico começou) }
 function relatorioAgenda(linhas, ctx) {
   const { periodo, hoje } = ctx;
   const contam = linhas.filter(contaAtendimento);
   const ids = new Set(linhas.map(l => l.id));
   const recusas = (ctx.recusas || []).filter(r => ids.has(r.atendimento_id));
+  const eventos = (ctx.eventos || []).filter(e => ids.has(e.atendimento_id));
+  const respostas = respostasAosConvites(eventos, ctx.prestadoras || []);
+  const respostaDe = new Map(respostas.por_prestadora.map(r => [r.prestadora_id, r]));
+  const infoCanc = infoCancelamentos(linhas, eventos);
+  const comEvento = new Set(eventos.map(e => e.atendimento_id));
 
   const resumo = contarAgenda(linhas);
   const anterior = contarAgenda(ctx.anteriores || []);
@@ -202,7 +369,7 @@ function relatorioAgenda(linhas, ctx) {
   // prestadoras: produtividade, faltas × meta, recusas
   const mapaP = new Map();
   const dadosP = (id, nome, ativa = true, meta = null) => {
-    if (!mapaP.has(id)) mapaP.set(id, { prestadora_id: id, nome, ativa, meta_pct: meta, concluidos: 0, programados: 0, cancelados: 0, faltas: 0, horas_realizadas: 0, recusas: 0, vinculados: 0 });
+    if (!mapaP.has(id)) mapaP.set(id, { prestadora_id: id, nome, ativa, meta_pct: meta, concluidos: 0, programados: 0, cancelados: 0, cancelou_ela: 0, faltas: 0, horas_realizadas: 0, recusas: 0, vinculados: 0 });
     return mapaP.get(id);
   };
   for (const p of ctx.prestadoras || []) dadosP(p.id, p.nome, p.ativa !== false, p.faltas_aceitavel_pct === null || p.faltas_aceitavel_pct === undefined ? null : Number(p.faltas_aceitavel_pct));
@@ -210,7 +377,7 @@ function relatorioAgenda(linhas, ctx) {
     if (!l.prestadora_id) continue;
     const x = dadosP(l.prestadora_id, l.prestadora_nome);
     if (['proposto', 'aceito', 'concluido', 'falta'].includes(l.status)) x.vinculados++; // convites que ela tem em aberto, aceitou ou cumpriu
-    if (l.status === 'cancelado') x.cancelados++;
+    if (l.status === 'cancelado') { x.cancelados++; if (infoCanc.get(l.id)?.quem === 'prestadora') x.cancelou_ela++; }
     else if (l.status === 'falta') x.faltas++;
     else if (l.status === 'concluido') { x.concluidos++; x.horas_realizadas += duracao(l); }
     else x.programados++;
@@ -224,6 +391,7 @@ function relatorioAgenda(linhas, ctx) {
       ...x, horas_realizadas: arred(x.horas_realizadas), devidos, taxa_faltas_pct: taxaFaltas,
       acima_meta: x.meta_pct !== null && taxaFaltas !== null && taxaFaltas > x.meta_pct,
       convites, taxa_recusa_pct: pct(x.recusas, convites),
+      resposta_media_h: respostaDe.get(x.prestadora_id)?.tempo_medio_h ?? null, respondidos: respostaDe.get(x.prestadora_id)?.respondidos ?? 0, // do histórico
     };
   });
   const comMovimento = x => x.concluidos + x.programados + x.cancelados + x.faltas + x.recusas > 0;
@@ -264,12 +432,14 @@ function relatorioAgenda(linhas, ctx) {
     por_servico: porServico, por_local: porLocal, por_origem: porOrigem,
     recorrencia: { recorrentes, avulsos: contam.length - recorrentes },
     clientes, prestadoras, ociosas, recusas: recusasInfo, avisos, alertas, por_unidade: porUnidade,
+    resposta_convites: respostas, cancelamentos: resumoCancelamentos(linhas, infoCanc), funil_real: funilDoHistorico(linhas, eventos),
+    historico: { desde: ctx.historicoDesde ?? null, sem_historico: linhas.filter(l => !comEvento.has(l.id)).length },
   };
 }
 
 // ---------- FINANCEIRO ----------
 // linhas: as mesmas da agenda, com { valor, custo, repasse_pago_em } (cancelados incluídos: viram "receita perdida").
-// ctx: { periodo, hoje, anteriores, evolucao: [{ mes, qtd, receita, custo, receita_completa, custo_completo }], unidades }
+// ctx: { periodo, hoje, anteriores, evolucao: [{ mes, qtd, receita, custo, receita_completa, custo_completo }], unidades, eventos }
 function relatorioFinanceiro(linhas, ctx) {
   const { periodo, hoje } = ctx;
   const semCancelados = linhas.filter(l => l.status !== 'cancelado');
@@ -293,6 +463,15 @@ function relatorioFinanceiro(linhas, ctx) {
     return { qtd: it.length, com_valor: it.filter(x => x.valor !== null).length, receita: reais(soma(it, x => x.valor)) };
   };
   const canc = perdidos('cancelado'), fal = perdidos('falta');
+  // receita perdida com cancelamentos, por quem pediu e por motivo (do histórico; o que é anterior a ele fica em "sem registro")
+  const cancelados = l.filter(x => x.status === 'cancelado');
+  const infoCanc = infoCancelamentos(linhas, ctx.eventos || []);
+  canc.por_quem = QUEM_CANCELOU.map(quem => {
+    const it = cancelados.filter(x => quemCancelou(infoCanc.get(x.id)) === quem);
+    return { quem, qtd: it.length, com_valor: it.filter(x => x.valor !== null).length, receita: reais(soma(it, x => x.valor)) };
+  }).filter(x => x.qtd > 0);
+  canc.por_motivo = motivosAgrupados(cancelados.map(x => ({ motivo: infoCanc.get(x.id)?.motivo || null, valor: x.valor })), 6)
+    .map(m => ({ motivo: m.motivo, qtd: m.qtd, receita: reais(m.receita) }));
 
   const repasseItens = realizados.filter(x => x.custo !== null);
   const repasseTotal = soma(repasseItens, x => x.custo), repassePago = soma(repasseItens.filter(x => x.repasse_pago_em), x => x.custo);
@@ -442,4 +621,5 @@ function relatorioSatisfacao(avaliacoes, ctx) {
 module.exports = {
   resolverPeriodo, chaveDe, chavesDoPeriodo, somaDias, somaMes, isodow, PRESETS,
   contarAgenda, choquesDeHorario, relatorioAgenda, relatorioFinanceiro, relatorioSatisfacao, resumoAvaliacoes,
+  respostasAosConvites, infoCancelamentos, resumoCancelamentos, motivosAgrupados, funilDoHistorico, QUEM_CANCELOU,
 };

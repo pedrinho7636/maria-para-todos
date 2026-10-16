@@ -41,6 +41,8 @@ const aplicar = process.argv.includes('--aplicar');
       for (const c of criadas) console.log(`  + criada  ${c.nome}  <${c.email}>`);
       for (const p of lista) {
         const id = ids.get(normalizarTexto(p.nome));
+        const { rows: alvo } = await client.query(
+          'select id, status from atendimentos where unidade_id = $1 and profissional_externo = $2 for update', [unidadeId, p.nome]);
         const { rowCount } = await client.query(
           `update atendimentos set prestadora_id = $1, profissional_externo = null,
              status = case when status = 'pedido' then 'proposto' else status end,
@@ -48,6 +50,8 @@ const aplicar = process.argv.includes('--aplicar');
            where unidade_id = $2 and profissional_externo = $3`,
           [id, unidadeId, p.nome]
         );
+        // o que estava como "pedido" virou convite pra ela: entra no histórico (ator = sistema, é um script de manutenção)
+        await registrarEventos(client, alvo.filter(a => a.status === 'pedido').map(a => ({ atendimentoId: a.id, de: 'pedido', para: 'proposto', acao: 'proposto', prestadoraId: id })));
         ligados += rowCount;
         console.log(`  ${String(rowCount).padStart(3)} atendimento(s)  ->  ${p.nome}`);
       }

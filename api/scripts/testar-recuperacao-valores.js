@@ -269,6 +269,15 @@ const ultimoCodigo = async (destino) => (await pool.query('select codigo from co
   check('cada atendimento guarda o valor mensal informado (1200)', serie.filter(x => x.hora_atendimento.startsWith('08')).every(x => Number(x.valor_mensal) === 1200));
   check('dia sem valor mensal fica sem valor', serie.filter(x => x.hora_atendimento.startsWith('09')).every(x => x.valor === null && x.valor_mensal === null));
 
+  console.log('\n== Valor de CADA atendimento em atendimento recorrente (o que o formulário manda) ==');
+  r = await http('POST', '/atendimentos/admin/carazinho/recorrente', { data_inicio: inicioSerie, horizonte_meses: 2, valor_por_atendimento: 'xx', itens: [{ dia_semana: 3, hora_atendimento: '10:00', tipo_servico: 'qa-faxina' }] }, tAdm);
+  check('valor por atendimento inválido: 400', r.s === 400);
+  r = await http('POST', '/atendimentos/admin/carazinho/recorrente', { data_inicio: inicioSerie, horizonte_meses: 2, valor_por_atendimento: 150.5, itens: [{ dia_semana: 3, hora_atendimento: '10:00', tipo_servico: 'qa-faxina' }, { dia_semana: 5, hora_atendimento: '10:00', tipo_servico: 'qa-faxina' }] }, tAdm);
+  const cada = r.j.atendimentos || [];
+  check('série com valor por atendimento criada (201)', r.s === 201 && cada.length > 4, JSON.stringify(r.j).slice(0, 200));
+  check('TODOS os atendimentos recebem o valor cheio (150,50), sem dividir', cada.every(x => Number(x.valor) === 150.5 && x.valor_mensal === null), JSON.stringify(cada.map(x => x.valor)));
+  check('total da série = valor × quantidade', Math.round(cada.reduce((s, x) => s + Number(x.valor) * 100, 0)) === cada.length * 15050);
+
   console.log('\n== Endereço da unidade ==');
   const { rows: [enderecoOriginal] } = await pool.query("select endereco, endereco_curto from unidades where slug = 'carazinho'");
   try {

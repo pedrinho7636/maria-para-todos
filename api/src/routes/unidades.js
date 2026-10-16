@@ -9,6 +9,7 @@ const { nomeValido, emailValido, telefoneValido, senhaValida } = require('../uti
 const { normalizarTexto } = require('../utils/importarPlanilha');
 const { ErroNegocio, emTransacao, lerDadosUnidade, criarUnidade, vincularAdmin, cnpjsDoAdmin } = require('../utils/unidades');
 const asyncHandler = require('../utils/asyncHandler');
+const { atorDe, registrarEventos } = require('../utils/eventos');
 
 const router = express.Router();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -127,11 +128,18 @@ router.post('/:slug/admin/equipe', requireAuth, requireRole('administrador'), re
          where unidade_id = $1 and prestadora_id is null and profissional_externo is not null`, [req.unidadeId]);
       let ligados = 0;
       for (const e of externos.filter(x => normalizarTexto(x.nome) === normalizarTexto(nome))) {
+        // o que estava como "pedido" vira convite pra ela: entra no histórico (o resto só ganha a prestadora, sem mudar de status)
+        const { rows: alvo } = await db.query(
+          `select id, status from atendimentos where unidade_id = $1 and prestadora_id is null and profissional_externo = $2 for update`,
+          [req.unidadeId, e.nome]);
         const { rowCount } = await db.query(
           `update atendimentos set prestadora_id = $1, profissional_externo = null,
              status = case when status = 'pedido' then 'proposto' else status end, atualizado_em = now()
            where unidade_id = $2 and prestadora_id is null and profissional_externo = $3`,
           [nova.id, req.unidadeId, e.nome]);
+        await registrarEventos(db, alvo.filter(a => a.status === 'pedido').map(a => ({
+          atendimentoId: a.id, de: 'pedido', para: 'proposto', acao: 'proposto', prestadoraId: nova.id, ator: atorDe(req.user),
+        })));
         ligados += rowCount;
       }
       return { nova, ligados };

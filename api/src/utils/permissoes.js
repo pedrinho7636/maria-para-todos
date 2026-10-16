@@ -38,7 +38,8 @@ async function acessoAdminUnidade(user, slug, modulo) {
   if (user.perfil === 'sub_administrador') {
     const { rows: [row] } = await pool.query(
       `select sa.unidade_id, sa.ativo, sa.pode_dashboard, sa.pode_agenda,
-              sa.pode_avaliacoes, sa.pode_equipe, sa.pode_clientes, sa.pode_financeiro
+              sa.pode_avaliacoes, sa.pode_equipe, sa.pode_clientes, sa.pode_financeiro,
+              sa.pode_relatorios
        from sub_administradores sa
        join unidades u on u.id = sa.unidade_id
        where sa.id = $1 and u.slug = $2`,

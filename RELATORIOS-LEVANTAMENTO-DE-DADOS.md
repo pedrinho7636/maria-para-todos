@@ -12,7 +12,9 @@ Legenda: ✅ já gravado e fácil de somar · 🟡 dá pra calcular com o que ex
 
 A aba **Relatórios** do administrador já entrega tudo que está marcado ✅ e 🟡 abaixo (Agenda, Financeiro e Satisfação), com período à
 escolha, comparação com o período anterior, planilha CSV e impressão. Ficam de fora só os itens ❌ (dados que o sistema ainda não captura),
-listados na seção 4. Decisões tomadas na implementação (a confirmar com o cliente):
+listados na seção 4. **Atualização (16/10/2026):** o sistema passou a gravar o **histórico de status** (`atendimento_eventos`) e três indicadores
+que eram ❌ já saem nos relatórios: tempo de resposta ao convite, motivo/quem cancelou e o funil real (veja as linhas marcadas com 🆕 nas tabelas
+abaixo e a seção 4). Decisões tomadas na implementação (a confirmar com o cliente):
 - **Quem vê:** só o administrador completo; funcionário não tem acesso (não existe permissão "Relatórios").
 - **Mês/período = o do serviço** (data do atendimento), não o do pagamento.
 - **Falta** não gera receita nem repasse; o valor cadastrado dela e o dos cancelados aparecem só como **receita perdida**.
@@ -58,6 +60,11 @@ listados na seção 4. Decisões tomadas na implementação (a confirmar com o c
 - `recusas_atendimento` (atendimento, prestadora, **quando recusou**) — ✅ histórico completo de recusas desde a versão com recusas (as anteriores não foram registradas).
 - `avisos_prestadora` (cancelamentos avisados, `criado_em`, `lido_em`) — ✅ dá pra medir quanto tempo a prestadora leva pra ler um aviso.
 - `controle_prestadora` (meta de faltas aceitável por prestadora).
+- 🆕 `atendimento_eventos` (**histórico de status**: atendimento, status anterior → novo, `acao`, **quando**, **quem** — `ator_perfil` + `ator_id` —, prestadora
+  envolvida, e no cancelamento `cancelado_por` + `motivo`). Uma linha por mudança de status (e por troca de prestadora num convite), gravada na mesma
+  transação da mudança, só acrescentando. Existe **só a partir do dia em que foi criada**: atendimento mais antigo não tem eventos e fica de fora
+  dos indicadores abaixo (o relatório informa quantos). Ações: `criado`, `importado`, `proposto`, `reatribuido`, `aceito`, `recusado`,
+  `confirmado_auto`, `concluido`, `concluido_auto`, `cancelado`, `falta`, `reaberto`, `atualizado`.
 
 ### 1.3 Indicadores possíveis
 
@@ -68,23 +75,26 @@ listados na seção 4. Decisões tomadas na implementação (a confirmar com o c
 | Horas agendadas e **horas realizadas** | 🟡 | `sum(duracao_horas)` (usar 1 h onde nulo) por status |
 | Ocupação por horário (mapa de calor dia × hora) | 🟡 | `hora_atendimento` + `duracao_horas` |
 | Ocupação/produtividade por prestadora | 🟡 | atendimentos e horas por `prestadora_id`; já existe `total_atendimentos` na Equipe |
-| Funil: pedido → proposto → aceito → concluído | 🟡 | só *estado atual* (não há histórico de transições) |
+| Funil: pedido → proposto → aceito → concluído | ✅ 🆕 | **funil real** (por quantas etapas cada atendimento *passou*) a partir de `atendimento_eventos`; o funil por situação *atual* continua ao lado |
 | Taxa de recusa de convites | ✅ | `recusas_atendimento` ÷ convites (convite = `proposto` + recusados + aceitos do período) |
-| Taxa de **cancelamento** | 🟡 | `status = cancelado` ÷ total; **sem data nem motivo do cancelamento** (só `atualizado_em`) |
+| Taxa de **cancelamento** | ✅ | `status = cancelado` ÷ total; data, quem pediu e motivo vêm do histórico (linhas abaixo) |
 | Taxa de **faltas** por prestadora vs meta | ✅ | `faltas ÷ (concluídos + faltas)` — já calculada na Equipe com `faltas_aceitavel_pct` |
 | Conflitos de horário por prestadora | 🟡 | sobreposição de intervalos (a regra já existe em `utils/conflitos.js`) |
 | Atendimentos sem prestadora / convites vencidos | 🟡 | `pedido`/`proposto` com data passada (o Financeiro já mostra `convites_vencidos`) |
 | Origem dos pedidos (site × WhatsApp × manual × planilha) | ✅ | `group by origem` |
 | Recorrentes × avulsos | ✅ | `serie_id is not null` |
 | Clientes novos × recorrentes | 🟡 | `clientes.criado_em` e contagem de atendimentos por cliente |
-| **Tempo de resposta** da prestadora a um convite | ❌ | falta gravar `proposto_em` e `aceito_em` |
-| **Quando** cada mudança de status aconteceu / quem fez | ❌ | não há histórico de status (log de auditoria) |
-| Motivo de cancelamento / quem cancelou | ❌ | não é perguntado nem gravado |
+| **Tempo de resposta** da prestadora a um convite | ✅ 🆕 | `atendimento_eventos`: do convite (`proposto`) até ela aceitar/recusar; média, mediana e % em até 24 h por prestadora. O aceite só abre 2 dias antes do atendimento: o tempo do aceite conta **desde a abertura dessa janela** (se o convite veio antes); a recusa conta desde o convite |
+| **Quando** cada mudança de status aconteceu / quem fez | ✅ 🆕 | `atendimento_eventos` (auditoria), só dos atendimentos a partir da criação da tabela |
+| Motivo de cancelamento / quem cancelou | ✅ 🆕 | perguntado (opcional) na agenda ao cancelar: `cancelado_por` (cliente / franquia / prestadora) e `motivo`; cancelamentos antigos aparecem como "anterior ao histórico" |
+| Cancelamentos com pouca antecedência | ✅ 🆕 | início do atendimento − momento do cancelamento (quantos com menos de 24 h) |
 
 ### 1.4 Ressalvas de qualidade
 - Dados importados da planilha trazem `profissional_externo` para quem não tem cadastro → relatórios por prestadora só enxergam quem já foi cadastrada/ligada.
 - `tipo_servico` livre: vale normalizar (ou criar catálogo) antes de relatório por serviço.
-- Atendimento criado no passado por importação entra com status da planilha (concluído/previsto), sem histórico de aceite.
+- Atendimento criado no passado por importação entra com status da planilha (concluído/previsto), sem histórico de aceite: o histórico registra só o evento `importado` (com o status que a planilha trazia) e ele fica de fora do funil real e do tempo de resposta.
+- O histórico só existe desde que a tabela foi criada; antes disso nada foi registrado e **não dá pra reconstruir**. Os relatórios mostram "anterior ao histórico" e avisam quantos atendimentos do período ficam de fora.
+- Tempo de resposta: o convite que a unidade deu como combinado, que o sistema confirmou/concluiu quando o horário chegou, ou que passou a outra prestadora/foi cancelado antes de ela responder conta como **sem resposta** (não entra na média).
 
 ---
 
@@ -117,7 +127,7 @@ listados na seção 4. Decisões tomadas na implementação (a confirmar com o c
 | Evolução mensal (12 meses) e sazonalidade | 🟡 |
 | Receita prevista × realizada | ✅ (previsto/realizado do mês) |
 | Repasses a pagar × pagos por período | ✅ |
-| Receita **perdida**: cancelados e faltas com valor cadastrado | 🟡 (`status in (cancelado, falta)` somando `valor`) |
+| Receita **perdida**: cancelados e faltas com valor cadastrado | ✅ (`status in (cancelado, falta)` somando `valor`); 🆕 os cancelamentos também **por quem pediu e por motivo** |
 | Consolidado da empresa (várias unidades do mesmo CNPJ) | 🟡 (somar por CNPJ) |
 | **Recebimento do cliente** (pago / em aberto / atrasado) | ❌ não existe (só se sabe o valor, não se foi pago) |
 | Despesas da franquia (fixas, impostos, comissão) | ❌ |
@@ -173,12 +183,12 @@ Fluxo: só atendimento **concluído** pode ser avaliado → entra `pendente` →
 
 Em ordem de valor / esforço:
 
-1. **Histórico de status** (`atendimento_eventos`: atendimento, status anterior → novo, quando, quem). Destrava funil, tempo de resposta, motivo/data de cancelamento e auditoria.
-2. **Motivo do cancelamento** (e quem cancelou: cliente pediu / franquia / prestadora).
+1. ✅ **Histórico de status** (`atendimento_eventos`: atendimento, status anterior → novo, quando, quem) — **feito (16/10/2026)**. Destrava funil, tempo de resposta, motivo/data de cancelamento e auditoria.
+2. ✅ **Motivo do cancelamento** (e quem cancelou: cliente pediu / franquia / prestadora) — **feito (16/10/2026)**: pergunta opcional na agenda.
 3. **Catálogo de serviços** (normalizar `tipo_servico`).
 4. **Recebimento do cliente** (pago/em aberto) — sem isso o Financeiro é "competência", não "caixa".
 5. **NPS real** (0–10) e/ou critérios na avaliação.
-6. `proposto_em` / `aceito_em` (se não fizer o histórico completo).
+6. ✅ `proposto_em` / `aceito_em` — dispensado: saem do histórico completo (eventos `proposto` e `aceito`).
 7. Custo por atendimento vindo da planilha (o cliente vai verificar se consegue exportar).
 
 ## 5. Perguntas de negócio pra fechar com o cliente

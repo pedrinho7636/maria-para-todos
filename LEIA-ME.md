@@ -81,9 +81,12 @@ teste cobre também o valor dos atendimentos (unitário e em grupo), o endereço
 prestadoras a partir da planilha, além do Financeiro (permissões, repasses, pagamento), das views corrigidas e da
 conclusão automática (essa parte roda numa transação revertida, sem tocar nos atendimentos reais).
 `npm run teste:recorrencia` (divisão do valor mensal), `npm run teste:financeiro` (receita, custo, margem, repasses) e
-`npm run teste:relatorios` (todos os cálculos da aba Relatórios) não precisam de API nem de banco. O
+`npm run teste:relatorios` (todos os cálculos da aba Relatórios) e `npm run teste:relatorios-historico` (os indicadores que saem
+do histórico de status: tempo de resposta ao convite, cancelamentos, funil real) não precisam de API nem de banco. O
 `npm run teste:relatorios-api` confere as rotas dos relatórios (quem pode abrir, período, várias unidades) e precisa da API de
-testes rodando, como os demais (instruções no cabeçalho de `api/scripts/testar-relatorios-api.js`).
+testes rodando, como os demais (instruções no cabeçalho de `api/scripts/testar-relatorios-api.js`). O `npm run teste:eventos`
+também precisa da API de testes: percorre cada ponto em que o status de um atendimento muda e confere o evento gravado no histórico
+(e o que os relatórios mostram a partir dele).
 
 **Publicar na internet (Render + Neon):** passo a passo, e o que só você pode fazer, em `PUBLICAR-SITE.md`. No
 código já estão: banco por `DATABASE_URL`, `render.yaml`, `/api/ping`, `npm run banco:schema` (`-- --sem-exemplos`
@@ -165,6 +168,8 @@ api/
     scripts/testar-financeiro.js — `npm run teste:financeiro`: cálculos do módulo Financeiro (sem API/banco)
     scripts/testar-relatorios.js — `npm run teste:relatorios`: cálculos da aba Relatórios — período, Agenda, Financeiro, Satisfação (sem API/banco)
     scripts/testar-relatorios-api.js — `npm run teste:relatorios-api`: rotas /api/relatorios (permissões, período, consolidado de unidades; precisa da API)
+    scripts/testar-relatorios-historico.js — `npm run teste:relatorios-historico`: tempo de resposta ao convite, cancelamentos (quem/motivo), funil real (sem API/banco)
+    scripts/testar-eventos.js — `npm run teste:eventos`: histórico de status — um evento em cada transição + o que os relatórios mostram dele (precisa da API)
     scripts/testar-agenda.js — `npm run teste:agenda`: CNPJ, conflitos de horário, recusas, avisos de cancelamento, calendário/cliente, convite e substituição de perfil (precisa da API)
     scripts/vincular-profissionais-importadas.js — `npm run importadas:vincular`: liga atendimentos importados às prestadoras
       asyncHandler.js        — evita que erro numa rota derrube o processo
@@ -181,7 +186,8 @@ api/
       relatorios.js             — Relatórios (Agenda, Financeiro, Satisfação) por período; só administrador completo
     utils/financeiro.js        — cálculos do Financeiro (em centavos, testáveis sem banco)
     utils/relatorios.js        — cálculos dos Relatórios (período, séries, taxas; testáveis sem banco)
-    utils/conclusao.js         — conclui sozinho o atendimento aceito cuja data/hora já passou (a cada 5 min)
+    utils/conclusao.js         — conclui sozinho o atendimento aceito cuja data/hora já passou (a cada 5 min) e grava o evento no histórico
+    utils/eventos.js           — histórico de status dos atendimentos (tabela atendimento_eventos): grava eventos, lê quem cancelou/motivo
 ```
 
 Autenticação: senha com hash `bcrypt`, sessão via JWT (7 dias) guardado no `localStorage` do navegador (`pm-token`).
@@ -282,6 +288,22 @@ atendimentos da Equipe e é a base do Financeiro.
 - **Cancelamento avisa a prestadora:** ao cancelar (um atendimento ou uma série), a prestadora responsável recebe um
   **aviso no portal** ("Avisos da unidade", com serviço, cliente, data e horário) até clicar em *Entendi*, e o
   atendimento sai da agenda dela (no calendário aparece como "cancelado"). Tabela `avisos_prestadora`.
+- **Quem pediu e por quê (opcional):** ao escolher *Cancelado* no balão da agenda aparecem **Quem pediu o cancelamento?** (o cliente /
+  a franquia / a prestadora; ou "Não informar") e **Motivo** (texto livre, até 300 caracteres). Os dois vão pro histórico do atendimento
+  e alimentam os relatórios; a prestadora não vê. Na API: `cancelado_por` (`cliente`, `franquia` ou `prestadora`) e `motivo` no corpo de
+  `POST /atendimentos/admin/:slug/:id/situacao` (e de `.../serie/:serieId/cancelar`, valendo pra série inteira).
+
+**Histórico de status dos atendimentos (`atendimento_eventos`):** o atendimento guarda só o status de agora; a tabela
+`atendimento_eventos` guarda **como ele chegou lá**. Cada mudança grava uma linha — status de antes e de depois, quando, quem fez
+(administrador, funcionário, prestadora, cliente, "público" quando o pedido veio do site, ou "sistema" nas conclusões automáticas), a
+prestadora envolvida e, no cancelamento, quem pediu e o motivo. O evento entra **na mesma transação** da mudança (um nunca existe sem o
+outro) e só se acrescenta: nada é editado. Gravam eventos: pedido do site, cadastro avulso, série semanal, importação da planilha
+(`importado`), convite (`proposto`), troca de prestadora (`reatribuido`), aceite e recusa pela prestadora, confirmação automática de
+convite cujo horário chegou (`confirmado_auto`), conclusão manual e automática, cancelamento, falta, reabertura (`reaberto`: cancelado →
+programado, falta → concluído) e a ligação de atendimentos da planilha a uma prestadora recém-cadastrada. O que **não** muda nada (reatribuir
+pra mesma prestadora, cancelar o que já está cancelado, editar local/valor) não gera evento. A tabela nasce vazia: atendimentos anteriores
+a ela não têm histórico (os relatórios avisam quantos ficam de fora). Apagar um atendimento apaga o histórico dele. Código em
+`api/src/utils/eventos.js` e `api/src/utils/conclusao.js`; a lista de ações está no cabeçalho do primeiro.
 
 **Conflitos de horário e pendências (agenda da prestadora):** dois atendimentos da mesma prestadora se conflitam quando
 os intervalos [início, início + duração] se sobrepõem, mesmo em parte (sem duração vale 1 h; terminar às 11:00 e
@@ -353,8 +375,14 @@ tabelas, alertas e os botões **Baixar planilha (CSV)** e **Imprimir** (a impres
   clientes atendidos/que voltaram/novos, recorrentes × avulsos, gráfico por dia/semana/mês, situação (funil), dias da semana, mapa de calor
   dia × hora, serviços e origem dos pedidos, tabela por prestadora (faltas × meta, recusas), clientes e locais que mais aparecem, avisos de
   cancelamento (lidos e tempo até ler) e alertas (passou sem prestadora, futuros sem prestadora, choque de horário, profissional da planilha sem cadastro).
+  Do **histórico de status**: **tempo médio de resposta ao convite** por prestadora (média, mediana e % em até 24 h; também na tabela de
+  prestadoras), **quem cancelou** (cliente / franquia / prestadora / não informado), **motivos dos cancelamentos** (escritas parecidas são
+  somadas), antecedência dos cancelamentos (quantos com menos de 24 h) e o **funil real** pedido → convite → confirmado → concluído.
+  O aceite só abre 2 dias antes do atendimento, então o tempo de resposta a um aceite conta **desde a abertura dessa janela** (a recusa
+  conta desde o convite). Atendimentos anteriores ao histórico ficam de fora desses indicadores e a tela diz quantos são.
 - **Financeiro:** receita, custo, margem, ticket médio, receita por hora, a realizar, receita perdida (cancelados e faltas com valor),
   repasses pagos × a pagar, série do período, evolução dos últimos 12 meses, por serviço, maiores clientes (e concentração), resultado por prestadora.
+  A receita perdida com cancelamentos aparece **por quem cancelou e por motivo** (do histórico de status).
 - **Satisfação:** nota média e % de satisfeitos (só avaliações **aprovadas**), distribuição das notas, taxa de resposta (avaliações ÷
   concluídos), tempo até avaliar e de moderação, nota por serviço e por período, ranking de prestadoras (nota + faltas + recusas +
   cancelamentos), pontos de atenção (nota ≤ 3) e elogios. A "nota média" **não é NPS** (o portal ainda não pergunta "você indicaria?").
