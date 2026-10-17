@@ -1,0 +1,485 @@
+/* Portal da Maria — Aba Relatórios (abas, filtros, gráficos, tabelas, mapa de calor) e estilo de impressão. */
+
+/* Relatórios */
+.rel-abas {
+  display: inline-flex;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 14px;
+  max-width: 100%
+}
+
+.rel-abas button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 9px 20px;
+  border-radius: 9px;
+  cursor: pointer
+}
+
+.rel-abas button:hover {
+  color: var(--ink)
+}
+
+.rel-abas button.active {
+  background: var(--green);
+  color: #fff
+}
+
+.rel-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 10px
+}
+
+.rel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px
+}
+
+.rel-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  cursor: pointer
+}
+
+.rel-chip:hover {
+  border-color: var(--green)
+}
+
+.rel-chip.active {
+  background: var(--green-soft);
+  border-color: var(--green);
+  color: var(--green-strong);
+  font-weight: 600
+}
+
+.rel-passo {
+  display: flex;
+  align-items: center;
+  gap: 8px
+}
+
+.rel-passo strong {
+  min-width: 138px;
+  text-align: center;
+  font-size: 14px
+}
+
+.rel-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 10px
+}
+
+.rel-custom input {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px
+}
+
+.rel-opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto
+}
+
+.rel-opcoes select {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  max-width: 100%
+}
+
+.rel-so-impressao {
+  display: none
+}
+
+.rel-info {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 0 0 18px;
+  line-height: 1.5
+}
+
+.rel-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 26px;
+  margin-bottom: 26px
+}
+
+.rel-bloco {
+  margin-bottom: 26px
+}
+
+.rel-barras {
+  padding: 4px 0 10px
+}
+
+.rel-linha {
+  display: grid;
+  grid-template-columns: minmax(84px, 36%) 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 18px;
+  font-size: 13px
+}
+
+.rel-rot {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.rel-trilho {
+  height: 10px;
+  background: var(--bg);
+  border-radius: 6px;
+  overflow: hidden
+}
+
+.rel-preench {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  border-radius: 6px
+}
+
+.rel-preench.ruim {
+  background: var(--red)
+}
+
+.rel-preench.azul {
+  background: var(--blue)
+}
+
+.rel-preench.ambar {
+  background: var(--amber)
+}
+
+.rel-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap
+}
+
+.rel-grafico {
+  padding: 6px 18px 14px
+}
+
+.rel-escala {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 2px
+}
+
+.rel-area {
+  height: 170px;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  border-bottom: 1px solid var(--line)
+}
+
+.rel-col {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end
+}
+
+.rel-pilha {
+  display: flex;
+  flex-direction: column-reverse;
+  width: 100%;
+  height: 100%
+}
+
+.rel-par {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 100%;
+  height: 100%
+}
+
+.rel-seg {
+  display: block;
+  width: 100%
+}
+
+.rel-bar {
+  flex: 1;
+  min-width: 0;
+  border-radius: 3px 3px 0 0
+}
+
+.k-conc,
+.k-receita {
+  background: var(--green)
+}
+
+.k-prog,
+.k-margem {
+  background: var(--blue)
+}
+
+.k-custo {
+  background: var(--amber)
+}
+
+.k-nota {
+  background: var(--amber)
+}
+
+.rel-eixo {
+  display: flex;
+  gap: 3px;
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace
+}
+
+.rel-eixo span {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: visible
+}
+
+.rel-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 10px
+}
+
+.rel-legenda i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: -1px
+}
+
+.rel-rolagem {
+  overflow-x: auto
+}
+
+.rel-tab {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px
+}
+
+.rel-tab th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 8px 10px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line)
+}
+
+.rel-tab td {
+  padding: 9px 10px;
+  border-top: 1px solid var(--line);
+  white-space: nowrap
+}
+
+.rel-tab th:first-child,
+.rel-tab td:first-child {
+  padding-left: 18px
+}
+
+.rel-tab th:last-child,
+.rel-tab td:last-child {
+  padding-right: 18px
+}
+
+.rel-tab .num {
+  text-align: right
+}
+
+.rel-tab tbody tr:first-child td {
+  border-top: 0
+}
+
+.rel-ruim {
+  color: var(--red);
+  font-weight: 600
+}
+
+.rel-calor {
+  display: grid;
+  gap: 3px;
+  padding: 4px 18px 14px;
+  min-width: 440px
+}
+
+.rel-calor .h {
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center
+}
+
+.rel-calor .d {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center
+}
+
+.rel-cel {
+  position: relative;
+  height: 26px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink)
+}
+
+.rel-cel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--green);
+  opacity: var(--i, 0);
+  border-radius: 4px
+}
+
+.rel-cel span {
+  position: relative
+}
+
+.rel-cel.forte {
+  color: #fff
+}
+
+.rel-comentario {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.45;
+  white-space: normal;
+  margin-top: 3px
+}
+
+@media (max-width: 900px) {
+  .rel-2 {
+    grid-template-columns: 1fr
+  }
+
+  .rel-opcoes {
+    margin-left: 0;
+    width: 100%
+  }
+}
+
+@media (max-width: 700px) {
+  .rel-abas {
+    display: flex;
+    width: 100%
+  }
+
+  .rel-abas button {
+    flex: 1;
+    padding: 10px 6px
+  }
+
+  .rel-linha {
+    grid-template-columns: minmax(70px, 40%) 1fr auto;
+    padding: 6px 14px
+  }
+
+  .rel-grafico {
+    padding: 6px 14px 14px
+  }
+
+  .rel-area {
+    height: 140px
+  }
+
+  .rel-opcoes .btn-sm {
+    flex: 1 1 140px
+  }
+
+  .rel-opcoes select {
+    width: 100%
+  }
+}
+
+@media print {
+
+  .topbar,
+  .appfoot,
+  .back-link,
+  .rel-abas,
+  .rel-filtros,
+  .rel-custom,
+  .theme-toggle,
+  #toast {
+    display: none !important
+  }
+
+  .rel-so-impressao {
+    display: inline !important
+  }
+
+  body {
+    background: #fff
+  }
+
+  .panel,
+  .stat {
+    break-inside: avoid;
+    box-shadow: none
+  }
+
+  .rel-preench,
+  .rel-seg,
+  .rel-bar,
+  .rel-cel::before {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact
+  }
+}

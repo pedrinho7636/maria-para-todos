@@ -2,7 +2,7 @@
 
 Sistema de gestão para franquias de serviços de limpeza (TCC), com 3 perfis de acesso principais — administrador
 (franqueado), prestadora e cliente — mais sub-administradores com permissões por módulo. Roda 100% local:
-`Portal Da Maria.html` (frontend) fala com uma API própria em Node/Express (`api/`), que conversa com um
+`Portal Da Maria.html` (frontend: HTML + `assets/css` + `assets/js`) fala com uma API própria em Node/Express (`api/`), que conversa com um
 PostgreSQL rodando na sua máquina.
 
 ---
@@ -87,6 +87,12 @@ do histórico de status: tempo de resposta ao convite, cancelamentos, funil real
 testes rodando, como os demais (instruções no cabeçalho de `api/scripts/testar-relatorios-api.js`). O `npm run teste:eventos`
 também precisa da API de testes: percorre cada ponto em que o status de um atendimento muda e confere o evento gravado no histórico
 (e o que os relatórios mostram a partir dele).
+O `npm run teste:seguranca` confere as correções da varredura de segurança (seção 8: cabeçalhos e CSP, sessão que cai ao trocar a
+senha, e-mail só com a senha atual, pedido público, dados que não vazam, bomba de zip, limites de requisição...). Ele sobe sozinho
+uma segunda API na porta 3013 pra testar os limites, cria e apaga uma unidade `qa-seg-*` própria e não toca nas unidades reais.
+A API tem um teto geral de 1.500 requisições por minuto por IP (variável `LIMITE_API`); a bateria completa cabe nele, mas se um
+teste receber 429 inesperado numa máquina lenta/rápida demais, suba a API de teste com `LIMITE_API=100000`. Depois de **uma rodada que
+falhou no meio**, reinicie a API de teste (os limites ficam na memória dela) antes de rodar de novo.
 
 **Publicar na internet (Render + Neon):** passo a passo, e o que só você pode fazer, em `PUBLICAR-SITE.md`. No
 código já estão: banco por `DATABASE_URL`, `render.yaml`, `/api/ping`, `npm run banco:schema` (`-- --sem-exemplos`
@@ -120,8 +126,8 @@ Resend e trocar `EMAIL_FROM` pra usar esse domínio.
 
 ## 4. Abrir o frontend
 
-O `Portal Da Maria.html` faz `fetch()` para `http://localhost:3001/api`, então **precisa ser servido por um
-servidor local** (não abrir com duplo-clique) por causa de CORS:
+O `Portal Da Maria.html` (com a pasta `assets/` ao lado dele, que tem o CSS e o JavaScript) faz `fetch()` para
+`http://localhost:3001/api`, então **precisa ser servido por um servidor local** (não abrir com duplo-clique) por causa de CORS:
 
 - **VS Code:** extensão "Live Server" → botão direito no arquivo → "Open with Live Server".
 - **Terminal (Node):** na pasta do projeto, `npx serve .` e abra o endereço que aparecer.
@@ -146,7 +152,47 @@ Com a API rodando (passo 3) e o HTML servido, teste o fluxo:
 
 ---
 
-## 5. Estrutura do backend (`api/`)
+## 5. Estrutura do frontend e do backend
+
+**Frontend** (servido pela própria API: o HTML em `/` e a pasta `assets/` em `/assets`):
+
+```
+Portal Da Maria.html          — só a estrutura (HTML) de todas as telas, os <link> dos estilos e os <script> na ordem certa
+assets/
+  css/                        — estilos por assunto, carregados em ordem (a ordem importa: um sobrescreve o anterior)
+    01-base-e-tema.css          cores claro/escuro, tipografia, reset
+    02-site-publico.css         home pública (barra, hero, funcionalidades, serviços, contato)
+    03-login-cadastro.css       login e cadastro
+    04-app-geral.css            área logada: barra, cartões, painéis, modais, formulários, modo escuro
+    05-agenda-e-financeiro.css  calendário/linha do tempo da agenda e Financeiro
+    06-relatorios.css           aba Relatórios e estilo de impressão
+    07-avaliacoes-e-componentes.css  estrelas, avaliações, botões pequenos
+    08-celular.css              ajustes para celular
+  js/                         — scripts por assunto, numerados na ORDEM DE CARGA (scripts comuns, não módulos: os onclick
+                                do HTML chamam as funções globais; cada arquivo usa o que os anteriores definiram)
+    01-nucleo-api-sessao.js     endereço da API, sessão, barras de carregamento, api()/apiUpload(), aviso de versão nova
+    02-estado-e-formatacao.js   dados em memória, horário 24 h, máscaras (telefone, dinheiro, CNPJ), escapeHtml
+    03-dados-sessao-login.js    WhatsApp, permissões, carregar dados, login e entrada na área do usuário
+    04-sincronizacao.js         atualização automática do que outras pessoas fazem
+    05-recuperar-senha-e-cadastro.js
+    06-painel-e-unidades.js     seletor de unidades e layout do painel inicial
+    07-agenda-admin.js          calendário do mês, linha do tempo, balão do atendimento
+    08-cadastrar-atendimento.js atendimento único, série semanal, importação de planilha
+    09-area-prestadora.js       convites, calendário e avisos da prestadora
+    10-equipe.js                navegação do administrador, Equipe, valor por atendimento, meta de faltas, contato
+    11-primeiro-acesso.js       primeiro acesso da prestadora criada pela planilha
+    12-clientes-e-avaliacoes.js clientes, substituição de perfil, moderação de avaliações
+    13-financeiro.js            Financeiro
+    14-relatorios.js            Relatórios (Agenda, Financeiro, Satisfação)
+    15-acessos-funcionarios.js  funcionários e permissões
+    16-area-cliente.js          área do cliente
+    17-meu-perfil.js            Meu perfil
+    18-iniciar.js               toast, tema e a partida do app (precisa ser o ÚLTIMO)
+```
+Pra acrescentar uma tela nova: crie o `assets/js/NN-nome.js` (antes do `18-iniciar.js`) e acrescente a `<script src>` no HTML
+na mesma posição. A versão do site (aviso "versão nova — atualizar") considera o HTML **e** todos os arquivos de `assets/`.
+
+**Backend** (`api/`):
 
 ```
 api/
@@ -527,3 +573,58 @@ com `<script>` no lugar do serviço executaria no navegador de quem visualizasse
   "Concluído") — hoje a reimportação só traz o que for novo.
 - Valor (cobrado do cliente) vindo da planilha: ela não tem essa coluna.
 - Edição de data/hora de um atendimento já criado (só reatribuição de prestadora).
+
+---
+
+## 8. Segurança (varredura de 16/10/2026)
+
+Revisão de todo o projeto (API, front, banco, scripts, configuração de deploy e dependências). `npm audit`: **0 vulnerabilidades
+conhecidas**; nenhum segredo no histórico do git (só os exemplos do `.env.example`); todo SQL usa parâmetros (os poucos nomes de tabela
+dinâmicos vêm de mapas fixos no código); o front escapa os dados antes de pôr no HTML. O que foi **corrigido** nesta rodada
+(cada item tem teste em `npm run teste:seguranca`):
+
+| Risco | Correção |
+|---|---|
+| Sessão (token de 7 dias) continuava valendo depois de trocar/redefinir a senha — quem roubou o token mantinha o acesso | Cada conta guarda `senha_alterada_em`; token emitido antes disso cai (401) na hora. Vale pra "esqueci a senha", Meu perfil → senha, primeiro acesso, senha de funcionário trocada pelo administrador e `npm run admin:criar -- --redefinir`. Quem troca a senha pela tela recebe um token novo e continua logado. Conta apagada também derruba o token. (`api/src/utils/sessao.js`) |
+| Token aceitava qualquer algoritmo "pedido" por ele | Só HS256, na assinatura e na verificação |
+| Trocar o e-mail da conta exigia só a sessão aberta (token roubado → trocar e-mail → "esqueci a senha" → conta tomada) | Trocar o e-mail passa a pedir a **senha atual** (campo novo no Meu perfil), com teto de 5 erros / 15 min por conta |
+| E-mail com vírgula/ponto e vírgula (`eu@x.com,vitima@y.com`) era aceito: o código de cadastro ia pra vários destinatários | `emailValido` recusa vírgula, ponto e vírgula, aspas, < > ( ) [ ] \ e mais de 254 caracteres |
+| Cadastro mandava e-mail sem limite por destinatário (dava pra lotar a caixa de alguém trocando de IP) e o código de 6 dígitos de um cadastro podia ser chutado de vários IPs | Limite **por e-mail**: 6 pedidos e 10 conferências erradas a cada 15 min |
+| Foto de perfil: só o começo (`data:image/png;base64,`) era conferido — texto com aspas/tag depois do prefixo ia pro banco e depois pro HTML/CSS | O servidor confere a foto inteira (base64 puro); o front também só usa foto no formato seguro |
+| **XSS** no botão "Cadastrar agora" (agenda): nome vindo da planilha com `&quot;` quebrava o atributo `onclick` | O nome passa por `escapeHtml` antes de entrar no atributo |
+| Cliente recebia colunas internas da franquia em `/cliente/me/pendentes-avaliacao` (`select a.*`: valor pago à prestadora, repasse, código da planilha) | A rota devolve só os 8 campos que a tela usa |
+| Pedido **público** (sem login) com o nome de um cliente existente caía na conta dele (qualquer um enchia o histórico de outra pessoa com atendimentos falsos); campos sem validação de tipo/data | Pedido público só reaproveita cliente **sem conta**; tipos, datas (30/02, ano 9999), horário e tamanhos são validados |
+| Aceite de convite: entre a conferência e o `update` a unidade podia trocar a prestadora, e o aceite caía num atendimento de outra | O `update` exige `prestadora_id` e `status = 'proposto'`; se mudou, responde 409 |
+| Um cliente podia avaliar o mesmo atendimento quantas vezes quisesse (inflar/derrubar a nota) | Uma avaliação por atendimento (409); avaliação sem prestadora é recusada |
+| Telefone da unidade (público, vira link do WhatsApp) aceitava qualquer texto | Só número válido com DDD |
+| Corpo de 2 MB / 9 MB era lido **antes** de conferir o login | `requireAuth` roda antes dos parsers grandes (foto e planilha): sem login, 401 sem ler o corpo |
+| "Bomba de zip": uma planilha .xlsx pequena que descompacta em gigabytes derrubaria o servidor por falta de memória | Cada item do zip é descompactado com teto (40 MB por item, 120 MB no total; o tamanho declarado no cabeçalho não é confiado) antes de a planilha ser lida |
+| Tempo de resposta do login revelava se a conta existe | Conta inexistente também gasta uma comparação de senha (mesmo tempo da senha errada) |
+| Id fora do formato (UUID), data inválida ou texto com caractere nulo viravam erro 500 | O erro do banco por valor inválido vira **400** com mensagem genérica |
+| Nenhum teto geral de requisições; erro não tratado numa promessa derrubava o processo | Teto de 1.500 requisições/min por IP (`/api/ping` e `/api/health` livres); `unhandledRejection` só é registrado |
+| Sem CSP e sem cabeçalhos de permissão | `Content-Security-Policy` (script/estilo/imagem/fonte só do próprio site e das fontes do Google, `connect-src 'self'`, sem iframe/objeto/base de fora), `Permissions-Policy` (câmera, microfone, localização desligados) e `X-Permitted-Cross-Domain-Policies` |
+| `window.open` do WhatsApp sem `noopener`; campos de senha sem `autocomplete` (o navegador podia preencher a senha do **administrador** no campo "senha" de um funcionário novo) | Abas externas abrem com `noopener,noreferrer`; `autocomplete="new-password"`/`current-password` nos campos certos; links `target="_blank"` com `rel="noopener noreferrer"` |
+| `npm run banco:schema` num banco hospedado criava contas de exemplo com senha pública ("senha123") | Com `DATABASE_URL`, o comando recusa sem `--sem-exemplos` (ou `--com-exemplos`, explícito) |
+| Cancelar série podia apagar uma "falta" de hoje (mudava pra cancelado) | Série cancelada ignora o que já é "falta" |
+
+### Riscos que continuam (decisões de negócio / limites da arquitetura)
+
+- **Senha padrão das prestadoras importadas (`senha123`) + login pelo NOME no primeiro acesso.** É o fluxo pedido, mas quem souber o nome
+  de uma prestadora que ainda não fez o primeiro acesso consegue entrar nessa conta e definir o e-mail dela. Mitigações já existentes:
+  o limite de tentativas por conta/IP, e a conta só vale até o primeiro acesso ser concluído. **Recomendação:** pedir pras prestadoras
+  concluírem o primeiro acesso logo após a importação; a opção futura é trocar a senha fixa por uma **senha provisória aleatória por
+  conta**, mostrada uma vez ao administrador (como já é feito pra prestadora criada na Equipe).
+- **O token fica no `localStorage`/`sessionStorage`** do navegador (padrão de SPA). Um XSS futuro o exporia; hoje não há XSS conhecido e o
+  CSP limita pra onde um código injetado poderia mandar dados. Trocar por cookie `HttpOnly` exigiria reescrever o login. A senha
+  trocada ou redefinida agora encerra as outras sessões.
+- **O CSP ainda permite `'unsafe-inline'`** em script e estilo, porque o HTML usa `onclick="..."` e `style="..."` em muitos lugares. Tirar isso
+  (trocar por `addEventListener`/classes) deixaria o CSP bloquear qualquer script injetado.
+- **Contas de prestadora que dividem o mesmo e-mail** (o e-mail de prestadora não é único): "esqueci a senha" redefine **todas** as contas
+  ligadas àquele e-mail de uma vez. É o comportamento documentado; evite dois cadastros com o mesmo e-mail.
+- **Cadastro aberto de prestadora e de cliente** (qualquer pessoa pode criar conta numa unidade, confirmando o e-mail). É por desenho; o
+  administrador só envia convites e dados pra quem ele escolhe.
+- **JWT_SECRET:** o do Render é gerado pelo próprio Render. Se algum dia vazar (ele já apareceu numa imagem durante o desenvolvimento),
+  troque no painel do Render — isso desconecta todo mundo. Depois, troque também a senha do banco no Neon se a `DATABASE_URL` tiver
+  aparecido em algum lugar.
+- Dependências: rode `npm audit` de vez em quando dentro de `api/` (hoje 0 vulnerabilidades); `nodemailer`, `pg`, `express-rate-limit` e
+  `read-excel-file` têm versões de correção mais novas (`npm outdated`), sem vulnerabilidade conhecida nas instaladas.

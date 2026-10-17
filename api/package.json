@@ -22,7 +22,8 @@
     "teste:relatorios": "node scripts/testar-relatorios.js",
     "teste:relatorios-api": "node scripts/testar-relatorios-api.js",
     "teste:eventos": "node scripts/testar-eventos.js",
-    "teste:relatorios-historico": "node scripts/testar-relatorios-historico.js"
+    "teste:relatorios-historico": "node scripts/testar-relatorios-historico.js",
+    "teste:seguranca": "node scripts/testar-seguranca.js"
   },
   "engines": {
     "node": ">=20"

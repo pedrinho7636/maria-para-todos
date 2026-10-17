@@ -3,7 +3,7 @@
 Sistema de gestão para franquias de serviços de limpeza (TCC): administrador, sub-administradores com permissão
 por módulo, prestadoras e clientes, com agenda em calendário, atendimento recorrente por padrão semanal,
 avisos automáticos por WhatsApp (link "clique pra conversar") e moderação de avaliações. Roda 100% local —
-frontend em `Portal Da Maria.html`, backend em `api/` (Node/Express), banco PostgreSQL.
+frontend em `Portal Da Maria.html` (HTML) + `assets/` (CSS e JS), backend em `api/` (Node/Express), banco PostgreSQL.
 
 ## Para rodar o projeto
 
@@ -18,7 +18,9 @@ Veja o passo a passo completo em [LEIA-ME.md](LEIA-ME.md).
 ## Estrutura
 
 ```
-Portal Da Maria.html   — frontend (SPA de arquivo único)
+Portal Da Maria.html      — frontend: só a estrutura (HTML) das telas
+assets/css/               — estilos, divididos por assunto (8 arquivos, carregados em ordem)
+assets/js/                — scripts, divididos por assunto (18 arquivos numerados; a ORDEM importa)
 banco-schema.sql                — schema PostgreSQL (tabelas, enums, views, dados de exemplo)
 api/                             — backend Node/Express
 ```

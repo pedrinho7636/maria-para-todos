@@ -1,19 +1,28 @@
-const jwt = require('jsonwebtoken');
 const asyncHandler = require('../utils/asyncHandler');
 const { acessoAdminUnidade } = require('../utils/permissoes');
+const { verificarToken, sessaoValida } = require('../utils/sessao');
 const { pool } = require('../db');
 
-function requireAuth(req, res, next) {
+// Confere a assinatura do token E se a sessão ainda vale (conta existe e a senha não foi trocada depois de o token ser
+// emitido — ver utils/sessao.js). Token inválido/vencido/revogado = 401.
+async function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ erro: 'Token ausente' });
 
+  let user;
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
+    user = verificarToken(token);
   } catch {
-    res.status(401).json({ erro: 'Token inválido ou expirado' });
+    return res.status(401).json({ erro: 'Token inválido ou expirado' });
   }
+  try {
+    if (!(await sessaoValida(user))) return res.status(401).json({ erro: 'Sessão encerrada. Entre novamente.' });
+  } catch (erro) {
+    return next(erro);
+  }
+  req.user = user;
+  next();
 }
 
 function requireRole(...perfis) {

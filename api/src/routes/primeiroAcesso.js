@@ -9,6 +9,7 @@ const { senhaValida, emailValido, telefoneValido } = require('../utils/validacao
 const { enviarCodigoConfirmacao, consumirCodigo } = require('../utils/verificacaoEmail');
 const { SENHA_PADRAO } = require('../utils/prestadorasImportadas');
 const { ErroNegocio, emTransacao } = require('../utils/unidades');
+const { tokenDe, esquecerSessao } = require('../utils/sessao');
 
 const router = express.Router();
 
@@ -66,14 +67,17 @@ router.post('/concluir', limite, requireAuth, requireRole('prestadora'), asyncHa
     const usuario = await emTransacao(async (db) => {
       if (!await consumirCodigo(db, chaveDoCodigo(conta.id, email), codigo)) throw new ErroNegocio(400, 'Código inválido ou expirado');
       const { rows: [p] } = await db.query(
-        `update prestadoras set email = $1, senha_hash = $2, telefone = $3, primeiro_acesso_pendente = false, atualizado_em = now()
+        `update prestadoras set email = $1, senha_hash = $2, telefone = $3, primeiro_acesso_pendente = false, atualizado_em = now(),
+           senha_alterada_em = $5
          where id = $4 returning *`,
-        [email, senhaHash, telefone, conta.id]
+        [email, senhaHash, telefone, conta.id, new Date()]
       );
       return p;
     });
     delete usuario.senha_hash;
-    res.json({ ok: true, usuario });
+    // a senha padrão deixou de existir: sessões antigas (feitas com ela) caem; esta continua com o token novo
+    esquecerSessao('prestadora', conta.id);
+    res.json({ ok: true, usuario, token: tokenDe(req.user) });
   } catch (erro) {
     if (erro instanceof ErroNegocio) return res.status(erro.status).json({ erro: erro.message });
     if (erro.code === '23505') return res.status(409).json({ erro: 'Esse telefone já está cadastrado em outra conta.' });

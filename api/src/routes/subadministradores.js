@@ -7,6 +7,7 @@ const { normalizarEmail } = require('../utils/normalizacao');
 const { senhaValida, emailValido, nomeValido } = require('../utils/validacao');
 const { capitalizarPessoa } = require('../utils/normalizacao');
 const asyncHandler = require('../utils/asyncHandler');
+const { esquecerSessao } = require('../utils/sessao');
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
@@ -95,6 +96,7 @@ router.patch('/:slug/:id', asyncHandler(async (req, res) => {
   if (senha) {
     if (!senhaValida(senha)) return res.status(400).json({ erro: 'A senha precisa ter ao menos 8 caracteres' });
     sets.push(`senha_hash = $${i++}`); vals.push(await bcrypt.hash(senha, SALT_ROUNDS));
+    sets.push(`senha_alterada_em = $${i++}`); vals.push(new Date()); // as sessões antigas do funcionário deixam de valer
   }
   if (permissoes) {
     for (const modulo of MODULOS) {
@@ -112,6 +114,7 @@ router.patch('/:slug/:id', asyncHandler(async (req, res) => {
     vals
   );
   if (!sub) return res.status(404).json({ erro: 'Sub-administrador não encontrado' });
+  if (senha) esquecerSessao('sub_administrador', sub.id);
   res.json(sub);
 }));
 

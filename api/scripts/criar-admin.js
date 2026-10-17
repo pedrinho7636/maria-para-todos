@@ -69,8 +69,9 @@ function perguntarSenha(texto) {
     const hash = await bcrypt.hash(senha, 10);
 
     if (existente) {
-      await pool.query('update administradores set senha_hash = $1 where id = $2', [hash, existente.id]);
-      console.log(`Senha de ${email} redefinida.`);
+      // senha_alterada_em: as sessões (tokens) antigas desse administrador deixam de valer (em até ~10 s, a API guarda a conferência um instante)
+      await pool.query('update administradores set senha_hash = $1, senha_alterada_em = $3 where id = $2', [hash, existente.id, new Date()]);
+      console.log(`Senha de ${email} redefinida. Quem estava logado com a senha antiga é desconectado.`);
       return;
     }
 

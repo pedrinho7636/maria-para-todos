@@ -4,6 +4,7 @@ const { requireAuth, requireRole, requireAcessoUnidade, requirePrimeiroAcessoCon
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Cliente envia avaliação de um atendimento concluído — entra como 'pendente' para moderação
 router.post('/', requireAuth, requireRole('cliente'), asyncHandler(async (req, res) => {
@@ -12,21 +13,31 @@ router.post('/', requireAuth, requireRole('cliente'), asyncHandler(async (req, r
   if (!Number.isInteger(nota) || nota < 1 || nota > 5) {
     return res.status(400).json({ erro: 'nota deve ser um número inteiro entre 1 e 5' });
   }
+  if (comentario !== undefined && comentario !== null && typeof comentario !== 'string') {
+    return res.status(400).json({ erro: 'comentario deve ser um texto' });
+  }
   if (comentario && comentario.length > 1000) {
     return res.status(400).json({ erro: 'comentario excede o tamanho máximo permitido' });
   }
+  if (typeof atendimento_id !== 'string' || !UUID.test(atendimento_id)) return res.status(400).json({ erro: 'atendimento_id inválido' });
 
   const { rows: [atendimento] } = await pool.query(
-    `select * from atendimentos where id = $1 and cliente_id = $2 and status = 'concluido'`,
+    `select id, prestadora_id from atendimentos where id = $1 and cliente_id = $2 and status = 'concluido'`,
     [atendimento_id, req.user.id]
   );
   if (!atendimento) return res.status(404).json({ erro: 'Atendimento não encontrado ou não pertence a você' });
+  if (!atendimento.prestadora_id) return res.status(400).json({ erro: 'Este atendimento não tem prestadora para avaliar' });
 
+  // Um atendimento recebe UMA avaliação: sem isso o cliente mandava quantas quisesse (inflando ou derrubando a nota da prestadora).
+  // A checagem e o insert vão na mesma instrução; duas chamadas simultâneas só passam as duas numa janela de milissegundos.
   const { rows: [avaliacao] } = await pool.query(
     `insert into avaliacoes (atendimento_id, cliente_id, prestadora_id, nota, comentario, status)
-     values ($1, $2, $3, $4, $5, 'pendente') returning *`,
-    [atendimento_id, req.user.id, atendimento.prestadora_id, nota, comentario || null]
+     select $1::uuid, $2::uuid, $3::uuid, $4::smallint, $5::text, 'pendente'
+     where not exists (select 1 from avaliacoes where atendimento_id = $1::uuid)
+     returning *`,
+    [atendimento_id, req.user.id, atendimento.prestadora_id, nota, comentario ? comentario.trim() || null : null]
   );
+  if (!avaliacao) return res.status(409).json({ erro: 'Este atendimento já foi avaliado' });
   res.status(201).json(avaliacao);
 }));
 

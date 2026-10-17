@@ -9,7 +9,7 @@
 //   npm run banco:schema -- --sem-exemplos --recriar
 //                                                 (APAGA TUDO do banco apontado e recria do zero. Mostra qual
 //                                                  banco é e exige digitar APAGAR TUDO pra confirmar.)
-//   (ou, sem mexer no .env)  DATABASE_URL="postgresql://..." npm run banco:schema
+//   (ou, sem mexer no .env)  DATABASE_URL="postgresql://..." npm run banco:schema -- --sem-exemplos   (em banco hospedado, sem a opção ele recusa)
 //
 // ATENÇÃO num site público: os dados de exemplo trazem contas com a senha "senha123".
 require('dotenv').config();
@@ -33,6 +33,16 @@ function destino() {
 function perguntar(texto) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => rl.question(texto, (r) => { rl.close(); resolve(r.trim()); }));
+}
+
+// Os dados de exemplo trazem contas com a senha "senha123" (públicas: o hash está neste repositório). Num banco HOSPEDADO
+// (DATABASE_URL = Neon/Render, aberto à internet) isso seria uma porta aberta, então lá o comando recusa sem --sem-exemplos
+// (ou --com-exemplos, se você realmente quer uma demonstração e vai apagar essas contas depois).
+if (process.env.DATABASE_URL && !semExemplos && !process.argv.includes('--com-exemplos')) {
+  console.error('\n⚠  Este é um banco HOSPEDADO (DATABASE_URL). Os dados de exemplo criam contas com senha pública ("senha123").\n' +
+    '   Use:  npm run banco:schema -- --sem-exemplos          (recomendado: banco limpo)\n' +
+    '   ou, só se for uma demonstração descartável:  npm run banco:schema -- --com-exemplos\n');
+  process.exit(1);
 }
 
 (async () => {

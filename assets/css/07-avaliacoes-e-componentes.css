@@ -1,0 +1,163 @@
+/* Portal da Maria — Estrelas e avaliações, botões pequenos, cartões de revisão e ajustes do modo escuro. */
+
+.stars {
+  display: inline-flex;
+  gap: 1px;
+  color: var(--amber);
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 1px
+}
+
+.stars .s-off {
+  color: var(--line)
+}
+
+.rate-item {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line)
+}
+
+.rate-item:last-child {
+  border-bottom: none
+}
+
+.rate-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px
+}
+
+.rate-top strong {
+  font-size: 14px;
+  font-weight: 600
+}
+
+.rate-top span {
+  font-size: 12px;
+  color: var(--muted)
+}
+
+.rate-stars {
+  display: inline-flex;
+  gap: 5px;
+  font-size: 24px;
+  color: var(--line);
+  margin-bottom: 11px;
+  line-height: 1
+}
+
+.rate-stars .st {
+  cursor: pointer;
+  transition: transform .1s
+}
+
+.rate-stars .st:hover {
+  transform: scale(1.12)
+}
+
+.rate-stars .st.on {
+  color: var(--amber)
+}
+
+.rate-item textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+  resize: vertical;
+  min-height: 54px;
+  margin-bottom: 11px
+}
+
+.rate-item textarea:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft)
+}
+
+.btn-sm {
+  border: none;
+  background: var(--green);
+  color: #fff;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+  padding: 9px 16px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background .15s
+}
+
+.btn-sm:hover {
+  background: var(--panel-dark)
+}
+
+.btn-sm.ghost {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted)
+}
+
+.btn-sm.ghost:hover {
+  border-color: #D9B0A6;
+  color: #B4452F
+}
+
+.mod-actions {
+  display: flex;
+  gap: 9px;
+  margin-top: 12px;
+  flex-wrap: wrap
+}
+
+.rev-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow)
+}
+
+.rev-card .rc-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px
+}
+
+.rev-card .rc-top strong {
+  font-size: 13.5px;
+  font-weight: 600
+}
+
+.rev-card p {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 7px
+}
+
+.rev-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 8px
+}
+
+@media(max-width:760px) {
+  .rev-grid {
+    grid-template-columns: 1fr
+  }
+}
+
+:root[data-theme="dark"] .chip-off {
+  background: #3A2A1E;
+  color: #D9A878
+}

@@ -5,9 +5,49 @@
 // "Período", "Recorrente" e "Margem de Contribuição" vêm na planilha mas não são lidos (o período sai do Horário; o que
 // repete toda semana é cadastrado pelo formulário de atendimento recorrente; a margem o portal calcula: Valor − Repasse).
 // Só lê e valida — quem grava no banco é a rota.
+const zlib = require('zlib');
 const read = require('read-excel-file/node');
 
 const MAX_LINHAS = 5000;
+
+// Um .xlsx é um zip. "Bomba de zip": um arquivo pequeno (os 6 MB que a rota aceita) que, ao descompactar, vira gigabytes e
+// derruba o servidor por falta de memória — antes de a planilha chegar a ser lida. Então, ANTES de entregar o arquivo à
+// biblioteca, cada item do zip é descompactado aqui com um teto de tamanho (o tamanho que o cabeçalho do zip declara pode
+// mentir, por isso se mede o que realmente sai). Uma planilha de 5.000 linhas descompacta em poucos MB.
+const ZIP_MAX_ENTRADAS = 500;
+const ZIP_MAX_POR_ITEM = 40 * 1024 * 1024;
+const ZIP_MAX_TOTAL = 120 * 1024 * 1024;
+function conferirZip(buffer) {
+  const invalido = () => new Error('Esse arquivo não parece ser uma planilha .xlsx válida.');
+  const grande = () => new Error('A planilha é grande demais depois de aberta (acima de 120 MB). Divida em arquivos menores.');
+  let fim = -1; // fim do diretório central do zip (assinatura 0x06054b50), nos últimos 64 KB
+  for (let i = buffer.length - 22; i >= Math.max(0, buffer.length - 22 - 65535); i--) {
+    if (buffer.readUInt32LE(i) === 0x06054b50) { fim = i; break; }
+  }
+  if (fim < 0) throw invalido();
+  const total = buffer.readUInt16LE(fim + 10), tamDiretorio = buffer.readUInt32LE(fim + 12), inicioDiretorio = buffer.readUInt32LE(fim + 16);
+  if (total > ZIP_MAX_ENTRADAS || inicioDiretorio + tamDiretorio > buffer.length) throw invalido();
+  let pos = inicioDiretorio, somaReal = 0;
+  for (let n = 0; n < total; n++) {
+    if (pos + 46 > buffer.length || buffer.readUInt32LE(pos) !== 0x02014b50) throw invalido();
+    const flags = buffer.readUInt16LE(pos + 8), metodo = buffer.readUInt16LE(pos + 10);
+    const comprimido = buffer.readUInt32LE(pos + 20), nomeLen = buffer.readUInt16LE(pos + 28), extraLen = buffer.readUInt16LE(pos + 30);
+    const comentarioLen = buffer.readUInt16LE(pos + 32), inicioLocal = buffer.readUInt32LE(pos + 42);
+    pos += 46 + nomeLen + extraLen + comentarioLen;
+    if ((flags & 1) || comprimido === 0xFFFFFFFF) throw invalido(); // criptografado ou zip64 (não é o caso de uma planilha normal)
+    if (inicioLocal + 30 > buffer.length || buffer.readUInt32LE(inicioLocal) !== 0x04034b50) throw invalido();
+    const inicioDados = inicioLocal + 30 + buffer.readUInt16LE(inicioLocal + 26) + buffer.readUInt16LE(inicioLocal + 28);
+    const dados = buffer.subarray(inicioDados, inicioDados + comprimido);
+    let tamanho;
+    if (metodo === 0) tamanho = dados.length; // guardado sem compressão
+    else if (metodo === 8) { // deflate
+      try { tamanho = zlib.inflateRawSync(dados, { maxOutputLength: ZIP_MAX_POR_ITEM }).length; }
+      catch (erro) { throw erro.code === 'ERR_BUFFER_TOO_LARGE' ? grande() : invalido(); }
+    } else throw invalido();
+    somaReal += tamanho;
+    if (tamanho > ZIP_MAX_POR_ITEM || somaReal > ZIP_MAX_TOTAL) throw grande();
+  }
+}
 
 function normalizarTexto(s) {
   return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -148,6 +188,7 @@ function mapearSituacao(v) {
 // Retorna { linhas, invalidos, repetidasNoArquivo, totalLidas }. Lança Error com
 // mensagem pronta pra mostrar na tela quando o arquivo não é uma planilha válida.
 async function lerAtendimentos(buffer) {
+  conferirZip(buffer); // recusa bomba de zip e arquivo que nem zip é, antes de gastar memória lendo
   let abas;
   try {
     abas = await read(buffer);
@@ -212,4 +253,4 @@ async function lerAtendimentos(buffer) {
   return { linhas, invalidos, repetidasNoArquivo, exemplosIgnorados, totalLidas: corpo.length };
 }
 
-module.exports = { lerAtendimentos, normalizarTexto, parseValor, COLUNAS, OBRIGATORIAS };
+module.exports = { lerAtendimentos, normalizarTexto, parseValor, conferirZip, COLUNAS, OBRIGATORIAS };

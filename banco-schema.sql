@@ -461,3 +461,10 @@ create table atendimento_eventos (
 );
 create index idx_atendimento_eventos_atendimento on atendimento_eventos(atendimento_id, id);
 create index idx_atendimento_eventos_prestadora on atendimento_eventos(prestadora_id, quando) where prestadora_id is not null;
+
+-- Quando a senha foi trocada pela última vez: um token (sessão) emitido ANTES disso deixa de valer — quem roubou o token perde
+-- o acesso assim que a dona troca/redefine a senha. Nulo = nunca trocada (todos os tokens valem). Ver api/src/utils/sessao.js.
+alter table administradores     add column senha_alterada_em timestamptz;
+alter table sub_administradores add column senha_alterada_em timestamptz;
+alter table prestadoras         add column senha_alterada_em timestamptz;
+alter table clientes            add column senha_alterada_em timestamptz;

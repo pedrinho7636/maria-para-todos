@@ -348,8 +348,10 @@ router.patch('/:slug/telefone', requireAuth, requireRole('administrador'), async
   const unidadeId = await unidadeDoAdmin(req.user.id, req.params.slug);
   if (!unidadeId) return res.status(403).json({ erro: 'Sem acesso a esta unidade' });
 
-  const telefone = (req.body.telefone || '').trim();
+  // o telefone da unidade aparece no site PÚBLICO e vira link do WhatsApp: só entra número de verdade (como no cadastro da unidade)
+  const telefone = String(req.body.telefone ?? '').trim();
   if (!telefone) return res.status(400).json({ erro: 'telefone é obrigatório' });
+  if (telefone.length > 30 || !telefoneValido(normalizarTelefone(telefone))) return res.status(400).json({ erro: 'Telefone inválido — informe DDD + número.' });
 
   const { rows: [unidade] } = await pool.query(
     'update unidades set telefone = $1 where id = $2 returning slug, nome, uf, telefone, endereco, endereco_curto',

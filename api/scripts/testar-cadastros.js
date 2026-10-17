@@ -540,9 +540,13 @@ async function codigoDe(email) {
   ok(lAntiga.status === 401 && lNovaSenha.status === 200 && lNovaSenha.json.usuario.primeiro_acesso_pendente === false, 'a senha padrão deixa de valer; entra com o e-mail dela e a senha nova');
   const lNomeDepois = await http('POST', '/auth/login', { perfil: 'prestadora', identificador: nomeImp, senha: senhaNovaImp });
   ok(lNomeDepois.status === 401, 'depois do primeiro acesso, o login pelo nome deixa de existir');
-  const liberada = await http('GET', '/atendimentos/prestadora/me/convites', null, tokenPA);
-  ok(liberada.status === 200, 'a área dela abre (mesmo com o token de antes da conclusão)');
-  const paRepete = await http('POST', '/primeiro-acesso/solicitar', { email: emailReal }, tokenPA);
+  // trocar a senha encerra as sessões ANTERIORES (quem entrou com a senha padrão): o token de antes cai e a resposta traz um novo
+  const antigaCaiu = await http('GET', '/atendimentos/prestadora/me/convites', null, tokenPA);
+  ok(antigaCaiu.status === 401, 'o token de ANTES da troca de senha deixa de valer (sessão encerrada)');
+  ok(typeof pc.json.token === 'string' && pc.json.token.length > 20, 'a conclusão devolve um token novo');
+  const liberada = await http('GET', '/atendimentos/prestadora/me/convites', null, pc.json.token);
+  ok(liberada.status === 200, 'a área dela abre com o token novo');
+  const paRepete = await http('POST', '/primeiro-acesso/solicitar', { email: emailReal }, pc.json.token);
   // (400 = recusado pela regra; 429 = o limite de 10 pedidos/15 min por IP já tinha estourado nesta bateria — nos dois casos não refaz)
   ok(paRepete.status === 400 || paRepete.status === 429, 'não dá pra refazer o primeiro acesso depois de concluído', `(HTTP ${paRepete.status})`);
   const { rows: [aindaOk] } = await pool.query('select email, primeiro_acesso_pendente as p from prestadoras where id = $1', [idImp]);

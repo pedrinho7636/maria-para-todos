@@ -1,0 +1,91 @@
+/* Portal da Maria — Cores (claro/escuro), tipografia, reset e elementos básicos. */
+
+:root {
+  --bg: #EEF3F0;
+  --surface: #FFFFFF;
+  --ink: #0B1F18;
+  --muted: #5B6B64;
+  --line: #DDE6E1;
+  --green: #0E6B4F;
+  --green-strong: #0A4E3A;
+  --green-soft: #E1F0E9;
+  --blue: #1C5FA8;
+  --blue-soft: #E6EFF8;
+  --amber: #C9842B;
+  --red: #C0392B;
+  --red-soft: #FBE3E0;
+  --panel-dark: #0A4E3A;
+  --bar-bg: rgba(255, 255, 255, .88);
+  --toast-bg: #0B1F18;
+  --toast-fg: #FFFFFF;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(11, 31, 24, .04), 0 8px 24px rgba(11, 31, 24, .05);
+}
+
+:root[data-theme="dark"] {
+  --bg: #0C1714;
+  --surface: #13211C;
+  --ink: #E7F0EB;
+  --muted: #9CB0A8;
+  --line: #26352F;
+  --green: #23A87B;
+  --green-strong: #54D0A4;
+  --green-soft: #16302A;
+  --blue: #6BA6E6;
+  --blue-soft: #172A3C;
+  --amber: #D9A24E;
+  --red: #F07167;
+  --red-soft: #3A1B1A;
+  --panel-dark: #0A3F2E;
+  --bar-bg: rgba(14, 24, 20, .85);
+  --toast-bg: #0A3F2E;
+  --toast-fg: #EAF4EF;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .5);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0
+}
+
+html {
+  scroll-behavior: smooth
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased
+}
+
+.mono {
+  font-family: 'JetBrains Mono', monospace
+}
+
+a {
+  color: inherit;
+  text-decoration: none
+}
+
+.screen {
+  display: none
+}
+
+.screen.active {
+  display: block
+}
+
+.brand-mark {
+  border-radius: 9px;
+  flex: none;
+  background: linear-gradient(135deg, var(--green) 0%, #15A876 100%);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
+  font-family: 'Space Grotesk', sans-serif
+}

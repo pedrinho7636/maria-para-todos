@@ -8,6 +8,7 @@ const { normalizarEmail, normalizarTelefone, emailInstitucionalValido, DOMINIO_I
 const { senhaValida, emailValido, telefoneValido } = require('../utils/validacao');
 const { enviarCodigoConfirmacao, confirmarCodigo, MOTIVO_TROCA_EMAIL } = require('../utils/verificacaoEmail');
 const asyncHandler = require('../utils/asyncHandler');
+const { tokenDe, esquecerSessao } = require('../utils/sessao');
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
@@ -103,7 +104,9 @@ router.patch('/', requireAuth, asyncHandler(async (req, res) => {
   }
   if (foto !== undefined) {
     if (foto) {
-      if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(foto)) {
+      // base64 puro até o fim: só checar o começo deixava passar texto com aspas/tags depois do prefixo, que a tela
+      // depois colocaria no HTML/CSS (script guardado na foto de perfil)
+      if (typeof foto !== 'string' || !/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(foto)) {
         return res.status(400).json({ erro: 'Formato de imagem inválido' });
       }
       if (foto.length > 1_800_000) { // ~1.3MB de imagem decodificada
@@ -134,16 +137,32 @@ router.patch('/', requireAuth, asyncHandler(async (req, res) => {
 // adivinhar o código por força bruta.
 const limiteEmail = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
 
+// Trocar o e-mail ou a senha exige a SENHA ATUAL: quem só tem a sessão aberta (computador emprestado, token roubado) não pode
+// trocar o e-mail e, por ele, pedir "esqueci a senha" e tomar a conta. Chutar essa senha tem teto POR CONTA: só os erros
+// contam (5 em 15 min), de qualquer IP.
+const limiteSenhaAtual = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false,
+  skipSuccessfulRequests: true, requestWasSuccessful: (req, res) => res.statusCode !== 401, // só a senha errada (401) gasta o limite
+  keyGenerator: (req) => 'conta:' + req.user.id,
+  message: { erro: 'Muitas tentativas de senha. Aguarde alguns minutos e tente de novo.' },
+});
+async function senhaAtualConfere(tabela, id, senha) {
+  if (typeof senha !== 'string' || !senha) return false;
+  const { rows: [u] } = await pool.query(`select senha_hash from ${tabela} where id = $1`, [id]);
+  return !!u?.senha_hash && await bcrypt.compare(senha, u.senha_hash);
+}
+
 // Passo 1: valida o e-mail (institucional, se o perfil exigir) e manda um
 // código de 6 dígitos pra ele — a troca só acontece de fato em /email/confirmar.
 // Mesma regra do cadastro: e-mail nunca é trocado sem confirmar que quem está
 // mudando tem acesso a essa caixa de entrada.
-router.post('/email/solicitar', limiteEmail, requireAuth, asyncHandler(async (req, res) => {
+router.post('/email/solicitar', limiteEmail, requireAuth, limiteSenhaAtual, asyncHandler(async (req, res) => {
   const cfg = CONFIG[req.user.perfil];
   if (!cfg || !cfg.temEmail) return res.status(400).json({ erro: 'Este perfil não tem e-mail' });
 
-  const { email } = req.body;
+  const { email, senha_atual } = req.body;
   if (!emailValido(email)) return res.status(400).json({ erro: 'E-mail inválido' });
+  if (!await senhaAtualConfere(cfg.tabela, req.user.id, senha_atual)) return res.status(401).json({ erro: 'Senha atual incorreta' });
 
   if (cfg.exigeDominio) {
     const slugs = await slugsPermitidosPara(req.user.perfil, cfg.tabela, req.user.id);
@@ -169,12 +188,14 @@ router.post('/email/solicitar', limiteEmail, requireAuth, asyncHandler(async (re
 }));
 
 // Passo 2: confirma o código e só então grava o e-mail novo.
-router.post('/email/confirmar', limiteEmail, requireAuth, asyncHandler(async (req, res) => {
+router.post('/email/confirmar', limiteEmail, requireAuth, limiteSenhaAtual, asyncHandler(async (req, res) => {
   const cfg = CONFIG[req.user.perfil];
   if (!cfg || !cfg.temEmail) return res.status(400).json({ erro: 'Este perfil não tem e-mail' });
 
-  const { email, codigo } = req.body;
+  const { email, codigo, senha_atual } = req.body;
   if (!email || !codigo) return res.status(400).json({ erro: 'email e codigo são obrigatórios' });
+  if (!emailValido(email)) return res.status(400).json({ erro: 'E-mail inválido' });
+  if (!await senhaAtualConfere(cfg.tabela, req.user.id, senha_atual)) return res.status(401).json({ erro: 'Senha atual incorreta' });
   const emailNormalizado = normalizarEmail(email);
 
   const ok = await confirmarCodigo(emailNormalizado, String(codigo).trim());
@@ -196,7 +217,7 @@ router.post('/email/confirmar', limiteEmail, requireAuth, asyncHandler(async (re
 
 // Troca de senha — exige a senha atual (nunca só a nova), pra ninguém com uma
 // sessão aberta numa máquina compartilhada trocar a senha de outra pessoa.
-router.patch('/senha', requireAuth, asyncHandler(async (req, res) => {
+router.patch('/senha', requireAuth, limiteSenhaAtual, asyncHandler(async (req, res) => {
   const cfg = CONFIG[req.user.perfil];
   if (!cfg) return res.status(400).json({ erro: 'Perfil sem tela de configurações' });
 
@@ -211,8 +232,10 @@ router.patch('/senha', requireAuth, asyncHandler(async (req, res) => {
   if (!ok) return res.status(401).json({ erro: 'Senha atual incorreta' });
 
   const novoHash = await bcrypt.hash(senha_nova, SALT_ROUNDS);
-  await pool.query(`update ${cfg.tabela} set senha_hash = $1 where id = $2`, [novoHash, req.user.id]);
-  res.json({ ok: true });
+  // senha_alterada_em: as OUTRAS sessões (tokens emitidos antes) deixam de valer; esta continua com o token novo desta resposta
+  await pool.query(`update ${cfg.tabela} set senha_hash = $1, senha_alterada_em = $3 where id = $2`, [novoHash, req.user.id, new Date()]);
+  esquecerSessao(req.user.perfil, req.user.id);
+  res.json({ ok: true, token: tokenDe(req.user) });
 }));
 
 module.exports = router;

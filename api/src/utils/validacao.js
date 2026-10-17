@@ -5,8 +5,13 @@ function senhaValida(s) {
   return typeof s === 'string' && s.length >= 8;
 }
 
+// Um e-mail só. Sem espaço e sem , ; < > ( ) [ ] " \ — vírgula e ponto e vírgula fariam o provedor de e-mail tratar o texto
+// como VÁRIOS destinatários ("eu@x.com,vitima@y.com" mandaria o código pros dois: dava pra usar o cadastro pra mandar
+// e-mail a qualquer pessoa), e os demais são caracteres de HTML/cabeçalho que nunca fazem parte de um endereço real.
+// 254 é o tamanho máximo de um endereço.
+const EMAIL = /^[^\s@,;<>()[\]"\\]+@[^\s@,;<>()[\]"\\]+\.[^\s@,;<>()[\]"\\]+$/;
 function emailValido(e) {
-  return typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  return typeof e === 'string' && e.length <= 254 && EMAIL.test(e);
 }
 
 function nomeValido(n) {

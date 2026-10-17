@@ -1,0 +1,340 @@
+/* Portal da Maria — Calendário + linha do tempo da agenda e tela Financeiro. */
+
+/* ============ CALENDÁRIO + LINHA DO TEMPO (agenda do admin) ============ */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px
+}
+
+.cal-dow {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  padding-bottom: 4px
+}
+
+.cal-day {
+  position: relative;
+  padding: 9px 0;
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink)
+}
+
+.cal-day:hover {
+  background: var(--green-soft)
+}
+
+.cal-day.outro-mes {
+  color: var(--muted);
+  opacity: .45
+}
+
+.cal-day.hoje {
+  font-weight: 700;
+  color: var(--green-strong)
+}
+
+.cal-day.selecionado {
+  background: var(--green);
+  color: #fff
+}
+
+.cal-day.tem-atendimento::after {
+  content: '';
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--green);
+  margin: 3px auto 0
+}
+
+.cal-day.selecionado.tem-atendimento::after {
+  background: #fff
+}
+
+.cal-day.bloqueado {
+  color: var(--muted);
+  opacity: .35;
+  cursor: not-allowed
+}
+
+.cal-day.bloqueado:hover {
+  background: transparent
+}
+
+.timeline {
+  display: flex;
+  margin-top: 4px
+}
+
+.timeline-hours {
+  width: 46px;
+  flex: none
+}
+
+.timeline-hours span {
+  display: block;
+  height: 60px;
+  font-size: 11px;
+  color: var(--muted);
+  transform: translateY(-6px)
+}
+
+.timeline-track {
+  position: relative;
+  flex: 1;
+  background-image: repeating-linear-gradient(to bottom, var(--line) 0, var(--line) 1px, transparent 1px, transparent 60px);
+  min-height: 60px
+}
+
+.tl-block {
+  position: absolute;
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--green-soft);
+  border: 1px solid #CBE6D9;
+  color: var(--green-strong);
+  transition: box-shadow .15s
+}
+
+.tl-block:hover {
+  box-shadow: 0 2px 8px rgba(11, 31, 24, .15)
+}
+
+.tl-block.sem-prestadora {
+  background: #FBF0DC;
+  border-color: #F0DCB8;
+  color: var(--amber)
+}
+
+/* proposto, ainda fora da janela de confirmação (mais de 2 dias) */
+.tl-block.aguardando-janela {
+  background: var(--blue-soft);
+  border-color: #BFD6EE;
+  color: var(--blue)
+}
+
+/* proposto, já dentro da janela de confirmação (<=2 dias) — chama atenção */
+.tl-block.pendente-confirmacao {
+  background: #FBE7DC;
+  border-color: #F0C4AC;
+  color: #C25A2B
+}
+
+.tl-block strong {
+  display: block;
+  font-size: 11.5px
+}
+
+/* uma linha por informação, cortada com reticências (vários blocos lado a lado ficam estreitos) */
+.tl-block .tl-linha {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis
+}
+
+/* concluído: neutro, pra não competir com o que ainda vai acontecer */
+.tl-block.concluido {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--muted)
+}
+
+/* cancelado: aparece riscado e apagado, mas não entra em nenhuma contagem */
+.tl-block.cancelado {
+  background: var(--bg);
+  border-color: var(--line);
+  border-style: dashed;
+  color: var(--muted);
+  opacity: .75
+}
+
+.tl-block.cancelado .tl-linha {
+  text-decoration: line-through
+}
+
+.reatribuir-pop {
+  position: absolute;
+  z-index: 20;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 12px;
+  width: 260px
+}
+
+.reatribuir-pop select,
+.reatribuir-pop input {
+  width: 100%;
+  margin-bottom: 10px
+}
+
+.tablerow {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 13px;
+  align-items: center
+}
+
+.tablerow:last-child {
+  border-bottom: none
+}
+
+.tr-av {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--green-soft);
+  color: var(--green-strong);
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: 'Space Grotesk', sans-serif;
+  flex: none
+}
+
+.tr-body {
+  flex: 1;
+  min-width: 0
+}
+
+.tr-body strong {
+  font-size: 13.5px;
+  display: block;
+  font-weight: 600
+}
+
+.tr-body span {
+  font-size: 12px;
+  color: var(--muted)
+}
+
+.tr-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap
+}
+
+.chip {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-weight: 500;
+  white-space: nowrap
+}
+
+.chip-on {
+  background: var(--green-soft);
+  color: var(--green-strong)
+}
+
+.chip-off {
+  background: #F0E3DC;
+  color: #9a6a4a
+}
+
+/* Financeiro */
+.fin-mes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap
+}
+
+.fin-mes strong {
+  min-width: 150px;
+  text-align: center
+}
+
+.fin-nota {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 0 18px 12px;
+  line-height: 1.5
+}
+
+.fin-alerta {
+  font-size: 13px;
+  background: #FBF1DD;
+  color: #8a5a12;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  line-height: 1.45
+}
+
+.fin-det {
+  background: var(--bg);
+  padding: 6px 18px 14px 68px;
+  border-bottom: 1px solid var(--line)
+}
+
+.fin-det table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px
+}
+
+.fin-det th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 6px 8px 6px 0
+}
+
+.fin-det td {
+  padding: 5px 8px 5px 0;
+  border-top: 1px solid var(--line)
+}
+
+.fin-det .num,
+.fin-det th.num {
+  text-align: right;
+  white-space: nowrap
+}
+
+.fin-acoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end
+}
+
+.fin-clicavel {
+  cursor: pointer
+}
+
+.fin-clicavel:hover {
+  background: var(--bg)
+}
+
+@media (max-width: 900px) {
+  .fin-colunas {
+    grid-template-columns: 1fr
+  }
+
+  .fin-det {
+    padding-left: 18px;
+    overflow-x: auto
+  }
+}

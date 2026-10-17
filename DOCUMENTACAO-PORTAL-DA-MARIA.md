@@ -1,7 +1,7 @@
 # Documentação técnica — Portal da Maria (versão 0.0.0.0)
 
 > Este documento nasceu da engenharia reversa de um protótipo estático sem backend (v0.0.3). O sistema real hoje
-> (versão 0.0.0.0) tem persistência de verdade: frontend em arquivo único (`Portal Da Maria.html`) conversando com
+> (versão 0.0.0.0) tem persistência de verdade: frontend (`Portal Da Maria.html` + `assets/css` + `assets/js`) conversando com
 > uma API própria em Node/Express (`api/`), que fala com um PostgreSQL local — nada aqui é mockado ou simulado,
 > exceto onde explicitamente marcado (envio de e-mail no cadastro de admin, e a API oficial de WhatsApp Business,
 > ambos pausados/fora de escopo — ver seção 7 e `LEIA-ME.md`). As seções abaixo foram atualizadas pra refletir esse
@@ -12,8 +12,11 @@
 
 ## 1. Visão geral
 
-O frontend é um **SPA de arquivo único**: todas as "telas" são `<section class="screen">` dentro do mesmo HTML,
-alternadas via JavaScript (função `show(id)`). Diferente do protótipo original, todo o estado (agenda, convites,
+O frontend é um **SPA** (uma página só): todas as "telas" são `<section class="screen">` dentro do mesmo HTML
+(`Portal Da Maria.html`), alternadas via JavaScript (função `show(id)`). O HTML traz só a estrutura; os estilos ficam em
+`assets/css/` (8 arquivos por assunto) e o JavaScript em `assets/js/` (18 arquivos por assunto, numerados na ordem de
+carga — são scripts comuns e não módulos, porque os `onclick="..."` do HTML chamam as funções globais; o primeiro é o
+núcleo da API/sessão e o último, `18-iniciar.js`, dá a partida no app). Diferente do protótipo original, todo o estado (agenda, convites,
 avaliações, clientes) vem de requisições reais (`fetch`) pra API em `api/`, que por sua vez lê/grava num PostgreSQL
 local — recarregar a página perde só o estado de navegação (tela atual), não os dados, que continuam no banco.
 Sessão via JWT (7 dias) guardado em `localStorage`; tema (dark/light) também em `localStorage`.

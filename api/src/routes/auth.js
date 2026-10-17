@@ -1,21 +1,21 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
 const { normalizarEmail, normalizarTelefone, normalizarCnpj, cnpjValido, capitalizarPessoa, capitalizarNome } = require('../utils/normalizacao');
 const { senhaValida, emailValido, nomeValido, telefoneValido } = require('../utils/validacao');
 const { enviarCodigoConfirmacao, consumirCodigo, MOTIVO_CADASTRO, MOTIVO_RECUPERACAO } = require('../utils/verificacaoEmail');
 const { unidadesDoAdmin } = require('../utils/permissoes');
 const { requireAuth } = require('../middleware/auth');
+const { assinarToken, esquecerSessao, PERFIL_DA_TABELA } = require('../utils/sessao');
 const { ErroNegocio, lerDadosUnidade, criarUnidade, vincularAdmin, cidadeDeOutraEmpresa, msgCidadeOcupada } = require('../utils/unidades');
 const { normalizarTexto } = require('../utils/importarPlanilha');
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
-
-function assinarToken(payload) {
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
-}
+// Hash de uma senha qualquer, gerado ao subir: quando a conta NÃO existe, ainda assim se faz uma comparação de senha contra ele,
+// pra "conta que não existe" e "senha errada" demorarem o mesmo tempo (senão o tempo de resposta contava quem tem cadastro).
+const HASH_DE_MENTIRA = bcrypt.hashSync(require('crypto').randomBytes(16).toString('hex'), SALT_ROUNDS);
+const compararDeMentira = (senha) => bcrypt.compare(String(senha), HASH_DE_MENTIRA);
 
 function erroCredencial(res) {
   return res.status(400).json({ erro: 'E-mail inválido ou senha com menos de 8 caracteres' });
@@ -330,6 +330,7 @@ async function buscarEValidar(tabela, campo, identificador, senha) {
     const ok = await conferirSenha(linha, senha);
     if (ok) return ok;
   }
+  if (rows.length === 0) await compararDeMentira(senha);
   return null;
 }
 
@@ -381,10 +382,12 @@ router.post('/login', async (req, res) => {
       const alvo = normalizarTexto(identificador);
       const { rows: pendentes } = await pool.query('select * from prestadoras where primeiro_acesso_pendente = true');
       const achadas = [];
-      for (const p of pendentes.filter(p => normalizarTexto(p.nome) === alvo)) {
+      const mesmoNome = pendentes.filter(p => normalizarTexto(p.nome) === alvo);
+      for (const p of mesmoNome) {
         const ok = await conferirSenha(p, senha);
         if (ok) achadas.push(ok);
       }
+      if (mesmoNome.length === 0) await compararDeMentira(senha);
       if (achadas.length > 1) {
         return res.status(409).json({ erro: 'Há mais de uma prestadora com esse nome. Entre com o e-mail que o administrador passou pra você.' });
       }
@@ -508,8 +511,10 @@ router.post('/recuperar-senha/confirmar', async (req, res) => {
     const senhaHash = await bcrypt.hash(senha, SALT_ROUNDS);
     await emTransacao(async (db) => {
       if (!await consumirCodigo(db, conta.chave, String(codigo).trim())) throw new ErroNegocio(400, 'Código inválido ou expirado');
-      await db.query(`update ${conta.tabela} set senha_hash = $1 where id = any($2::uuid[])`, [senhaHash, conta.ids]);
+      // senha_alterada_em: as sessões (tokens) emitidas antes desta troca deixam de valer — quem roubou um token perde o acesso
+      await db.query(`update ${conta.tabela} set senha_hash = $1, senha_alterada_em = $3 where id = any($2::uuid[])`, [senhaHash, conta.ids, new Date()]);
     });
+    esquecerSessao(PERFIL_DA_TABELA[conta.tabela], conta.ids);
     res.json({ ok: true, mensagem: 'Senha redefinida! Entre com a nova senha.' });
   } catch (erro) {
     if (erro instanceof ErroNegocio) return res.status(erro.status).json({ erro: erro.message });

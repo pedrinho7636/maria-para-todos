@@ -208,6 +208,13 @@ const MIGRACOES = [
    )`,
   `create index if not exists idx_atendimento_eventos_atendimento on atendimento_eventos(atendimento_id, id)`,
   `create index if not exists idx_atendimento_eventos_prestadora on atendimento_eventos(prestadora_id, quando) where prestadora_id is not null`,
+
+  // quando a senha foi trocada pela última vez: um token (sessão) emitido ANTES disso deixa de valer — quem roubou o token
+  // perde o acesso assim que a dona troca/redefine a senha. Nulo = nunca trocada (todos os tokens valem).
+  `alter table administradores     add column if not exists senha_alterada_em timestamptz`,
+  `alter table sub_administradores add column if not exists senha_alterada_em timestamptz`,
+  `alter table prestadoras         add column if not exists senha_alterada_em timestamptz`,
+  `alter table clientes            add column if not exists senha_alterada_em timestamptz`,
 ];
 
 const TABELAS_BASE = ['unidades', 'administradores', 'administrador_unidades', 'prestadoras', 'clientes', 'atendimentos', 'avaliacoes', 'codigos_verificacao'];

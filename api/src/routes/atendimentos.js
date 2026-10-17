@@ -16,6 +16,9 @@ const { atorDe, lerCancelamento, acaoDaMudanca, registrarEvento, registrarEvento
 const { emTransacao } = require('../utils/unidades');
 
 const router = express.Router();
+const DIA = /^\d{4}-\d{2}-\d{2}$/;
+// data de calendário que existe de verdade (30/02 não), entre 2000 e 2100
+const dataReal = (s) => typeof s === 'string' && DIA.test(s) && new Date(s + 'T00:00:00Z').toISOString().slice(0, 10) === s && s >= '2000-01-01' && s <= '2100-12-31';
 
 const dataBR = (d) => String(d).slice(0, 10).split('-').reverse().join('/');
 
@@ -76,9 +79,11 @@ async function lerParaChecar(db, id, unidadeId) {
 
 // Acha um cliente da unidade pelo nome (sem diferenciar acento/maiúscula) ou cria
 // um novo, sem login — mesmo tipo de cadastro avulso que o pedido público gera.
-async function acharOuCriarCliente(db, unidadeId, nome, telefone) {
+// `soSemConta`: só reaproveita cliente que NÃO tem login. Pedido PÚBLICO (anônimo) nunca pode cair na conta de um cliente de
+// verdade só por digitar o nome dele — senão qualquer pessoa enchia o histórico de outro cliente de atendimentos falsos.
+async function acharOuCriarCliente(db, unidadeId, nome, telefone, { soSemConta = false } = {}) {
   const alvo = normalizarTexto(nome);
-  const { rows } = await db.query('select id, nome from clientes where unidade_id = $1', [unidadeId]);
+  const { rows } = await db.query(`select id, nome from clientes where unidade_id = $1${soSemConta ? ' and senha_hash is null' : ''}`, [unidadeId]);
   const achado = rows.find(c => normalizarTexto(c.nome) === alvo);
   if (achado) return achado.id;
   const { rows: [novo] } = await db.query(
@@ -128,20 +133,28 @@ router.post('/', limitePedidoPublico, asyncHandler(async (req, res) => {
   if (!unidade_slug || !tipo_servico || !data_atendimento) {
     return res.status(400).json({ erro: 'unidade_slug, tipo_servico e data_atendimento são obrigatórios' });
   }
+  // Rota pública, sem autenticação — tipo e tamanho de cada campo são conferidos aqui (nada de objeto/lista no lugar de texto,
+  // data que não existe, horário fora do formato) e os textos também são escapados no frontend antes de exibir.
+  if (typeof unidade_slug !== 'string' || typeof tipo_servico !== 'string' || typeof data_atendimento !== 'string') {
+    return res.status(400).json({ erro: 'unidade_slug, tipo_servico e data_atendimento devem ser texto' });
+  }
+  if (area !== undefined && area !== null && typeof area !== 'string') return res.status(400).json({ erro: 'area deve ser texto' });
+  if (!tipo_servico.trim() || tipo_servico.length > 200 || (area && area.length > 500)) {
+    return res.status(400).json({ erro: 'tipo_servico ou area vazio ou acima do tamanho máximo permitido' });
+  }
+  if (!dataReal(data_atendimento)) return res.status(400).json({ erro: 'Data inválida (use AAAA-MM-DD)' });
+  if (hora_atendimento !== undefined && hora_atendimento !== null && hora_atendimento !== '' && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(String(hora_atendimento))) {
+    return res.status(400).json({ erro: 'Horário inválido (use HH:MM)' });
+  }
   const nomePedido = String(cliente_nome ?? '').trim().slice(0, 120);
   const telefonePedido = String(cliente_telefone ?? '').trim().slice(0, 30);
-  // Rota pública, sem autenticação — limite de tamanho reduz a superfície de
-  // abuso em campos de texto livre (também escapados no frontend antes de exibir).
-  if (tipo_servico.length > 200 || (area && area.length > 500)) {
-    return res.status(400).json({ erro: 'tipo_servico ou area excede o tamanho máximo permitido' });
-  }
 
   const { rows: [unidade] } = await pool.query('select id from unidades where slug = $1', [unidade_slug]);
   if (!unidade) return res.status(400).json({ erro: 'Unidade não encontrada' });
 
   // Quem pediu entra como cliente avulso (sem login) da unidade — antes o nome e o telefone digitados no
-  // site se perdiam e a unidade não tinha como retornar. Reaproveita o cliente de mesmo nome.
-  const clienteId = nomePedido ? await acharOuCriarCliente(pool, unidade.id, nomePedido, telefonePedido) : null;
+  // site se perdiam e a unidade não tinha como retornar. Reaproveita um cliente avulso de mesmo nome (nunca um que tem conta).
+  const clienteId = nomePedido ? await acharOuCriarCliente(pool, unidade.id, nomePedido, telefonePedido, { soSemConta: true }) : null;
   // o pedido e o primeiro evento do histórico entram juntos (mesma instrução = tudo ou nada)
   const { rows: [atendimento] } = await pool.query(
     `with novo as (
@@ -772,7 +785,7 @@ router.post('/admin/:slug/serie/:serieId/cancelar', requireAuth, requireAcessoUn
     const { rows: antes } = await db.query(
       `select id, status, prestadora_id from atendimentos
        where serie_id = $1 and unidade_id = $2 and data_atendimento >= (now() at time zone 'America/Sao_Paulo')::date
-         and status not in ('concluido', 'cancelado')
+         and status not in ('concluido', 'cancelado', 'falta')
        for update`,
       [req.params.serieId, req.unidadeId]
     );
@@ -931,17 +944,22 @@ router.post('/prestadora/me/:id/aceitar', requireAuth, requireRole('prestadora')
   }
 
   const atendimento = await emTransacao(async (db) => {
-    const { rows: [antes] } = await db.query('select status from atendimentos where id = $1 for update', [req.params.id]);
+    // O convite tem que continuar DESTA prestadora e "proposto" até o fim: entre a conferência lá em cima e este update o
+    // administrador pode ter trocado a prestadora ou cancelado. Sem as duas condições no update, o aceite caía num
+    // atendimento que já era de outra (marcando-o "aceito" sem ela ter concordado).
     const { rows: [aceito] } = await db.query(
       // ao aceitar, trava a tarifa vigente: o que ela viu no convite é o que vale
       `update atendimentos set status = 'aceito', atualizado_em = now(),
          valor_prestadora = (select valor_por_atendimento from prestadoras where id = $2)
-       where id = $1 returning id, tipo_servico, area, data_atendimento, hora_atendimento, status, valor_prestadora as valor_pago`,
+       where id = $1 and prestadora_id = $2 and status = 'proposto'
+       returning id, tipo_servico, area, data_atendimento, hora_atendimento, status, valor_prestadora as valor_pago`,
       [req.params.id, req.user.id]
     );
-    await registrarEvento(db, { atendimentoId: aceito.id, de: antes?.status ?? atual.status, para: 'aceito', acao: 'aceito', prestadoraId: req.user.id, ator: atorDe(req.user) });
+    if (!aceito) return null;
+    await registrarEvento(db, { atendimentoId: aceito.id, de: 'proposto', para: 'aceito', acao: 'aceito', prestadoraId: req.user.id, ator: atorDe(req.user) });
     return aceito;
   });
+  if (!atendimento) return res.status(409).json({ erro: 'Este convite não está mais disponível (foi alterado ou cancelado pela unidade).' });
   res.json(atendimento);
 }));
 
@@ -998,8 +1016,11 @@ router.get('/cliente/me/atendimentos', requireAuth, requireRole('cliente'), asyn
 // Atendimentos concluídos do cliente logado, aguardando avaliação
 router.get('/cliente/me/pendentes-avaliacao', requireAuth, requireRole('cliente'), asyncHandler(async (req, res) => {
   await concluirAtendimentosRealizados(pool, { clienteId: req.user.id });
+  // Só o que a tela do cliente usa. Antes era "select a.*": devolvia ao cliente colunas internas da franquia
+  // (valor_prestadora = quanto a franquia paga à prestadora, repasse_pago_em, código da planilha...).
   const { rows } = await pool.query(
-    `select a.* from atendimentos a
+    `select a.id, a.tipo_servico, a.area, a.data_atendimento, a.hora_atendimento, a.status, a.prestadora_id, p.nome as prestadora_nome
+     from atendimentos a left join prestadoras p on p.id = a.prestadora_id
      where a.cliente_id = $1 and a.status = 'concluido'
        and not exists (select 1 from avaliacoes av where av.atendimento_id = a.id)
      order by a.data_atendimento desc`,

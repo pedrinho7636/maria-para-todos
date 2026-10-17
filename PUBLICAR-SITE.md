@@ -1,7 +1,7 @@
 # Publicar o Portal da Maria na internet (Render + Neon)
 
 Como fica: **um endereço só** (ex.: `https://portal-da-maria.onrender.com`). A API em Node entrega o site
-(`Portal Da Maria.html`) e responde em `/api` no mesmo endereço. O banco PostgreSQL fica no **Neon**.
+(`Portal Da Maria.html` e a pasta `assets/`) e responde em `/api` no mesmo endereço. O banco PostgreSQL fica no **Neon**.
 Os dois têm plano grátis.
 
 > **Por que não Cloudflare Pages?** Separar o site (Cloudflare) da API (Render) exigiria uma conta a mais, CORS e
@@ -22,7 +22,7 @@ Os dois têm plano grátis.
 | Segurança | Cabeçalhos (`nosniff`, anti-iframe, HSTS), sem `X-Powered-By`, só o HTML é servido (testei: `.env`, `.sql`, `package.json`, `LEIA-ME` dão 404), `JWT_SECRET` fraco derruba a subida |
 | Dependências | `npm audit`: **0 vulnerabilidades** (corrigi `proxy-addr` e `qs`, que estavam com falha crítica/moderada) |
 | Build do Render | `npm ci` testado numa cópia limpa; `render.yaml` na raiz (Node 22, health check leve `/api/ping`, região Ohio) |
-| Banco novo | `npm run banco:schema` (testado em banco vazio, PostgreSQL 17); `-- --sem-exemplos` não cria contas de exemplo |
+| Banco novo | `npm run banco:schema` (testado em banco vazio, PostgreSQL 17); `-- --sem-exemplos` não cria contas de exemplo. **Em banco hospedado (`DATABASE_URL`) o comando recusa sem `--sem-exemplos`**: os exemplos têm contas com senha pública |
 | Primeiro acesso | `npm run admin:criar` cria o administrador direto no banco, sem depender de e-mail |
 | Fuso horário | O servidor roda em UTC; todas as consultas de "hoje" já usam o horário de Brasília |
 | Dados reais | Ensaiei levar o seu banco local pro online (dump → restore): funciona, ver passo 4-B |

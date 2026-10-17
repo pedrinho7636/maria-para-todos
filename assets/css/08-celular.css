@@ -1,0 +1,235 @@
+/* Portal da Maria — Ajustes para celular (a maior parte dos acessos): menu, toque, janelas em tela cheia. */
+
+/* =====================================================================================================
+   CELULAR (a maior parte dos acessos): menu em linha própria com rolagem, seletor de cidades que não quebra,
+   alvos de toque de 44 px, campos com 16 px (o iPhone dá zoom em campo menor), balões e janelas em tela cheia.
+   ===================================================================================================== */
+.unit-select {
+  display: none
+}
+
+@media (max-width: 700px) {
+  html, body {
+    overflow-x: hidden
+  }
+
+  /* barra do topo: marca + sair + foto na 1ª linha; o menu (Visão geral, Agenda…) numa 2ª linha só dele, que rola */
+  .topbar-inner {
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: 0;
+    padding: 8px 14px 0
+  }
+
+  .topbar-right {
+    gap: 10px
+  }
+
+  .topnav {
+    order: 3;
+    flex: 1 0 100%;
+    margin: 6px -14px 0;
+    padding: 0 10px 8px;
+    gap: 6px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch
+  }
+
+  .topnav a {
+    flex: none;
+    scroll-snap-align: start;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    font-size: 14px;
+    background: rgba(255, 255, 255, .06)
+  }
+
+  .topnav a.active {
+    background: rgba(255, 255, 255, .22)
+  }
+
+  /* seletor de cidades: até 3 cabem lado a lado e rolam; com mais, vira uma lista suspensa */
+  .hero {
+    gap: 14px
+  }
+
+  .switcher {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch
+  }
+
+  .switcher button {
+    flex: none;
+    white-space: nowrap;
+    min-height: 44px;
+    padding: 0 16px
+  }
+
+  .switcher[data-muitas] button {
+    display: none
+  }
+
+  .switcher[data-muitas] .unit-select {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    padding: 0 10px
+  }
+
+  .view-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px
+  }
+
+  .hero h1, .view-head h1 {
+    font-size: 24px;
+    line-height: 1.2
+  }
+
+  /* toque e leitura */
+  input, select, textarea {
+    font-size: 16px !important
+  }
+
+  .btn-sm, .btn-accept, .btn-decline, .btn-verify {
+    min-height: 40px
+  }
+
+  .btn-lg {
+    min-height: 48px
+  }
+
+  .stat-value {
+    font-size: 26px
+  }
+
+  .stats, .pstat {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px
+  }
+
+  .panel-head {
+    flex-wrap: wrap;
+    gap: 6px
+  }
+
+  .tablerow {
+    padding: 12px 14px
+  }
+
+  .tablerow .btn-sm {
+    flex: 1 1 auto
+  }
+
+  .job {
+    padding: 12px 14px;
+    gap: 10px
+  }
+
+  .invite {
+    padding: 14px
+  }
+
+  .invite-actions {
+    display: flex;
+    gap: 8px
+  }
+
+  .invite-actions button {
+    flex: 1
+  }
+
+  .cli-card {
+    padding: 12px 14px;
+    gap: 10px
+  }
+
+  /* janelas: quase a tela toda, rolando por dentro */
+  .modal {
+    padding: 8px !important;
+    align-items: flex-end
+  }
+
+  .modal-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 92vh !important;
+    border-radius: 16px 16px 12px 12px
+  }
+
+  .form-actions {
+    flex-wrap: wrap
+  }
+
+  .form-actions .btn-sm {
+    flex: 1 1 140px
+  }
+
+  .field-row {
+    flex-direction: column;
+    gap: 0
+  }
+
+  /* balão do atendimento na agenda: folha presa no rodapé, sem sair da tela */
+  .reatribuir-pop {
+    position: fixed !important;
+    left: 8px !important;
+    right: 8px !important;
+    top: auto !important;
+    bottom: 8px !important;
+    width: auto !important;
+    max-height: 82vh;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, .3)
+  }
+
+  /* calendários: dias maiores pra dedo */
+  .cal-day {
+    padding: 12px 0
+  }
+
+  .timeline {
+    font-size: 12px
+  }
+
+  .fin-colunas {
+    grid-template-columns: 1fr
+  }
+
+  .appfoot .foot-inner {
+    flex-direction: column;
+    gap: 4px;
+    text-align: center
+  }
+
+  .toast {
+    left: 12px;
+    right: 12px;
+    max-width: none;
+    bottom: 12px
+  }
+
+  .theme-toggle {
+    left: auto;
+    right: 12px;
+    bottom: 76px;
+    width: 40px;
+    height: 40px
+  }
+}
